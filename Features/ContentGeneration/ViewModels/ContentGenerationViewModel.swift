@@ -61,6 +61,7 @@ class ContentGenerationViewModel: ObservableObject {
     private func generateStory() async throws {
         print("[Story] Starting story generation process")
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[Story] Trimmed main character for prompt: '\\(trimmedMainCharacter)'")
         let storyPrompt = """
         [Level: \(selectedLevel.rawValue)]
         Please convert the following text into an engaging \(selectedGenre.rawValue) story, maintaining the key information but presenting it in a narrative format.
@@ -77,10 +78,10 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Story] Selected image style for prompt: \(selectedImageStyle.displayName)") // This is the overall style
         
         let requestBody: [String: Any] = [
-            "text": storyPrompt, // The backend will parse "Original Text:" from this
+            "text": storyPrompt,
             "level": selectedLevel.rawValue,
-            "genre": selectedGenre.rawValue, // Genre is used by client for prompt, backend AI doesn't directly use it from payload currently
-            "image_style": selectedImageStyle.backendRawValue // Send the overall image style
+            "genre": selectedGenre.rawValue,
+            "image_style": selectedImageStyle.backendRawValue
         ]
         
         let url = URL(string: "\(backendURL)/generate_story")!
@@ -846,16 +847,20 @@ enum StoryGenre: String, Codable, CaseIterable {
 
 enum ImageStyle: String, Codable, CaseIterable {
     case ghibli = "ghibli"
+    case disney = "disney"
     case comicBook = "comic_book"
     case watercolor = "watercolor"
-    case realistic = "realistic"
+    case pixelArt = "pixel_art"
+    case threeDRender = "3d_render"
     
     var displayName: String {
         switch self {
-        case .ghibli: return "Ghibli Style"
-        case .comicBook: return "Comic Book Style"
-        case .watercolor: return "Watercolor Style"
-        case .realistic: return "Realistic Style"
+        case .ghibli: return "Studio Ghibli"
+        case .disney: return "Disney"
+        case .comicBook: return "Comic Book"
+        case .watercolor: return "Watercolor"
+        case .pixelArt: return "Pixel Art"
+        case .threeDRender: return "3D Render"
         }
     }
     

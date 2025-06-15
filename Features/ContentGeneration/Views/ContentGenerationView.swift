@@ -70,8 +70,9 @@ struct ContentGenerationView: View {
                                 Text("Main Character (Optional)")
                                     .font(.headline)
                                 
-                                TextField("Enter character name", text: $viewModel.mainCharacter)
-                                    .textFieldStyle(.roundedBorder)
+                                TextField("Main Character (Optional)", text: $viewModel.mainCharacter)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    
                             }
                             
                             // Image Style Selection
