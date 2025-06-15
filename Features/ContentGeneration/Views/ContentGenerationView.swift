@@ -1,0 +1,326 @@
+import SwiftUI
+
+struct ContentGenerationView: View {
+    @StateObject private var viewModel = ContentGenerationViewModel()
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Input Section
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Enter your text")
+                            .font(.headline)
+                        
+                        TextEditor(text: $viewModel.inputText)
+                            .frame(minHeight: 150)
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Reading Level Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reading Level")
+                            .font(.headline)
+                        
+                        Picker("Reading Level", selection: $viewModel.selectedLevel) {
+                            ForEach(ReadingLevel.allCases, id: \.self) { level in
+                                Text(level.rawValue).tag(level)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Content Type Selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Content Type")
+                            .font(.headline)
+                        
+                        Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
+                            ForEach(SummarizationTier.allCases, id: \.self) { tier in
+                                Text(tier.rawValue).tag(tier)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Story-specific options
+                    if viewModel.selectedSummarizationTier == .story {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Genre Selection
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Genre")
+                                    .font(.headline)
+                                
+                                Picker("Genre", selection: $viewModel.selectedGenre) {
+                                    ForEach(StoryGenre.allCases, id: \.self) { genre in
+                                        Text(genre.rawValue).tag(genre)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                            }
+                            
+                            // Main Character Input
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Main Character (Optional)")
+                                    .font(.headline)
+                                
+                                TextField("Enter character name", text: $viewModel.mainCharacter)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            
+                            // Image Style Selection
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Image Style")
+                                    .font(.headline)
+                                
+                                Picker("Image Style", selection: $viewModel.selectedImageStyle) {
+                                    ForEach(ImageStyle.allCases, id: \.self) { style in
+                                        Text(style.displayName).tag(style)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    // Generate Button
+                    Button(action: {
+                        Task {
+                            await viewModel.generateContent()
+                        }
+                    }) {
+                        if viewModel.isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Text("Generate Content")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    .disabled(viewModel.isLoading)
+                    
+                    // Error Message
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
+                    }
+                    
+                    // Display Generated Content Blocks
+                    if !viewModel.blocks.isEmpty {
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("Generated Content")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .padding(.horizontal)
+                            
+                            ForEach(viewModel.blocks) { block in
+                                ContentBlockView(block: block)
+                            }
+                        }
+                        .padding(.top)
+                    }
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("Generate Content")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
+                if let story = viewModel.currentStory {
+                    StoryView(story: story)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Story View
+struct StoryView: View {
+    let story: Story
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Story Title
+                    Text(story.title)
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .padding(.horizontal)
+                    
+                    // Story Overview
+                    Text(story.content)
+                        .font(.body)
+                        .padding(.horizontal)
+                    
+                    // Chapters
+                    ForEach(story.chapters.sorted(by: { $0.order < $1.order })) { chapter in
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Chapter Title
+                            Text(chapter.title)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                            
+                            // Chapter Image
+                            if let imageUrl = chapter.firebaseImageUrl {
+                                AsyncImage(url: URL(string: imageUrl)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                } placeholder: {
+                                    ProgressView()
+                                }
+                                .frame(maxHeight: 300)
+                            }
+                            
+                            // Chapter Content
+                            Text(chapter.content)
+                                .font(.body)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("Story")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Content Block Views
+struct ContentBlockView: View {
+    let block: ContentBlock
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Display image if available for any block type
+            if let imageUrl = block.firebaseImageUrl {
+                AsyncImage(url: URL(string: imageUrl)) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 200)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxHeight: 300)
+                            .cornerRadius(10)
+                    case .failure:
+                        VStack {
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                            Text("Failed to load image")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 200)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+            }
+            
+            // Display block content based on type
+            switch block.type {
+            case .heading:
+                Text(block.content ?? "")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+            case .paragraph:
+                Text(block.content ?? "")
+                    .font(.body)
+                
+            case .image:
+                // Image already displayed above
+                if block.content != nil {
+                    Text(block.content ?? "")
+                        .font(.body)
+                }
+                
+            case .quizHeading:
+                Text(block.content ?? "")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                
+            case .multipleChoiceQuestion:
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(block.content ?? "")
+                        .font(.headline)
+                    
+                    if let options = block.options {
+                        ForEach(options) { option in
+                            Button(action: {
+                                // Handle option selection
+                            }) {
+                                HStack {
+                                    Text(option.text)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if option.id == block.correctAnswerID {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                    
+                    if let explanation = block.explanation {
+                        Text(explanation)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 8)
+                    }
+                }
+                
+            case .error:
+                Text(block.content ?? "An error occurred")
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(.horizontal)
+    }
+}
+
+#Preview {
+    ContentGenerationView()
+} 
