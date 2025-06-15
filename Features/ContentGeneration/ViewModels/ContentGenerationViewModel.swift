@@ -61,10 +61,10 @@ class ContentGenerationViewModel: ObservableObject {
     private func generateStory() async throws {
         print("[Story] Starting story generation process")
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[Story] Trimmed main character for prompt: '\\(trimmedMainCharacter)'")
+        print("[Story] Trimmed main character for prompt: '\(trimmedMainCharacter)'")
         let storyPrompt = """
         [Level: \(selectedLevel.rawValue)]
-        Please convert the following text into an engaging \(selectedGenre.rawValue) story, maintaining the key information but presenting it in a narrative format.
+        Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story, maintaining the key information but presenting it in a narrative format.
         Image Style to consider for tone and visuals: \(selectedImageStyle.displayName).
         \(trimmedMainCharacter.isEmpty ? "" : "Main Character: \(trimmedMainCharacter)")
         Original Text:
@@ -80,8 +80,8 @@ class ContentGenerationViewModel: ObservableObject {
         let requestBody: [String: Any] = [
             "text": storyPrompt,
             "level": selectedLevel.rawValue,
-            "genre": selectedGenre.rawValue,
-            "image_style": selectedImageStyle.backendRawValue
+            "genre": selectedGenre.rawValue.lowercased(),
+            "image_style": selectedImageStyle.rawValue
         ]
         
         let url = URL(string: "\(backendURL)/generate_story")!
