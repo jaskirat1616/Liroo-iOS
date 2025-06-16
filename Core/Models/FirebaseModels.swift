@@ -65,7 +65,7 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
 // MARK: - Firebase User Content Models
 
 struct FirebaseUserContent: Identifiable, Codable, Hashable {
-    var id: String?
+    @DocumentID var id: String?
     var userId: String?
     var topic: String?
     var level: String?
