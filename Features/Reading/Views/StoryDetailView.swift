@@ -2,7 +2,28 @@ import SwiftUI
 
 // Sub-view to display FirebaseStory details
 struct StoryDetailView: View {
+    @EnvironmentObject var viewModel: FullReadingViewModel
     let story: FirebaseStory
+
+    // Helper to construct full story text for context
+    private var fullStoryText: String {
+        var content = story.title + "\n\n"
+        if let overview = story.overview, !overview.isEmpty {
+            content += "Overview:\n" + overview + "\n\n"
+        }
+        if let chapters = story.chapters, !chapters.isEmpty {
+            content += "Chapters:\n"
+            for chapter in chapters {
+                if let title = chapter.title, !title.isEmpty {
+                    content += title + "\n"
+                }
+                if let chapterContent = chapter.content, !chapterContent.isEmpty {
+                    content += chapterContent + "\n\n"
+                }
+            }
+        }
+        return content
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -16,6 +37,10 @@ struct StoryDetailView: View {
                     .padding(.top)
                 Text(overview)
                     .font(.body)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.initiateDialogue(paragraph: overview, originalContent: fullStoryText)
+                    }
             }
 
             if let chapters = story.chapters, !chapters.isEmpty {
@@ -32,6 +57,10 @@ struct StoryDetailView: View {
                         if let content = chapter.content, !content.isEmpty {
                             Text(content)
                                 .font(.body)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    viewModel.initiateDialogue(paragraph: content, originalContent: fullStoryText)
+                                }
                         }
                         if let imageUrlString = chapter.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
                             AsyncImage(url: imageUrl) { phase in

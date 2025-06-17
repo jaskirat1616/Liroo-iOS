@@ -2,7 +2,27 @@ import SwiftUI
 
 // Sub-view to display FirebaseUserContent details
 struct UserContentDetailView: View {
+    @EnvironmentObject var viewModel: FullReadingViewModel
     let userContent: FirebaseUserContent
+
+    // Helper to construct full user content text for context
+    private var fullUserContentText: String {
+        var content = ""
+        if let topic = userContent.topic, !topic.isEmpty {
+            content += topic + "\n\n"
+        }
+        if let blocks = userContent.blocks, !blocks.isEmpty {
+            for block in blocks {
+                if let type = block.type {
+                    content += "Type: " + type + "\n"
+                }
+                if let blockContent = block.content, !blockContent.isEmpty {
+                    content += blockContent + "\n\n"
+                }
+            }
+        }
+        return content
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -40,9 +60,16 @@ struct UserContentDetailView: View {
                         }
 
                         // Handle standard text content if not a quiz
-                        if block.type?.lowercased() != "multiplechoicequestion", let content = block.content, !content.isEmpty {
+                        if block.type?.lowercased() != "multiplechoicequestion" && block.type?.lowercased() != "image" && block.type?.lowercased() != "quizheading", let content = block.content, !content.isEmpty {
                             Text(content)
                                 .font(.body)
+                                .contentShape(Rectangle()) // Make it tappable
+                                .onTapGesture {
+                                    // Ensure content is not empty before initiating dialogue
+                                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        viewModel.initiateDialogue(paragraph: content, originalContent: fullUserContentText)
+                                    }
+                                }
                         }
                         
                         // Handle image if not a quiz (or if quizzes can also have images - adjust as needed)
