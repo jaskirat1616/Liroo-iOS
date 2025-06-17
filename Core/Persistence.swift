@@ -1,0 +1,88 @@
+import CoreData
+import Combine // For future use if service returns Combine publishers
+
+struct PersistenceController {
+    static let shared = PersistenceController()
+
+    let container: NSPersistentContainer
+
+    // A preview persistence controller for SwiftUI previews with sample data
+    static var preview: PersistenceController = {
+        let controller = PersistenceController(inMemory: true)
+        let viewContext = controller.container.viewContext
+        
+        // Add sample data for previews
+        let book1 = Book(context: viewContext)
+        book1.id = UUID()
+        book1.title = "SwiftUI for Dummies (Preview)"
+        book1.author = "Preview Author"
+        book1.lastReadDate = Date()
+        book1.progress = 0.5
+
+        let log1 = ReadingLog(context: viewContext)
+        log1.id = UUID()
+        log1.date = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        log1.duration = 30 * 60 // 30 minutes
+        log1.wordsRead = 1500
+        // book1.addToReadingLogs(log1) // If you add relationship
+
+        let log2 = ReadingLog(context: viewContext)
+        log2.id = UUID()
+        log2.date = Calendar.current.date(byAdding: .day, value: -2, to: Date())!
+        log2.duration = 60 * 60 // 1 hour
+        log2.wordsRead = 3000
+        // book1.addToReadingLogs(log2) // If you add relationship
+
+        do {
+            try viewContext.save()
+        } catch {
+            let nsError = error as NSError
+            fatalError("Unresolved error \(nsError), \(nsError.userInfo) during preview setup")
+        }
+        return controller
+    }()
+
+    init(inMemory: Bool = false) {
+        // Name must match your .xcdatamodeld file name
+        container = NSPersistentContainer(name: "LirooDataModel") 
+
+        if inMemory {
+            // For testing and previews, use an in-memory store
+            container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null")
+        }
+
+        container.loadPersistentStores { storeDescription, error in
+            if let error = error as NSError? {
+                // Replace this implementation with code to handle the error appropriately.
+                // fatalError() causes the application to generate a crash log and terminate.
+                // You should not use this function in a shipping application, although it may be useful during development.
+                /*
+                 Typical reasons for an error here include:
+                 * The parent directory does not exist, cannot be created, or disallows writing.
+                 * The persistent store is not accessible, due to permissions or data protection when the device is locked.
+                 * The device is out of space.
+                 * The store could not be migrated to the current model version.
+                 Check the error message to determine what the actual problem was.
+                 */
+                fatalError("Unresolved error \(error), \(error.userInfo)")
+            }
+        }
+        // Automatically merge changes from parent context
+        container.viewContext.automaticallyMergesChangesFromParent = true
+    }
+
+    // Helper function to save context
+    func saveContext() {
+        let context = container.viewContext
+        if context.hasChanges {
+            do {
+                try context.save()
+            } catch {
+                let nsError = error as NSError
+                // Consider robust error handling for production
+                print("Error saving context: \(nsError), \(nsError.userInfo)")
+                // fatalError("Unresolved error \(nsError), \(nsError.userInfo)") // Avoid fatalError in production
+            }
+        }
+    }
+}

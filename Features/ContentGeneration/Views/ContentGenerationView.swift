@@ -13,13 +13,7 @@ struct ContentGenerationView: View {
     
     // MARK: - Camera OCR Additions
     @State private var showingCameraPicker = false
-    @State private var capturedImageByCamera: UIImage? {
-        didSet {
-            if let img = capturedImageByCamera {
-                ocrViewModel.setImageForProcessing(img)
-            }
-        }
-    }
+    @State private var capturedImageByCamera: UIImage? // Can be used for preview if needed
     @State private var cameraAccessGranted: Bool? = nil
     @State private var showCameraPermissionAlert = false
 
@@ -264,7 +258,24 @@ struct ContentGenerationView: View {
             }
             // MARK: - Camera Picker Sheet Modifier
             .sheet(isPresented: $showingCameraPicker) {
-                CameraPickerView(selectedImage: $capturedImageByCamera)
+                CameraPickerView(
+                    selectedImage: $capturedImageByCamera, // Still bind for potential preview
+                    onImagePicked: { pickedImage in
+                        print("📸 ContentGenerationView: CameraPickerView onImagePicked callback received. Image is nil? \(pickedImage == nil)")
+                        if let img = pickedImage {
+                            print("📸 ContentGenerationView: Valid image received from callback. Sending to OCR.")
+                            self.ocrViewModel.setImageForProcessing(img)
+                            // Optionally, still set capturedImageByCamera if you want it for a preview display
+                            // self.capturedImageByCamera = img 
+                        } else {
+                            print("📸 ContentGenerationView: Image from callback is nil (picker cancelled or error).")
+                            // Optionally, clear any existing preview if an image was picked then cancelled
+                            // self.capturedImageByCamera = nil
+                            // We might also want to clear OCR error/state if user cancels
+                            // self.ocrViewModel.setImageForProcessing(nil) // This would clear recognized text too
+                        }
+                    }
+                )
             }
             // Alert for camera permission
             .alert("Camera Access Denied", isPresented: $showCameraPermissionAlert) {
@@ -278,8 +289,14 @@ struct ContentGenerationView: View {
                 Text("To use the camera for OCR, please grant camera access in Settings.")
             }
             .onChange(of: ocrViewModel.recognizedText) { newText in
+                print("🔄 ContentGenerationView: ocrViewModel.recognizedText changed. New text: \"\(newText)\". Error message: \"\(ocrViewModel.errorMessage ?? "None")\"")
                 if !newText.isEmpty && ocrViewModel.errorMessage == nil {
+                    print("🔄 ContentGenerationView: Updating viewModel.inputText with recognized text.")
                     viewModel.inputText = newText
+                } else if newText.isEmpty && ocrViewModel.errorMessage == nil {
+                     print("🔄 ContentGenerationView: Recognized text is empty, but no OCR error. Not updating input text.")
+                } else if ocrViewModel.errorMessage != nil {
+                     print("🔄 ContentGenerationView: OCR error exists. Not updating input text from recognizedText.")
                 }
             }
             .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {

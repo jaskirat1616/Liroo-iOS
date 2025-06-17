@@ -23,17 +23,13 @@ struct LirooApp: App {
     
     @StateObject private var authViewModel = AuthViewModel() // Assuming you have an AuthViewModel that manages auth state
 
+    // Initialize the persistence controller
+    let persistenceController = PersistenceController.shared
+
     var body: some Scene {
         WindowGroup {
-            // If user is authenticated, show main app content (TabView)
-            // Otherwise, show a login/authentication view
-            // This is a common pattern. Adjust if your auth flow is different.
-            
-            // For now, let's assume we always show the TabView.
-            // You might want to wrap this in an if/else based on authViewModel.isAuthenticated
-            
-            MainAppView() // New View that will host the TabView
-                .environmentObject(authViewModel) // Pass AuthViewModel if needed by subviews
+            MainTabView() // Your main tab view
+                .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }
 }
@@ -42,6 +38,10 @@ struct LirooApp: App {
 struct MainAppView: View {
     var body: some View {
         TabView {
+            DashboardView()
+                .tabItem {
+                     Label("Dashboard", systemImage: "square.grid.2x2.fill")
+                }
             ContentGenerationView()
                 .tabItem {
                     Label("Generate", systemImage: "wand.and.stars")
