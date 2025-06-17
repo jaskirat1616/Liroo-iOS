@@ -8,6 +8,9 @@ struct SignupView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var interestedTopicsString = ""
+    @State private var isStudent = false
+    @State private var additionalInfo = ""
     @State private var isLoading = false
     @State private var showError = false
     @State private var errorMessage = ""
@@ -76,6 +79,43 @@ struct SignupView: View {
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(10)
+                }
+                .padding(.horizontal)
+                
+                // Interested Topics Field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Topics you're interested in (comma-separated)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextField("e.g., history, science, art", text: $interestedTopicsString)
+                        .autocapitalization(.none)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal)
+                
+                // Student Status Toggle
+                Toggle("Are you a student?", isOn: $isStudent)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                
+                // Additional Info TextEditor
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("A little about yourself (Optional)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    TextEditor(text: $additionalInfo)
+                        .frame(height: 100)
+                        .padding(4)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
                 }
                 .padding(.horizontal)
                 
@@ -149,7 +189,19 @@ struct SignupView: View {
         
         Task {
             do {
-                try await authViewModel.signUp(email: email, password: password, name: name)
+                // Convert interestedTopicsString to array
+                let topicsArray = interestedTopicsString.split(separator: ",")
+                                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    .filter { !$0.isEmpty }
+
+                try await authViewModel.signUp(
+                    email: email,
+                    password: password,
+                    name: name,
+                    interestedTopics: topicsArray.isEmpty ? nil : topicsArray,
+                    isStudent: isStudent,
+                    additionalInfo: additionalInfo.isEmpty ? nil : additionalInfo
+                )
                 dismiss()
             } catch {
                 errorMessage = authViewModel.errorMessage ?? "An error occurred"

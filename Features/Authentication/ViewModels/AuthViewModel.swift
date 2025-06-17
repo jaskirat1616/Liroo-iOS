@@ -20,13 +20,13 @@ class AuthViewModel: ObservableObject {
     }
     
     // MARK: - Sign Up
-    func signUp(email: String, password: String, name: String) async throws {
+    func signUp(email: String, password: String, name: String, interestedTopics: [String]? = nil, isStudent: Bool? = nil, additionalInfo: String? = nil) async throws {
         do {
             // Create user in Firebase Auth
             let authResult = try await auth.createUser(withEmail: email, password: password)
             
             // Create user profile in Firestore
-            let userData: [String: Any] = [
+            var userData: [String: Any] = [
                 "userId": authResult.user.uid,
                 "email": email,
                 "name": name,
@@ -34,6 +34,18 @@ class AuthViewModel: ObservableObject {
                 "updatedAt": FieldValue.serverTimestamp()
             ]
             
+            // Add new optional fields if they have values
+            if let interestedTopics = interestedTopics, !interestedTopics.isEmpty {
+                userData["interestedTopics"] = interestedTopics
+            }
+            if let isStudent = isStudent {
+                userData["isStudent"] = isStudent
+            }
+            if let additionalInfo = additionalInfo, !additionalInfo.isEmpty {
+                userData["additionalInfo"] = additionalInfo
+            }
+            // avatarURL can be set later via profile edit. Font preferences can also be default or set later.
+
             try await db.collection("users").document(authResult.user.uid).setData(userData)
             
         } catch {

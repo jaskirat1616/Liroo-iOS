@@ -52,12 +52,11 @@ struct MainAppView: View {
                     Label("History", systemImage: "list.bullet.rectangle.portrait")
                 }
             
-            // Add other main views as tabs here if needed
-            // For example, a ProfileView:
-            // ProfileView()
-            //     .tabItem {
-            //         Label("Profile", systemImage: "person.crop.circle")
-            //     }
+            
+            ProfileView()
+                 .tabItem {
+                     Label("Profile", systemImage: "person.crop.circle")
+                 }
         }
     }
 }
