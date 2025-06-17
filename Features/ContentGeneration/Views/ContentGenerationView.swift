@@ -1,16 +1,35 @@
 import SwiftUI
+import PhotosUI
 
 struct ContentGenerationView: View {
     @StateObject private var viewModel = ContentGenerationViewModel()
     @Environment(\.dismiss) private var dismiss
     
+    // MARK: - OCR and File Import Additions
+    @StateObject private var ocrViewModel = OCRViewModel()
+    @State private var showingPhotosPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showingFileImporter = false
+    
+    // MARK: - Camera OCR Additions
+    @State private var showingCameraPicker = false
+    @State private var capturedImageByCamera: UIImage? {
+        didSet {
+            if let img = capturedImageByCamera {
+                ocrViewModel.setImageForProcessing(img)
+            }
+        }
+    }
+    @State private var cameraAccessGranted: Bool? = nil
+    @State private var showCameraPermissionAlert = false
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
                     // Input Section
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Enter your text")
+                        Text("Enter your text or use OCR")
                             .font(.headline)
                         
                         TextEditor(text: $viewModel.inputText)
@@ -18,6 +37,57 @@ struct ContentGenerationView: View {
                             .padding(8)
                             .background(Color(.systemGray6))
                             .cornerRadius(10)
+                        
+                        // Buttons for OCR
+                        VStack(spacing: 10) {
+                            HStack(spacing: 10) {
+                                Button {
+                                    showingPhotosPicker = true
+                                } label: {
+                                    Label("From Library", systemImage: "photo.on.rectangle")
+                                }
+                                .buttonStyle(.bordered)
+                                .frame(maxWidth: .infinity)
+                                
+                                Button {
+                                    showingFileImporter = true
+                                } label: {
+                                    Label("From File", systemImage: "doc.text.image")
+                                }
+                                .buttonStyle(.bordered)
+                                .frame(maxWidth: .infinity)
+                            }
+                            
+                            Button {
+                                CameraPickerView.checkCameraPermission { granted in
+                                    self.cameraAccessGranted = granted
+                                    if granted {
+                                        self.ocrViewModel.setImageForProcessing(nil)
+                                        self.capturedImageByCamera = nil
+                                        self.showingCameraPicker = true
+                                    } else {
+                                        self.showCameraPermissionAlert = true
+                                    }
+                                }
+                            } label: {
+                                Label("From Camera", systemImage: "camera")
+                            }
+                            .buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity)
+                        }
+                        .padding(.top, 5)
+
+                        // Display OCR Status/Error
+                        if ocrViewModel.isProcessing {
+                            ProgressView("Scanning image...")
+                                .padding(.top, 5)
+                        } else if let ocrError = ocrViewModel.errorMessage {
+                            Text("OCR Error: \(ocrError)")
+                                .foregroundColor(.red)
+                                .font(.caption)
+                                .padding(.top, 5)
+                        }
+                        
                     }
                     .padding(.horizontal)
                     
@@ -144,6 +214,72 @@ struct ContentGenerationView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                }
+            }
+            // MARK: - OCR and File Import Sheet Modifiers
+            .photosPicker(
+                isPresented: $showingPhotosPicker,
+                selection: $selectedPhotoItem,
+                matching: .images,
+                photoLibrary: .shared()
+            )
+            .onChange(of: selectedPhotoItem) { newItem in
+                Task {
+                    ocrViewModel.setImageForProcessing(nil)
+                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                        if let uiImage = UIImage(data: data) {
+                            ocrViewModel.setImageForProcessing(uiImage)
+                            return
+                        }
+                    }
+                    if newItem != nil {
+                        ocrViewModel.errorMessage = "Could not load image from library."
+                    }
+                }
+            }
+            .sheet(isPresented: $showingFileImporter) {
+                FilePickerView(
+                    selectedFileURL: .constant(nil),
+                    allowedFileTypes: [.image],
+                    onFilePicked: { url in
+                        ocrViewModel.setImageForProcessing(nil)
+                        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+                        defer {
+                            if shouldStopAccessing {
+                                url.stopAccessingSecurityScopedResource()
+                            }
+                        }
+                        do {
+                            let imageData = try Data(contentsOf: url)
+                            if let uiImage = UIImage(data: imageData) {
+                                ocrViewModel.setImageForProcessing(uiImage)
+                            } else {
+                                ocrViewModel.errorMessage = "Failed to convert imported file to an image."
+                            }
+                        } catch {
+                            ocrViewModel.errorMessage = "Could not load data from file: \(error.localizedDescription)"
+                        }
+                    }
+                )
+            }
+            // MARK: - Camera Picker Sheet Modifier
+            .sheet(isPresented: $showingCameraPicker) {
+                CameraPickerView(selectedImage: $capturedImageByCamera)
+            }
+            // Alert for camera permission
+            .alert("Camera Access Denied", isPresented: $showCameraPermissionAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString), UIApplication.shared.canOpenURL(url) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            } message: {
+                Text("To use the camera for OCR, please grant camera access in Settings.")
+            }
+            .onChange(of: ocrViewModel.recognizedText) { newText in
+                if !newText.isEmpty && ocrViewModel.errorMessage == nil {
+                    viewModel.inputText = newText
                 }
             }
             .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
