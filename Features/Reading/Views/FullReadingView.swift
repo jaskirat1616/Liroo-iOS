@@ -4,6 +4,18 @@ struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = "" // For the TextField in the sheet
 
+    // Reading Settings
+    @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
+    @AppStorage("readingFontSize") private var selectedFontSize: Double = 17.0 // Default font size
+    @AppStorage("readingFontStyleName") private var selectedFontStyleName: String = ReadingFontStyle.systemDefault.rawValue // Added
+
+    private var currentTheme: ReadingTheme {
+        ReadingTheme(rawValue: selectedThemeName) ?? .light
+    }
+    private var currentFontStyle: ReadingFontStyle { // Added
+        ReadingFontStyle(rawValue: selectedFontStyleName) ?? .systemDefault
+    }
+
     init(itemID: String, collectionName: String, itemTitle: String) {
         _viewModel = StateObject(wrappedValue: FullReadingViewModel(itemID: itemID, collectionName: collectionName))
         self.itemTitle = itemTitle // Store title for navigation bar
@@ -18,32 +30,52 @@ struct FullReadingView: View {
                 if viewModel.isLoading {
                     ProgressView("Loading Content...")
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .foregroundColor(currentTheme.primaryTextColor) // Apply text color
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
                 } else if let errorMessage = viewModel.errorMessage {
                     Text("Error: \(errorMessage)")
-                        .foregroundColor(.red)
+                        .foregroundColor(.red) // Error messages might keep a distinct color
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
                     Button("Retry") {
                         viewModel.fetchFullContent()
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
+                    .tint(currentTheme.primaryTextColor)
+                    .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 2))) // Apply font style
                 } else if let story = viewModel.story {
-                    StoryDetailView(story: story)
+                    StoryDetailView(story: story,
+                                    baseFontSize: selectedFontSize,
+                                    primaryTextColor: currentTheme.primaryTextColor,
+                                    secondaryTextColor: currentTheme.secondaryTextColor,
+                                    fontStyle: currentFontStyle) // Pass font style
                         .environmentObject(viewModel) // Inject viewModel
                 } else if let userContent = viewModel.userContent {
-                    UserContentDetailView(userContent: userContent)
+                    UserContentDetailView(userContent: userContent,
+                                          baseFontSize: selectedFontSize,
+                                          primaryTextColor: currentTheme.primaryTextColor,
+                                          secondaryTextColor: currentTheme.secondaryTextColor,
+                                          fontStyle: currentFontStyle) // Pass font style
                         .environmentObject(viewModel) // Inject viewModel
                 } else {
                     Text("No content found or loaded.")
                         .frame(maxWidth: .infinity, alignment: .center)
+                        .foregroundColor(currentTheme.primaryTextColor) // Apply text color
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
                 }
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity) // Allow VStack to expand
         }
+        .background(currentTheme.backgroundColor.edgesIgnoringSafeArea(.all)) // Apply background color to ScrollView
         .navigationTitle(itemTitle) // Use the passed itemTitle
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $viewModel.isShowingDialogueView) {
-            DialogueSheetView(viewModel: viewModel, userDialogueInput: $userDialogueInput)
+            DialogueSheetView(viewModel: viewModel, userDialogueInput: $userDialogueInput, theme: currentTheme, fontStyle: currentFontStyle) // Pass fontStyle
         }
+        // This is a simple way to make the navigation bar match the theme.
+        // For more complex styling, you'd use UIAppearance or custom modifiers.
+        .toolbarColorScheme(currentTheme == .dark ? .dark : .light, for: .navigationBar)
     }
 }
 
@@ -51,6 +83,8 @@ struct FullReadingView: View {
 struct DialogueSheetView: View {
     @ObservedObject var viewModel: FullReadingViewModel
     @Binding var userDialogueInput: String
+    let theme: ReadingTheme // Receive the theme
+    let fontStyle: ReadingFontStyle // Added
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -60,25 +94,26 @@ struct DialogueSheetView: View {
                 if let selectedParagraph = viewModel.selectedParagraphForDialogue {
                     VStack(alignment: .leading) {
                         Text("Discussing Paragraph:")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                            .font(fontStyle.getFont(size: 12, weight: .medium)) // Apply font style to caption
+                            .foregroundColor(theme.secondaryTextColor) // Use theme color
                         Text(selectedParagraph)
-                            .font(.footnote)
+                            .font(fontStyle.getFont(size: 14)) // Apply font style to paragraph
                             .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 10))
-                            .background(Color(UIColor.systemGray6))
+                            .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6)) // Adjust background for contrast
+                            .foregroundColor(theme.primaryTextColor) // Use theme color
                             .cornerRadius(8)
                             .lineLimit(nil) // Allow multiple lines for the paragraph
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 10)
-                    Divider()
+                    Divider().background(theme.secondaryTextColor)
                 }
 
                 ScrollViewReader { scrollViewProxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(viewModel.dialogueMessages) { message in
-                                MessageView(message: message)
+                                MessageView(message: message, theme: theme, fontStyle: fontStyle) // Pass fontStyle
                                     .id(message.id) // For scrolling
                             }
                         }
@@ -95,30 +130,37 @@ struct DialogueSheetView: View {
                     }
                 }
 
-                Divider() // Divider before the input field
+                Divider().background(theme.secondaryTextColor)
                 HStack {
                     TextField("Ask about this paragraph...", text: $userDialogueInput, axis: .vertical)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .textFieldStyle(PlainTextFieldStyle()) // Simpler style for theming
+                        .padding(8)
+                        .font(fontStyle.getFont(size: 16)) // Apply font style to TextField
+                        .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6))
+                        .cornerRadius(8)
+                        .foregroundColor(theme.primaryTextColor)
                         .lineLimit(1...5) // Allow multi-line input
                     
                     Button(action: {
                         sendMessage()
                     }) {
                         if viewModel.isSendingDialogueMessage {
-                            ProgressView()
+                            ProgressView().tint(theme.primaryTextColor)
                                 .padding(.horizontal)
                         } else {
                             Image(systemName: "paperplane.fill")
                                 .font(.system(size: 20))
+                                .foregroundColor(theme.primaryTextColor)
                         }
                     }
                     .disabled(userDialogueInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSendingDialogueMessage)
                     .padding(.leading, 6)
                 }
                 .padding()
-                .background(.thinMaterial) // Give input area a slightly different background
+                .background(theme.backgroundColor.opacity(0.8).edgesIgnoringSafeArea(.bottom)) // Use theme background for input area
             }
-            .navigationTitle(Text("Discuss Paragraph"))
+            .background(theme.backgroundColor) // Set background for the entire sheet content
+            .navigationTitle(Text("Discuss Paragraph").font(fontStyle.getFont(size: 17, weight: .semibold))) // Apply to nav title
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -128,8 +170,12 @@ struct DialogueSheetView: View {
                         userDialogueInput = "" // Clear input field
                         dismiss()
                     }
+                    .tint(theme.primaryTextColor)
+                    .font(fontStyle.getFont(size: 17)) // Apply to toolbar button
                 }
             }
+            // Adapt toolbar color scheme
+            .toolbarColorScheme(theme == .dark ? .dark : .light, for: .navigationBar)
         }
     }
 
@@ -154,6 +200,8 @@ struct DialogueSheetView: View {
 // Simple Message View for Dialogue
 struct MessageView: View {
     let message: ChatMessage
+    let theme: ReadingTheme // Receive theme
+    let fontStyle: ReadingFontStyle // Added
 
     var body: some View {
         HStack {
@@ -161,7 +209,8 @@ struct MessageView: View {
                 Spacer()
                 Text(message.text)
                     .padding(10)
-                    .background(Color.blue)
+                    .font(fontStyle.getFont(size: 16)) // Apply font style to user message
+                    .background(Color.blue) // User messages might keep a distinct color or adapt
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
@@ -169,21 +218,23 @@ struct MessageView: View {
                 if message.isLoading {
                     HStack(spacing: 8) {
                         ProgressView()
-                            .tint(.gray)
+                            .tint(theme.secondaryTextColor) // Use theme color
                         Text("Thinking...")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                            .font(fontStyle.getFont(size: 12, weight: .medium)) // Apply font style
+                            .foregroundColor(theme.secondaryTextColor) // Use theme color
                     }
                     .padding(10)
-                    .background(Color(UIColor.systemGray5))
+                    // Adapt AI message bubble background
+                    .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
                     .cornerRadius(10)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
 
                 } else {
                     Text(message.text)
                         .padding(10)
-                        .background(Color(UIColor.systemGray5))
-                        .foregroundColor(Color(UIColor.label))
+                        .font(fontStyle.getFont(size: 16)) // Apply font style to AI message
+                        .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
+                        .foregroundColor(theme.primaryTextColor) // Use theme color
                         .cornerRadius(10)
                         .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
                 }

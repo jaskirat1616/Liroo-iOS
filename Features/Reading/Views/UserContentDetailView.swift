@@ -4,6 +4,10 @@ import SwiftUI
 struct UserContentDetailView: View {
     @EnvironmentObject var viewModel: FullReadingViewModel
     let userContent: FirebaseUserContent
+    let baseFontSize: Double
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+    let fontStyle: ReadingFontStyle
 
     // Helper to construct full user content text for context
     private var fullUserContentText: String {
@@ -28,52 +32,51 @@ struct UserContentDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let topic = userContent.topic, !topic.isEmpty {
                 Text(topic)
-                    .font(.largeTitle)
-                    .bold()
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 8), weight: .bold))
+                    .foregroundColor(primaryTextColor)
             } else {
                 Text("Generated Content")
-                    .font(.largeTitle)
-                    .bold()
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 8), weight: .bold))
+                    .foregroundColor(primaryTextColor)
             }
             
             if let level = userContent.level {
                  Text("Level: \(level)")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize - 2)))
+                    .foregroundColor(secondaryTextColor)
             }
 
             if let blocks = userContent.blocks, !blocks.isEmpty {
                 Text("Content Blocks")
-                    .font(.title2)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 4), weight: .semibold))
+                    .foregroundColor(primaryTextColor)
                     .padding(.top)
                 
                 ForEach(blocks) { block in
                     VStack(alignment: .leading, spacing: 8) {
                         if let type = block.type {
-                             // Display type only if it's not a quiz, as QuizBlockView handles its own title/question
                             if type.lowercased() != "multiplechoicequestion" {
-                                Text(type.capitalized) // E.g., "Text", "Image"
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                Text(type.capitalized)
+                                    .font(fontStyle.getFont(size: CGFloat(baseFontSize - 3)))
+                                    .foregroundColor(secondaryTextColor)
                                     .padding(.bottom, 2)
                             }
                         }
 
-                        // Handle standard text content if not a quiz
                         if block.type?.lowercased() != "multiplechoicequestion" && block.type?.lowercased() != "image" && block.type?.lowercased() != "quizheading", let content = block.content, !content.isEmpty {
                             Text(content)
-                                .font(.body)
-                                .contentShape(Rectangle()) // Make it tappable
+                                .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
+                                .foregroundColor(primaryTextColor)
+                                .lineSpacing(CGFloat(baseFontSize * 0.3))
+                                .contentShape(Rectangle())
                                 .onTapGesture {
-                                    // Ensure content is not empty before initiating dialogue
                                     if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                         viewModel.initiateDialogue(paragraph: content, originalContent: fullUserContentText)
                                     }
                                 }
                         }
                         
-                        // Handle image if not a quiz (or if quizzes can also have images - adjust as needed)
-                         if block.type?.lowercased() != "multiplechoicequestion", let imageUrlString = block.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
+                        if block.type?.lowercased() != "multiplechoicequestion", let imageUrlString = block.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
                             AsyncImage(url: imageUrl) { phase in
                                 switch phase {
                                 case .empty:
@@ -85,11 +88,11 @@ struct UserContentDetailView: View {
                                          .cornerRadius(8)
                                          .frame(maxHeight: 200)
                                 case .failure:
-                                    Image(systemName: "photo.artframe") // Placeholder for failure
+                                    Image(systemName: "photo.artframe")
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
                                         .frame(maxHeight: 200)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(secondaryTextColor)
                                 @unknown default:
                                     EmptyView()
                                         .frame(height: 200)
@@ -98,13 +101,16 @@ struct UserContentDetailView: View {
                             .padding(.vertical)
                         }
 
-                        // Render Quiz if block type is multipleChoiceQuestion
                         if block.type?.lowercased() == "multiplechoicequestion" {
-                            QuizBlockView(block: block)
+                            QuizBlockView(block: block,
+                                          baseFontSize: baseFontSize,
+                                          primaryTextColor: primaryTextColor,
+                                          secondaryTextColor: secondaryTextColor,
+                                          fontStyle: fontStyle)
                         }
                     }
                     .padding(.vertical)
-                    Divider()
+                    Divider().background(secondaryTextColor)
                 }
             }
         }

@@ -2,6 +2,10 @@ import SwiftUI
 
 struct QuizBlockView: View {
     let block: FirebaseContentBlock
+    let baseFontSize: Double
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+    let fontStyle: ReadingFontStyle
 
     @State private var selectedOptionID: String? = nil
     @State private var isAnswerSubmitted: Bool = false
@@ -11,7 +15,8 @@ struct QuizBlockView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let question = block.content, !question.isEmpty {
                 Text(question)
-                    .font(.headline)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize), weight: .semibold))
+                    .foregroundColor(primaryTextColor)
                     .padding(.bottom, 8)
             }
 
@@ -26,7 +31,8 @@ struct QuizBlockView: View {
                             Image(systemName: iconNameForOption(option: option))
                                 .foregroundColor(iconColorForOption(option: option))
                             Text(option.text ?? "Unnamed Option")
-                                .foregroundColor(.primary)
+                                .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.9)))
+                                .foregroundColor(primaryTextColor)
                             Spacer()
                         }
                         .padding()
@@ -52,6 +58,7 @@ struct QuizBlockView: View {
                     }
                 }) {
                     Text("Submit Answer")
+                        .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.9), weight: .semibold))
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -66,14 +73,15 @@ struct QuizBlockView: View {
                 if let explanationText = block.explanation, !explanationText.isEmpty {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Explanation:")
-                            .font(.subheadline)
-                            .bold()
+                            .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.85), weight: .bold))
+                            .foregroundColor(primaryTextColor)
                         Text(explanationText)
-                            .font(.subheadline)
+                            .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.85)))
+                            .foregroundColor(primaryTextColor)
                     }
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemGray6))
+                    .background(primaryTextColor.opacity(0.1))
                     .cornerRadius(8)
                     .padding(.top, 8)
                     .transition(.opacity.combined(with: .slide))

@@ -4,6 +4,10 @@ import SwiftUI
 struct StoryDetailView: View {
     @EnvironmentObject var viewModel: FullReadingViewModel
     let story: FirebaseStory
+    let baseFontSize: Double
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+    let fontStyle: ReadingFontStyle
 
     // Helper to construct full story text for context
     private var fullStoryText: String {
@@ -27,16 +31,21 @@ struct StoryDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(story.title)
-                .font(.largeTitle)
-                .bold()
+            if !story.title.isEmpty {
+                Text(story.title)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 8), weight: .bold))
+                    .foregroundColor(primaryTextColor)
+            }
             
             if let overview = story.overview, !overview.isEmpty {
                 Text("Overview")
-                    .font(.title2)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 4), weight: .semibold))
+                    .foregroundColor(primaryTextColor)
                     .padding(.top)
                 Text(overview)
-                    .font(.body)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
+                    .foregroundColor(primaryTextColor)
+                    .lineSpacing(CGFloat(baseFontSize * 0.3))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         viewModel.initiateDialogue(paragraph: overview, originalContent: fullStoryText)
@@ -45,18 +54,22 @@ struct StoryDetailView: View {
 
             if let chapters = story.chapters, !chapters.isEmpty {
                 Text("Chapters")
-                    .font(.title2)
+                    .font(fontStyle.getFont(size: CGFloat(baseFontSize + 4), weight: .semibold))
+                    .foregroundColor(primaryTextColor)
                     .padding(.top)
                 
                 ForEach(chapters) { chapter in
                     VStack(alignment: .leading, spacing: 8) {
                         if let chapterTitle = chapter.title, !chapterTitle.isEmpty {
                             Text(chapterTitle)
-                                .font(.headline)
+                                .font(fontStyle.getFont(size: CGFloat(baseFontSize + 2), weight: .medium))
+                                .foregroundColor(primaryTextColor)
                         }
                         if let content = chapter.content, !content.isEmpty {
                             Text(content)
-                                .font(.body)
+                                .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
+                                .foregroundColor(primaryTextColor)
+                                .lineSpacing(CGFloat(baseFontSize * 0.3))
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     viewModel.initiateDialogue(paragraph: content, originalContent: fullStoryText)
@@ -74,11 +87,11 @@ struct StoryDetailView: View {
                                          .cornerRadius(8)
                                          .frame(maxHeight: 200)
                                 case .failure:
-                                    Image(systemName: "photo.artframe") // Placeholder for failure
+                                    Image(systemName: "photo.artframe")
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
                                         .frame(maxHeight: 200)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(secondaryTextColor)
                                 @unknown default:
                                     EmptyView()
                                         .frame(height: 200)
@@ -88,7 +101,7 @@ struct StoryDetailView: View {
                         }
                     }
                     .padding(.vertical)
-                    Divider()
+                    Divider().background(secondaryTextColor)
                 }
             }
         }

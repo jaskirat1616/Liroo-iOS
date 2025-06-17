@@ -57,6 +57,11 @@ struct MainAppView: View {
                  .tabItem {
                      Label("Profile", systemImage: "person.crop.circle")
                  }
+
+                 SettingsView() // Add SettingsView as a tab
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
         }
     }
 }
