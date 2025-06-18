@@ -11,7 +11,6 @@ struct SignupView: View {
     @State private var interestedTopicsString = ""
     @State private var isStudent = false
     @State private var additionalInfo = ""
-    @State private var isLoading = false
     @State private var showError = false
     @State private var errorMessage = ""
     
@@ -121,7 +120,7 @@ struct SignupView: View {
                 
                 // Sign Up Button
                 Button(action: signUp) {
-                    if isLoading {
+                    if authViewModel.isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     } else {
@@ -135,7 +134,7 @@ struct SignupView: View {
                 .foregroundColor(.white)
                 .cornerRadius(10)
                 .padding(.horizontal)
-                .disabled(isLoading)
+                .disabled(authViewModel.isLoading)
                 
                 // Sign In Link
                 HStack {
@@ -160,14 +159,18 @@ struct SignupView: View {
     }
     
     private func signUp() {
+        // Clear previous errors
+        authViewModel.errorMessage = nil
+        errorMessage = ""
+        
         // Validate inputs
-        guard !name.isEmpty else {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Please enter your name"
             showError = true
             return
         }
         
-        guard !email.isEmpty else {
+        guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Please enter your email"
             showError = true
             return
@@ -184,8 +187,6 @@ struct SignupView: View {
             showError = true
             return
         }
-        
-        isLoading = true
         
         Task {
             do {
@@ -207,7 +208,6 @@ struct SignupView: View {
                 errorMessage = authViewModel.errorMessage ?? "An error occurred"
                 showError = true
             }
-            isLoading = false
         }
     }
 }

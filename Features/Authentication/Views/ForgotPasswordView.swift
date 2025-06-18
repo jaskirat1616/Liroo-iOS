@@ -5,7 +5,6 @@ struct ForgotPasswordView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var email = ""
-    @State private var isLoading = false
     @State private var showError = false
     @State private var showSuccess = false
     
@@ -42,7 +41,7 @@ struct ForgotPasswordView: View {
                 
                 // Reset Button
                 Button(action: resetPassword) {
-                    if isLoading {
+                    if authViewModel.isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     } else {
@@ -56,7 +55,7 @@ struct ForgotPasswordView: View {
                 .foregroundColor(.white)
                 .cornerRadius(10)
                 .padding(.horizontal)
-                .disabled(isLoading)
+                .disabled(authViewModel.isLoading)
                 
                 // Back to Sign In
                 Button("Back to Sign In") {
@@ -83,13 +82,14 @@ struct ForgotPasswordView: View {
     }
     
     private func resetPassword() {
-        guard !email.isEmpty else {
+        // Clear previous errors
+        authViewModel.errorMessage = nil
+        
+        guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             authViewModel.errorMessage = "Please enter your email"
             showError = true
             return
         }
-        
-        isLoading = true
         
         Task {
             do {
@@ -98,7 +98,6 @@ struct ForgotPasswordView: View {
             } catch {
                 showError = true
             }
-            isLoading = false
         }
     }
 }

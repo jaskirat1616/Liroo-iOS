@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab: Tab = .dashboard
+    @EnvironmentObject private var authViewModel: AuthViewModel
 
     // You might access the context here if MainTabView itself needs to perform Core Data operations
     // @Environment(\.managedObjectContext) private var viewContext 

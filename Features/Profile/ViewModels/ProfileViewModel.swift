@@ -20,6 +20,7 @@ final class ProfileViewModel: ObservableObject {
         var interestedTopics: [String]?
         var isStudent: Bool?
         var additionalInfo: String?
+        var lastLoginAt: Date?
         
         struct FontPreferences: Codable {
             var fontSize: Double
@@ -223,14 +224,21 @@ final class ProfileViewModel: ObservableObject {
             processedData["updatedAt"] = nil
         }
 
+        // START NEW CODE TO HANDLE lastLoginAt
+        if let lastLoginAtTimestamp = data["lastLoginAt"] as? Timestamp {
+            processedData["lastLoginAt"] = lastLoginAtTimestamp.dateValue().timeIntervalSince1970
+        } else if data["lastLoginAt"] == nil || data["lastLoginAt"] is NSNull {
+            // If UserProfile expects an optional Date for lastLoginAt, setting to nil is correct.
+            processedData["lastLoginAt"] = nil
+        } else if data["lastLoginAt"] != nil && !(data["lastLoginAt"] is Double) {
+            // If lastLoginAt exists but is not a Timestamp or already a Double, it's unexpected.
+            print("Warning: 'lastLoginAt' field was of an unexpected type: \(String(describing: type(of: data["lastLoginAt"]!))). Treating as nil.")
+            processedData["lastLoginAt"] = nil // Or you could remove it: processedData.removeValue(forKey: "lastLoginAt")
+                                             // depending on whether UserProfile model has this field.
+        }
+        // END NEW CODE TO HANDLE lastLoginAt
+
         // Handle FontPreferences: Firestore might return it as Data
-        // JSONDecoder expects a dictionary for a nested struct, not raw Data.
-        // So, if fontPreferences is Data, we first decode it into a dictionary [String: Any]
-        // or directly into the FontPreferences struct and then re-encode it as part of the main JSON.
-        // A simpler way is to decode it into the struct and then place the struct itself,
-        // letting the outer JSONEncoder for UserProfile handle it.
-        // However, since we are using JSONSerialization first, we need to make it a compatible type.
-        
         if let fontPrefsData = data["fontPreferences"] as? Data {
             do {
                 // Decode the Data into FontPreferences struct first
@@ -241,15 +249,13 @@ final class ProfileViewModel: ObservableObject {
                 processedData["fontPreferences"] = dictRepresentation
             } catch {
                 print("Error decoding fontPreferences Data into dictionary: \(error). Setting to nil.")
-                processedData["fontPreferences"] = nil // Or handle error appropriately
+                processedData["fontPreferences"] = nil
             }
         } else if data["fontPreferences"] != nil && !(data["fontPreferences"] is [String: Any]) {
             // If it's not Data and not already a dictionary, it's an unexpected type.
             print("Warning: 'fontPreferences' field was of an unexpected type: \(String(describing: type(of: data["fontPreferences"]!))). Treating as nil.")
             processedData["fontPreferences"] = nil
         }
-        // If fontPreferences is already a [String: Any] dictionary (e.g., from older data or manual entry),
-        // it should pass through JSONSerialization correctly.
 
         let jsonData = try JSONSerialization.data(withJSONObject: processedData, options: [])
         return try decoder.decode(UserProfile.self, from: jsonData)

@@ -30,7 +30,7 @@ struct UserHistoryEntry: Identifiable, Hashable { // Renamed from HistoryItem
     init(from content: FirebaseUserContent) {
         self.id = content.id ?? UUID().uuidString
         self.title = content.topic ?? "Generated Content"
-        self.date = content.createdAt ?? Date()
+        self.date = content.createdAt?.dateValue() ?? Date()
         self.type = .generatedContent
         self.originalDocumentID = content.id ?? ""
         self.originalCollectionName = "userGeneratedContent"

@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject private var authViewModel: AuthViewModel
+    @State private var showSignOutAlert = false
+    @State private var showDeleteAccountAlert = false
+    
     // Access the AppStorage variables
     @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
     @AppStorage("readingFontSize") private var selectedFontSize: Double = 17.0 // Default font size
@@ -21,6 +25,31 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
+                // User Account Section
+                Section(header: Text("Account")) {
+                    if let user = authViewModel.user {
+                        HStack {
+                            Text("Email")
+                            Spacer()
+                            Text(user.email ?? "No email")
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        HStack {
+                            Text("User ID")
+                            Spacer()
+                            Text(user.uid.prefix(8) + "...")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                    
+                    Button("Sign Out") {
+                        showSignOutAlert = true
+                    }
+                    .foregroundColor(.red)
+                }
+                
                 Section(header: Text("Reading Preferences")) {
                     // Theme Picker
                     Picker("Theme", selection: $selectedThemeName) {
@@ -68,8 +97,42 @@ struct SettingsView: View {
                      .foregroundColor(currentTheme.primaryTextColor) // Use selected theme
                      .cornerRadius(8)
                 }
+                
+                // Danger Zone Section
+                Section(header: Text("Danger Zone")) {
+                    Button("Delete Account") {
+                        showDeleteAccountAlert = true
+                    }
+                    .foregroundColor(.red)
+                }
             }
             .navigationTitle("Settings")
+            .alert("Sign Out", isPresented: $showSignOutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    do {
+                        try authViewModel.signOut()
+                    } catch {
+                        print("Error signing out: \(error.localizedDescription)")
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to sign out?")
+            }
+            .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        do {
+                            try await authViewModel.deleteAccount()
+                        } catch {
+                            print("Error deleting account: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data.")
+            }
         }
     }
 }

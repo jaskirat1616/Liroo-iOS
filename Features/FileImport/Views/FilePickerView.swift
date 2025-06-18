@@ -12,6 +12,9 @@ struct FilePickerView: UIViewControllerRepresentable {
         // asCopy: true is generally safer. It provides a copy of the file in a temporary location.
         // If you need to access the original file, use asCopy: false and handle security-scoped bookmarks.
         controller.delegate = context.coordinator
+        controller.shouldShowFileExtensions = true
+        controller.allowsMultipleSelection = false
+        controller.directoryURL = nil // Don't restrict to a specific directory
         return controller
     }
 
@@ -34,6 +37,16 @@ struct FilePickerView: UIViewControllerRepresentable {
             guard let url = urls.first else {
                 // This case should ideally not happen if the picker successfully returns.
                 // You might want to log an error or handle it.
+                print("🔍 FilePickerView: No URL returned from document picker")
+                return
+            }
+            
+            print("🔍 FilePickerView: Document picked at URL: \(url.absoluteString)")
+            print("🔍 FilePickerView: File exists at path: \(FileManager.default.fileExists(atPath: url.path))")
+            
+            // Verify the file is accessible
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("🔍 FilePickerView: ERROR - File does not exist at picked URL")
                 return
             }
             

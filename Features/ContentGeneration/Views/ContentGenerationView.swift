@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 struct ContentGenerationView: View {
     @StateObject private var viewModel = ContentGenerationViewModel()
@@ -73,8 +74,18 @@ struct ContentGenerationView: View {
 
                         // Display OCR Status/Error
                         if ocrViewModel.isProcessing {
-                            ProgressView("Scanning image...")
-                                .padding(.top, 5)
+                            if ocrViewModel.totalPages > 1 {
+                                VStack {
+                                    ProgressView("Processing page \(ocrViewModel.currentPage) of \(ocrViewModel.totalPages)...")
+                                        .padding(.top, 5)
+                                    Text("Scanning multi-page document...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                ProgressView("Scanning image...")
+                                    .padding(.top, 5)
+                            }
                         } else if let ocrError = ocrViewModel.errorMessage {
                             Text("OCR Error: \(ocrError)")
                                 .foregroundColor(.red)
@@ -219,14 +230,15 @@ struct ContentGenerationView: View {
             )
             .onChange(of: selectedPhotoItem) { newItem in
                 Task {
-                    ocrViewModel.setImageForProcessing(nil)
-                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                        if let uiImage = UIImage(data: data) {
-                            ocrViewModel.setImageForProcessing(uiImage)
-                            return
-                        }
-                    }
+                    // Only clear if we're actually going to process a new item
                     if newItem != nil {
+                        ocrViewModel.setImageForProcessing(nil)
+                        if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                            if let uiImage = UIImage(data: data) {
+                                ocrViewModel.setImageForProcessing(uiImage)
+                                return
+                            }
+                        }
                         ocrViewModel.errorMessage = "Could not load image from library."
                     }
                 }
@@ -234,24 +246,42 @@ struct ContentGenerationView: View {
             .sheet(isPresented: $showingFileImporter) {
                 FilePickerView(
                     selectedFileURL: .constant(nil),
-                    allowedFileTypes: [.image],
+                    allowedFileTypes: [.image, .pdf],
                     onFilePicked: { url in
+                        // Clear previous state once at the beginning
                         ocrViewModel.setImageForProcessing(nil)
+                        ocrViewModel.errorMessage = nil
+
                         let shouldStopAccessing = url.startAccessingSecurityScopedResource()
                         defer {
                             if shouldStopAccessing {
                                 url.stopAccessingSecurityScopedResource()
                             }
                         }
+
                         do {
-                            let imageData = try Data(contentsOf: url)
-                            if let uiImage = UIImage(data: imageData) {
-                                ocrViewModel.setImageForProcessing(uiImage)
+                            let resources = try url.resourceValues(forKeys: [.contentTypeKey])
+                            guard let contentType = resources.contentType else {
+                                ocrViewModel.errorMessage = "Could not determine the file type."
+                                return
+                            }
+
+                            if contentType.conforms(to: .image) {
+                                let imageData = try Data(contentsOf: url)
+                                if let uiImage = UIImage(data: imageData) {
+                                    ocrViewModel.setImageForProcessing(uiImage)
+                                } else {
+                                    ocrViewModel.errorMessage = "Failed to convert the selected file to an image. The file might be corrupted or in an unsupported format."
+                                }
+                            } else if contentType.conforms(to: .pdf) {
+                                // Use the OCRViewModel's processFile method for PDF handling
+                                ocrViewModel.processFile(at: url, fileType: contentType)
                             } else {
-                                ocrViewModel.errorMessage = "Failed to convert imported file to an image."
+                                let fileExtension = contentType.preferredFilenameExtension ?? "unknown"
+                                ocrViewModel.errorMessage = "Unsupported file type selected: \(fileExtension)."
                             }
                         } catch {
-                            ocrViewModel.errorMessage = "Could not load data from file: \(error.localizedDescription)"
+                            ocrViewModel.errorMessage = "Could not load data from the file: \(error.localizedDescription)"
                         }
                     }
                 )

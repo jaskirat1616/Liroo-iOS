@@ -4,7 +4,6 @@ struct LoginView: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
     @State private var email = ""
     @State private var password = ""
-    @State private var isLoading = false
     @State private var showError = false
     
     var body: some View {
@@ -49,7 +48,7 @@ struct LoginView: View {
                     
                     // Sign In Button
                     Button(action: signIn) {
-                        if isLoading {
+                        if authViewModel.isLoading {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
@@ -63,7 +62,7 @@ struct LoginView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .padding(.horizontal)
-                    .disabled(isLoading)
+                    .disabled(authViewModel.isLoading)
                     
                     // Forgot Password
                     NavigationLink(destination: ForgotPasswordView()) {
@@ -96,7 +95,21 @@ struct LoginView: View {
     }
     
     private func signIn() {
-        isLoading = true
+        // Clear previous errors
+        authViewModel.errorMessage = nil
+        
+        // Basic validation
+        guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            authViewModel.errorMessage = "Please enter your email"
+            showError = true
+            return
+        }
+        
+        guard !password.isEmpty else {
+            authViewModel.errorMessage = "Please enter your password"
+            showError = true
+            return
+        }
         
         Task {
             do {
@@ -104,7 +117,6 @@ struct LoginView: View {
             } catch {
                 showError = true
             }
-            isLoading = false
         }
     }
 }

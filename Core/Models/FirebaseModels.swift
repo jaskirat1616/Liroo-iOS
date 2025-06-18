@@ -71,7 +71,7 @@ struct FirebaseUserContent: Identifiable, Codable, Hashable {
     var level: String?
     var summarizationTier: String?
     var blocks: [FirebaseContentBlock]?
-    var createdAt: Date?
+    var createdAt: Timestamp? = Timestamp(date: Date())
 
     // Conform to Hashable
     func hash(into hasher: inout Hasher) {

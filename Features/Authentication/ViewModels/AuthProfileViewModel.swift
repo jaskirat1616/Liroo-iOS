@@ -81,13 +81,52 @@ final class AuthProfileViewModel: ObservableObject {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
         
-        // Convert Firestore Timestamp to Unix timestamp
         var processedData = data
-        if let createdAt = data["createdAt"] as? Timestamp {
-            processedData["createdAt"] = createdAt.dateValue().timeIntervalSince1970
+        
+        // Handle createdAt timestamp
+        if let createdAtTimestamp = data["createdAt"] as? Timestamp {
+            processedData["createdAt"] = createdAtTimestamp.dateValue().timeIntervalSince1970
+        } else if data["createdAt"] == nil || data["createdAt"] is NSNull {
+            processedData["createdAt"] = nil
+        } else if data["createdAt"] != nil && !(data["createdAt"] is Double) {
+            print("Warning: 'createdAt' field was of an unexpected type: \(String(describing: type(of: data["createdAt"]!))). Treating as nil.")
+            processedData["createdAt"] = nil
         }
-        if let updatedAt = data["updatedAt"] as? Timestamp {
-            processedData["updatedAt"] = updatedAt.dateValue().timeIntervalSince1970
+        
+        // Handle updatedAt timestamp
+        if let updatedAtTimestamp = data["updatedAt"] as? Timestamp {
+            processedData["updatedAt"] = updatedAtTimestamp.dateValue().timeIntervalSince1970
+        } else if data["updatedAt"] == nil || data["updatedAt"] is NSNull {
+            processedData["updatedAt"] = nil
+        } else if data["updatedAt"] != nil && !(data["updatedAt"] is Double) {
+            print("Warning: 'updatedAt' field was of an unexpected type: \(String(describing: type(of: data["updatedAt"]!))). Treating as nil.")
+            processedData["updatedAt"] = nil
+        }
+        
+        // Handle lastLoginAt timestamp
+        if let lastLoginAtTimestamp = data["lastLoginAt"] as? Timestamp {
+            processedData["lastLoginAt"] = lastLoginAtTimestamp.dateValue().timeIntervalSince1970
+        } else if data["lastLoginAt"] == nil || data["lastLoginAt"] is NSNull {
+            processedData["lastLoginAt"] = nil
+        } else if data["lastLoginAt"] != nil && !(data["lastLoginAt"] is Double) {
+            print("Warning: 'lastLoginAt' field was of an unexpected type: \(String(describing: type(of: data["lastLoginAt"]!))). Treating as nil.")
+            processedData["lastLoginAt"] = nil
+        }
+        
+        // Handle fontPreferences if it's stored as Data
+        if let fontPrefsData = data["fontPreferences"] as? Data {
+            do {
+                let fontPreferencesStruct = try JSONDecoder().decode(UserProfile.FontPreferences.self, from: fontPrefsData)
+                let fontPreferencesDict = try JSONEncoder().encode(fontPreferencesStruct)
+                let dictRepresentation = try JSONSerialization.jsonObject(with: fontPreferencesDict, options: []) as? [String: Any]
+                processedData["fontPreferences"] = dictRepresentation
+            } catch {
+                print("Error decoding fontPreferences Data into dictionary: \(error). Setting to nil.")
+                processedData["fontPreferences"] = nil
+            }
+        } else if data["fontPreferences"] != nil && !(data["fontPreferences"] is [String: Any]) {
+            print("Warning: 'fontPreferences' field was of an unexpected type: \(String(describing: type(of: data["fontPreferences"]!))). Treating as nil.")
+            processedData["fontPreferences"] = nil
         }
         
         let jsonData = try JSONSerialization.data(withJSONObject: processedData)
