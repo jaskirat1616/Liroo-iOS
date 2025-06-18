@@ -62,26 +62,37 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Story] Starting story generation process")
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Story] Trimmed main character for prompt: '\(trimmedMainCharacter)'")
+
+        // MODIFICATION 1: Integrate main character directly into the input text for the story LLM
+        var effectiveInputText = inputText
+        if !trimmedMainCharacter.isEmpty {
+            effectiveInputText = "The main character of this story is \(trimmedMainCharacter).\n\n\(inputText)"
+            print("[Story] Effective input text for story model will include main character: \(effectiveInputText.prefix(100))...")
+        }
+
+        // The "Main Character: \(trimmedMainCharacter)" line in storyPrompt is still useful
+        // for the backend to parse for chapter image generation prompts.
         let storyPrompt = """
         [Level: \(selectedLevel.rawValue)]
         Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story, maintaining the key information but presenting it in a narrative format.
         Image Style to consider for tone and visuals: \(selectedImageStyle.displayName).
-        \(trimmedMainCharacter.isEmpty ? "" : "Main Character: \(trimmedMainCharacter)")
+        \(trimmedMainCharacter.isEmpty ? "" : "Main Character: \(trimmedMainCharacter)") 
         Original Text:
-        \(inputText)
+        \(effectiveInputText) 
         """
         
         print("[Story] Generated story prompt for backend")
         // print("[Story] Full prompt: \(storyPrompt)") // For debugging the exact prompt
         print("[Story] Selected level: \(selectedLevel.rawValue)")
         print("[Story] Selected genre: \(selectedGenre.rawValue)")
-        print("[Story] Selected image style for prompt: \(selectedImageStyle.displayName)") // This is the overall style
+        print("[Story] Selected image style for prompt (displayName): \(selectedImageStyle.displayName)")
         
         let requestBody: [String: Any] = [
             "text": storyPrompt,
             "level": selectedLevel.rawValue,
             "genre": selectedGenre.rawValue.lowercased(),
-            "image_style": selectedImageStyle.rawValue
+            // MODIFICATION 2: Use displayName for image_style to match backend's expected keys
+            "image_style": selectedImageStyle.displayName 
         ]
         
         let url = URL(string: "\(backendURL)/generate_story")!
@@ -627,17 +638,25 @@ class ContentGenerationViewModel: ObservableObject {
         // Using a combined prompt from title and content. Adjust length as needed.
         let promptText = "Vivid illustration for story chapter titled '\(chapterIdentifier)': \(chapter.content.prefix(250))"
 
+        // MODIFICATION 3: Use displayName for image_style fallback
+        let effectiveImageStyle = chapter.imageStyle ?? selectedImageStyle.displayName
+        print("[Image] Effective image style for chapter '\(chapterIdentifier)': \(effectiveImageStyle)")
+
         let requestBody: [String: Any] = [
             "prompt": promptText,
             "level": currentStory?.level.rawValue ?? selectedLevel.rawValue,
-            "image_style": chapter.imageStyle ?? selectedImageStyle.backendRawValue,
+            "image_style": effectiveImageStyle,
             // max_width and max_height are not directly handled by the /generate_image endpoint's parameters in the provided backend code.
             // The backend's generate_and_save_image function uses them for prompt engineering if they were passed deeper.
             // For now, relying on backend's internal logic for sizing.
         ]
 
+        guard let url = URL(string: "\(backendURL)/generate_image") else {
+            print("[Image] ERROR: Invalid URL for image generation")
+            return nil
+        }
+
         do {
-            let url = URL(string: "\(backendURL)/generate_image")!
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
