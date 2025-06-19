@@ -44,6 +44,7 @@ enum ReadingTheme: String, CaseIterable, Identifiable {
 enum ReadingFontStyle: String, CaseIterable, Identifiable {
     case systemDefault = "System Default"
     case systemSerif = "System Serif" // e.g., New York
+    case openDyslexic = "OpenDyslexic" // OpenDyslexic font
     // case systemMonospaced = "System Monospaced" // Another option
     // case customSansSerif = "Open Sans" // Example if you bundle a custom font
 
@@ -55,6 +56,8 @@ enum ReadingFontStyle: String, CaseIterable, Identifiable {
             return .system(size: size, weight: weight, design: .default)
         case .systemSerif:
             return .system(size: size, weight: weight, design: .serif)
+        case .openDyslexic:
+            return .custom("OpenDyslexic-Regular", size: size)
         // case .systemMonospaced:
         //     return .system(size: size, weight: weight, design: .monospaced)
         // case .customSansSerif:
