@@ -27,11 +27,22 @@ struct ContentGenerationView: View {
                         Text("Enter your text or use OCR")
                             .font(.headline)
                         
-                        TextEditor(text: $viewModel.inputText)
+                        ZStack(alignment: .topTrailing) {
+                            TextEditor(text: Binding(
+                                get: { String(viewModel.inputText.prefix(5000)) },
+                                set: { viewModel.inputText = String($0.prefix(5000)) }
+                            ))
                             .frame(minHeight: 150)
                             .padding(8)
                             .background(Color(.systemGray6))
                             .cornerRadius(10)
+                            
+                            // Character count
+                            Text("\(viewModel.inputText.count)/5000")
+                                .font(.caption)
+                                .foregroundColor(viewModel.inputText.count > 5000 ? .red : .secondary)
+                                .padding([.top, .trailing], 12)
+                        }
                         
                         // Buttons for OCR
                         VStack(spacing: 10) {
@@ -93,6 +104,24 @@ struct ContentGenerationView: View {
                                 .padding(.top, 5)
                         }
                         
+                    }
+                    .padding(.horizontal)
+                    
+                    // Daily Generation Limit Indicator
+                    HStack {
+                        let used = viewModel.todayGenerationCount
+                        let limit = 8
+                        let atLimit = used >= limit
+                        Text("Daily Generation Limit: ")
+                            .font(.subheadline)
+                        Text("\(used) / \(limit) used" )
+                            .font(.subheadline)
+                            .foregroundColor(atLimit ? .red : .primary)
+                        if atLimit {
+                            Text("(limit reached)")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                        }
                     }
                     .padding(.horizontal)
                     
@@ -334,6 +363,9 @@ struct ContentGenerationView: View {
                     StoryView(story: story)
                 }
             }
+        }
+        .task {
+            await viewModel.refreshTodayGenerationCount()
         }
     }
 }

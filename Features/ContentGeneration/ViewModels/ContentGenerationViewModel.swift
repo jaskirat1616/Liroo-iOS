@@ -17,6 +17,7 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var currentStory: Story?
     @Published var blocks: [ContentBlock] = []
     @Published var isShowingFullScreenStory = false
+    @Published var todayGenerationCount: Int = 0
     
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
@@ -42,6 +43,16 @@ class ContentGenerationViewModel: ObservableObject {
             return
         }
         
+        // Daily generation limit check
+        if let userId = Auth.auth().currentUser?.uid {
+            let todayCount = await fetchTodayGenerationCount(userId: userId)
+            await MainActor.run { self.todayGenerationCount = todayCount }
+            if todayCount >= 8 {
+                errorMessage = "You have reached your daily generation limit (8 per day). Please try again tomorrow."
+                return
+            }
+        }
+        
         isLoading = true
         errorMessage = nil
         
@@ -51,6 +62,8 @@ class ContentGenerationViewModel: ObservableObject {
             } else {
                 try await generateRegularContent()
             }
+            // Refresh count after successful generation
+            await refreshTodayGenerationCount()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -551,6 +564,13 @@ class ContentGenerationViewModel: ObservableObject {
             let documentId = try await firestoreService.create(firebaseStory, in: "stories", documentId: story.id.uuidString)
             print("[Story][Save] Successfully saved story to Firestore with document ID: \(documentId)")
             
+            // Track story generation for dashboard engagement metrics
+            await MainActor.run {
+                let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
+                UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
+                print("[Engagement] Story generation tracked. Total: \(currentCount + 1)")
+            }
+            
             // Optional: Verification step
             // print("[Story][Save] Verifying saved story data...")
             // if let savedStoryData = try? await firestoreService.fetch(FirebaseStory.self, from: "stories", documentId: documentId) {
@@ -607,6 +627,13 @@ class ContentGenerationViewModel: ObservableObject {
             print("[Content][Save] Attempting to create content document in Firestore. Collection: 'userGeneratedContent'")
             let documentId = try await firestoreService.create(firebaseContent, in: "userGeneratedContent")
             print("[Content][Save] Successfully saved content to Firestore with document ID: \(documentId)")
+            
+            // Track content generation for dashboard engagement metrics
+            await MainActor.run {
+                let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
+                UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
+                print("[Engagement] Content generation tracked. Total: \(currentCount + 1)")
+            }
             
             // Optional: Verification step
             // print("[Content][Save] Verifying saved content data...")
@@ -835,6 +862,45 @@ class ContentGenerationViewModel: ObservableObject {
     private func extractTopicTitle(from text: String) -> String {
         let firstLine = text.split(separator: "\n").first ?? ""
         return String(firstLine.prefix(50))
+    }
+    
+    /// Fetches the number of content generations (stories + userGeneratedContent) for the user today.
+    private func fetchTodayGenerationCount(userId: String) async -> Int {
+        let db = Firestore.firestore()
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!.addingTimeInterval(-1)
+        let startTimestamp = Timestamp(date: startOfDay)
+        let endTimestamp = Timestamp(date: endOfDay)
+        var total = 0
+        do {
+            // Query userGeneratedContent
+            let userContentSnapshot = try await db.collection("userGeneratedContent")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
+                .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
+                .getDocuments()
+            total += userContentSnapshot.documents.count
+            // Query stories
+            let storiesSnapshot = try await db.collection("stories")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
+                .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
+                .getDocuments()
+            total += storiesSnapshot.documents.count
+        } catch {
+            print("[DailyLimit] Error fetching today's generation count: \(error)")
+        }
+        return total
+    }
+
+    /// Public method to refresh the daily generation count (call onAppear in the view)
+    @MainActor
+    func refreshTodayGenerationCount() async {
+        if let userId = Auth.auth().currentUser?.uid {
+            let count = await fetchTodayGenerationCount(userId: userId)
+            self.todayGenerationCount = count
+        }
     }
 }
 

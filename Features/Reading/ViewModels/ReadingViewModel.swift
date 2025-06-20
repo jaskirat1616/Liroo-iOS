@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import FirebaseFirestore
+import CoreData // Add this import for CoreData access
 
 import FirebaseFirestore // Assuming Firebase for content fetching
 
@@ -43,6 +44,12 @@ class FullReadingViewModel: ObservableObject {
     @Published var originalContentForDialogue: String? // Full text for context
     @Published var isSendingDialogueMessage: Bool = false
 
+    // --- Real Reading session tracking ---
+    private var sessionStartTime: Date?
+    private var sessionWordsRead: Int = 0
+    private var sessionProgress: Double = 0.0
+    private var lastProgressUpdate: Date = Date()
+    private var progressUpdateInterval: TimeInterval = 30 // Update progress every 30 seconds
 
     private var db = Firestore.firestore()
     private let itemID: String
@@ -57,6 +64,69 @@ class FullReadingViewModel: ObservableObject {
         self.itemID = itemID
         self.collectionName = collectionName
         fetchFullContent()
+    }
+
+    // MARK: - CoreData Book Update
+    private func markBookAsRead(withID id: String?, orTitle title: String?, progress: Double? = nil, author: String? = nil) {
+        let context = PersistenceController.shared.container.viewContext
+        let fetchRequest: NSFetchRequest<Book> = Book.fetchRequest()
+        if let id = id, let uuid = UUID(uuidString: id) {
+            fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+        } else if let title = title, !title.isEmpty {
+            fetchRequest.predicate = NSPredicate(format: "title == %@", title)
+        } else {
+            return // No valid identifier
+        }
+        fetchRequest.fetchLimit = 1
+        do {
+            let book = try context.fetch(fetchRequest).first ?? Book(context: context)
+            if let id = id, let uuid = UUID(uuidString: id) { book.id = uuid }
+            book.title = title
+            book.lastReadDate = Date()
+            book.isArchived = false
+            if let progress = progress { book.progress = Float(progress) }
+            if let author = author { book.author = author }
+            try context.save()
+            print("[Reading] Updated/Created Book: id=\(String(describing: book.id)), title=\(book.title ?? "nil"), progress=\(book.progress), author=\(book.author ?? "nil"), lastReadDate=\(String(describing: book.lastReadDate)), isArchived=\(book.isArchived)")
+            NotificationCenter.default.post(name: .dashboardNeedsRefresh, object: nil)
+        } catch {
+            print("Failed to update or create Book: \(error)")
+        }
+    }
+
+    /// Log a reading session to CoreData for dashboard stats and charts
+    private func logReadingSession(bookId: UUID?, date: Date = Date(), duration: TimeInterval, wordsRead: Int, wordsPerMinute: Int) {
+        let context = PersistenceController.shared.container.viewContext
+        let log = ReadingLog(context: context)
+        log.id = UUID()
+        log.date = date
+        log.duration = Int64(duration) // in seconds
+        log.wordsRead = Int64(wordsRead) // Estimated words for this specific session
+        
+        // Ensure you have added 'wordsPerMinute' attribute to your ReadingLog entity in Core Data Model
+        // For example, as an Int16 or Double. Adjust cast if needed.
+        log.wordsPerMinute = Int16(wordsPerMinute) // Calculated WPM for this specific session
+
+        // TODO: Establish and save relationship to Book entity if bookId is not nil
+        // if let bookUUID = bookId {
+        //     let fetchRequest: NSFetchRequest<Book> = Book.fetchRequest()
+        //     fetchRequest.predicate = NSPredicate(format: "id == %@", bookUUID as CVarArg)
+        //     fetchRequest.fetchLimit = 1
+        //     do {
+        //         if let book = try context.fetch(fetchRequest).first {
+        //             log.book = book // Assuming a 'book' relationship exists on ReadingLog
+        //         }
+        //     } catch {
+        //         print("[Reading] Error fetching book to link to ReadingLog: \(error)")
+        //     }
+        // }
+
+        do {
+            try context.save()
+            print("[Reading] Created ReadingLog: id=\(String(describing: log.id)), date=\(date), duration=\(duration), wordsRead=\(wordsRead), sessionWPM=\(wordsPerMinute)")
+        } catch {
+            print("[Reading] Failed to create ReadingLog: \(error)")
+        }
     }
 
     func fetchFullContent() {
@@ -84,12 +154,16 @@ class FullReadingViewModel: ObservableObject {
                 if self.collectionName == "stories" {
                      do {
                         self.story = try document.data(as: FirebaseStory.self)
+                        // Don't log reading session here - wait for actual reading
+                        print("[Reading] Loaded story: \(self.story?.title ?? "Unknown")")
                      } catch {
                         self.errorMessage = "Failed to decode story: \(error.localizedDescription)"
                      }
                 } else if self.collectionName == "userGeneratedContent" { // Adjust collection name if different
                      do {
                         self.userContent = try document.data(as: FirebaseUserContent.self)
+                        // Don't log reading session here - wait for actual reading
+                        print("[Reading] Loaded user content: \(self.userContent?.topic ?? "Unknown")")
                      } catch {
                         self.errorMessage = "Failed to decode user content: \(error.localizedDescription)"
                      }
@@ -109,6 +183,9 @@ class FullReadingViewModel: ObservableObject {
         // Add an initial greeting or prompt from AI if desired
         self.dialogueMessages.append(ChatMessage(sender: .ai, text: "Hi there! What would you like to discuss about this paragraph?"))
         self.isShowingDialogueView = true
+        
+        // Track dialogue interaction for engagement metrics
+        self.trackDialogueInteraction()
     }
 
     @MainActor
@@ -155,36 +232,35 @@ class FullReadingViewModel: ObservableObject {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                var responseBody: String = ""
-                if let responseData = data as? Data, let bodyString = String(data: responseData, encoding: .utf8) {
-                    responseBody = bodyString
-                }
-                self.handleDialogueError("Server error: \(statusCode). Body: \(responseBody)", loadingMessageId: loadingMessageId)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                self.handleDialogueError("Invalid response", loadingMessageId: loadingMessageId)
                 return
             }
             
-            if let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-               let aiText = jsonResponse["dialogue_response"] as? String { // Assuming the key is "dialogue_response"
-                if let index = dialogueMessages.firstIndex(where: { $0.id == loadingMessageId }) {
-                    dialogueMessages[index] = ChatMessage(id: loadingMessageId, sender: .ai, text: aiText, isLoading: false)
-                } else {
-                    // Fallback if loading message was somehow removed
-                    dialogueMessages.append(ChatMessage(sender: .ai, text: aiText))
-                }
-            } else {
-                self.handleDialogueError("Failed to parse AI response.", loadingMessageId: loadingMessageId)
+            guard httpResponse.statusCode == 200 else {
+                self.handleDialogueError("Server error: \(httpResponse.statusCode)", loadingMessageId: loadingMessageId)
+                return
             }
-
+            
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let responseText = json["response"] as? String else {
+                self.handleDialogueError("Invalid response format", loadingMessageId: loadingMessageId)
+                return
+            }
+            
+            // Update the loading message with the actual response
+            if let index = dialogueMessages.firstIndex(where: { $0.id == loadingMessageId }) {
+                dialogueMessages[index] = ChatMessage(id: loadingMessageId, sender: .ai, text: responseText, isLoading: false)
+            }
+            
+            isSendingDialogueMessage = false
+            
         } catch {
-            self.handleDialogueError("Network request failed: \(error.localizedDescription)", loadingMessageId: loadingMessageId)
+            self.handleDialogueError("Network error: \(error.localizedDescription)", loadingMessageId: loadingMessageId)
         }
-        isSendingDialogueMessage = false
     }
 
-    @MainActor // Ensure UI updates are on main thread
     private func handleDialogueError(_ message: String, loadingMessageId: UUID) {
         if let index = dialogueMessages.firstIndex(where: { $0.id == loadingMessageId }) {
              dialogueMessages[index] = ChatMessage(id: loadingMessageId, sender: .ai, text: "Error: \(message)", isLoading: false)
@@ -201,6 +277,109 @@ class FullReadingViewModel: ObservableObject {
         selectedParagraphForDialogue = nil
         originalContentForDialogue = nil
         // isShowingDialogueView = false // Optionally hide the view when cleared
+    }
+
+    /// Call this when the user starts reading
+    func startReadingSession() {
+        guard sessionStartTime == nil else { return } // Prevent double-start
+        sessionStartTime = Date()
+        // sessionWordsRead and sessionProgress are reset by the logic in calculateRealProgressForCurrentSession
+        // when a new session starts if you were using them for live UI.
+        lastProgressUpdate = Date()
+        print("[Reading] Session started at \(String(describing: sessionStartTime))")
+    }
+
+    /// Call this when the user finishes reading (or at a save point)
+    func finishReadingSession() {
+        guard let start = sessionStartTime else { return } // Prevent double-finish
+        let end = Date()
+        let actualSessionDuration = end.timeIntervalSince(start) // Duration in seconds
+        
+        // Calculate estimated words read for THIS session and the overall progress for the content
+        let (estimatedWordsInThisSession, overallContentProgress) = calculateRealProgressForCurrentSession()
+        
+        // Calculate WPM for THIS specific session
+        let durationInMinutes = actualSessionDuration / 60.0
+        let sessionWPM = durationInMinutes > 0 ? Int(Double(estimatedWordsInThisSession) / durationInMinutes) : 0
+        
+        print("[Reading] Session finished. Duration: \(actualSessionDuration) seconds, Est. Words for Session: \(estimatedWordsInThisSession), Est. Session WPM: \(sessionWPM), Overall Content Progress: \(overallContentProgress)")
+        
+        // Only log session if there was actual reading activity
+        if actualSessionDuration > 30 && estimatedWordsInThisSession > 0 { // Minimum 30 seconds and some words read
+            if let story = self.story {
+                let bookUUID = story.id.flatMap { UUID(uuidString: $0) }
+                self.markBookAsRead(withID: story.id, orTitle: story.title, progress: overallContentProgress, author: nil)
+                self.logReadingSession(bookId: bookUUID, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
+            } else if let userContent = self.userContent {
+                let bookUUID = userContent.id.flatMap { UUID(uuidString: $0) }
+                self.markBookAsRead(withID: userContent.id, orTitle: userContent.topic, progress: overallContentProgress, author: nil)
+                self.logReadingSession(bookId: bookUUID, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
+            }
+        }
+        
+        // Reset session tracking variables
+        sessionStartTime = nil
+    }
+    
+    /// Update reading progress periodically.
+    /// This method is primarily for potential live UI updates of an *ongoing* session.
+    /// The definitive calculation and saving of session data happens in `finishReadingSession`.
+    func updateReadingProgress() {
+        guard sessionStartTime != nil else { return } // No session active
+        
+        let now = Date()
+        if now.timeIntervalSince(lastProgressUpdate) >= progressUpdateInterval {
+            let (currentEstimatedWordsInSession, currentOverallProgress) = calculateRealProgressForCurrentSession()
+            // If you need to display live progress for the *current* session in the UI,
+            // you could update @Published properties here.
+            // For example:
+            // self.currentSessionLiveWords = currentEstimatedWordsInSession
+            // self.currentLiveBookProgress = currentOverallProgress
+            lastProgressUpdate = now
+            print("[Reading] Live progress update check: Est. words this session so far: \(currentEstimatedWordsInSession), Overall Book Progress: \(Int(currentOverallProgress * 100))%")
+        }
+    }
+    
+    /// Calculates estimated words read in the *current ongoing session* and the *overall progress* for the entire content.
+    /// Word estimation is based on time spent in the current session and an assumed WPM.
+    private func calculateRealProgressForCurrentSession() -> (estimatedWordsInSession: Int, overallProgress: Double) {
+        guard let start = sessionStartTime else { return (0, 0.0) } // No session started
+        
+        let durationOfCurrentSessionSoFar = Date().timeIntervalSince(start) // Duration of the current ongoing session in seconds
+        let minutesSpentInCurrentSession = durationOfCurrentSessionSoFar / 60.0
+        
+        // TODO: This assumedWPM should ideally be user-configurable or dynamically learned for better accuracy.
+        let assumedWPMForWordEstimation = 200.0
+        let estimatedWordsReadThisSession = Int(minutesSpentInCurrentSession * assumedWPMForWordEstimation)
+        
+        // Calculate overall progress for the content.
+        // This progress is based on words estimated *for this session* relative to total content words.
+        // `markBookAsRead` in `finishReadingSession` uses this to update the Book's overall progress.
+        let totalContentWords = getTotalContentWords()
+        let calculatedOverallProgress = totalContentWords > 0 ? min(Double(estimatedWordsReadThisSession) / Double(totalContentWords), 1.0) : 0.0
+        
+        return (estimatedWordsReadThisSession, calculatedOverallProgress)
+    }
+    
+    /// Get total word count of content
+    private func getTotalContentWords() -> Int {
+        if let story = self.story {
+            let text = story.chapters?.compactMap { $0.content }.joined(separator: " ") ?? ""
+            return text.split(separator: " ").count
+        } else if let userContent = self.userContent {
+            let text = userContent.blocks?.compactMap { $0.content }.joined(separator: " ") ?? ""
+            return text.split(separator: " ").count
+        }
+        return 0
+    }
+    
+    /// Track dialogue interaction for engagement metrics
+    private func trackDialogueInteraction() {
+        // In a real implementation, this would be stored in Core Data or UserDefaults
+        // For now, we'll use UserDefaults to track dialogue interactions
+        let currentCount = UserDefaults.standard.integer(forKey: "dialogueInteractionsCount")
+        UserDefaults.standard.set(currentCount + 1, forKey: "dialogueInteractionsCount")
+        print("[Engagement] Dialogue interaction tracked. Total: \(currentCount + 1)")
     }
 }
 

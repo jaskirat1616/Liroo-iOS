@@ -200,6 +200,15 @@ class OCRViewModel: ObservableObject {
         }
         
         let totalPages = document.numberOfPages
+        
+        // Page limit check
+        let maxPages = 10
+        if totalPages > maxPages {
+            self.errorMessage = "PDF has \(totalPages) pages, which exceeds the limit of \(maxPages) pages. Please select a smaller PDF."
+            print("🔍 OCRViewModel: PDF page limit exceeded. Aborting processing.")
+            return
+        }
+        
         print("🔍 OCRViewModel: PDF has \(totalPages) pages. Starting sequential processing.")
         
         self.isProcessing = true

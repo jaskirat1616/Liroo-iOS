@@ -5,11 +5,16 @@ import Combine
 // In a full implementation, this service would interact with Core Data, SwiftData, or another local database.
 class LocalDashboardDataService: DashboardDataServiceProtocol {
 
-    // Predefined "real" data
+    // Predefined "real" data based on what can actually be collected
     private let sampleOverallStats = ReadingStats(
         totalReadingTime: (3600 * 15) + (60 * 45), // 15 hours 45 minutes
         currentStreakInDays: 12,
-        totalWordsRead: 350000
+        totalWordsRead: 350000,
+        averageReadingSpeed: 220.0,
+        totalBooksRead: 25,
+        totalSessions: 45,
+        averageSessionLength: 1260.0, // 21 minutes
+        longestStreak: 18
     )
 
     private var sampleDailyActivity: [ReadingActivityDataPoint] {
@@ -80,6 +85,48 @@ class LocalDashboardDataService: DashboardDataServiceProtocol {
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
                 let itemsToReturn = Array(self.sampleRecentItems.prefix(limit))
                 promise(.success(itemsToReturn))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    // MARK: - New Analytics Methods (Stubs)
+
+    func fetchReadingSpeedTrendData(forLastDays count: Int) -> AnyPublisher<[ReadingSpeedDataPoint], Error> {
+        Future<[ReadingSpeedDataPoint], Error> { promise in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+                // Return empty array for now, or you can create sample data
+                promise(.success([]))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchTimeDistributionData() -> AnyPublisher<[TimeDistributionDataPoint], Error> {
+        Future<[TimeDistributionDataPoint], Error> { promise in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+                // Return empty array for now, or you can create sample data
+                promise(.success([]))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchWeeklyProgressData(forLastWeeks count: Int) -> AnyPublisher<[WeeklyProgressDataPoint], Error> {
+        Future<[WeeklyProgressDataPoint], Error> { promise in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+                // Return empty array for now, or you can create sample data
+                promise(.success([]))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchMonthlyProgressData(forLastMonths count: Int) -> AnyPublisher<[MonthlyProgressDataPoint], Error> {
+        Future<[MonthlyProgressDataPoint], Error> { promise in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+                // Return empty array for now, or you can create sample data
+                promise(.success([]))
             }
         }
         .eraseToAnyPublisher()

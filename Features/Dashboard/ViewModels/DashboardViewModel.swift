@@ -7,9 +7,14 @@ class DashboardViewModel: ObservableObject {
     @Published var overallStats: ReadingStats?
     @Published var dailyReadingActivity: [ReadingActivityDataPoint] = []
     @Published var recentlyReadItems: [RecentlyReadItem] = []
-
+    
+    // Real collectible data
+    @Published var engagementMetrics: EngagementMetrics?
+    @Published var readingAnalytics: ReadingAnalytics?
+    
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var selectedViewType: DashboardViewType = .student
     
     @Published var selectedTimeRange: ActivityTimeRange = .last7Days {
         didSet {
@@ -19,7 +24,7 @@ class DashboardViewModel: ObservableObject {
         }
     }
 
-    // Computed property for display
+    // Computed properties for display
     var totalReadingTimeDisplay: String {
         formatTimeInterval(overallStats?.totalReadingTime ?? 0)
     }
@@ -27,7 +32,34 @@ class DashboardViewModel: ObservableObject {
         "\(overallStats?.currentStreakInDays ?? 0) days"
     }
     var totalWordsReadDisplay: String {
-        "\(overallStats?.totalWordsRead ?? 0) words"
+        formatLargeNumber(overallStats?.totalWordsRead ?? 0)
+    }
+    var averageReadingSpeedDisplay: String {
+        "\(Int(overallStats?.averageReadingSpeed ?? 0)) WPM"
+    }
+    var totalBooksReadDisplay: String {
+        "\(overallStats?.totalBooksRead ?? 0) books"
+    }
+    var totalSessionsDisplay: String {
+        "\(overallStats?.totalSessions ?? 0) sessions"
+    }
+    var averageSessionLengthDisplay: String {
+        formatTimeInterval(overallStats?.averageSessionLength ?? 0)
+    }
+    var longestStreakDisplay: String {
+        "\(overallStats?.longestStreak ?? 0) days"
+    }
+    
+    // Engagement stats
+    var totalEngagementScore: Double {
+        guard let engagement = engagementMetrics else { return 0 }
+        let dialogueWeight = 0.6
+        let generationWeight = 0.4
+        
+        let dialogueScore = min(Double(engagement.dialogueInteractions) / 10.0, 1.0)
+        let generationScore = min(Double(engagement.contentGenerated) / 5.0, 1.0)
+        
+        return (dialogueScore * dialogueWeight) + (generationScore * generationWeight)
     }
 
     // MARK: - Private Properties
@@ -38,86 +70,138 @@ class DashboardViewModel: ObservableObject {
     // MARK: - Initialization
     init(dataService: DashboardDataServiceProtocol = CoreDataDashboardService(context: PersistenceController.shared.container.viewContext)) {
         self.dataService = dataService
-        fetchAllDashboardData() 
+        fetchAllDashboardData()
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDashboardRefresh), name: .dashboardNeedsRefresh, object: nil)
+    }
+
+    @objc private func handleDashboardRefresh() {
+        DispatchQueue.main.async {
+            self.refreshData()
+        }
     }
 
     // MARK: - Data Fetching
     
-    private func fetchInitialData() {
-        isLoading = true 
+    func fetchAllDashboardData() {
+        isLoading = true
         errorMessage = nil
         
-        let statsPublisher = dataService.fetchOverallStats()
+        // Fetch overall stats
+        dataService.fetchOverallStats()
             .receive(on: DispatchQueue.main)
-            .share() 
-
-        let recentItemsPublisher = dataService.fetchRecentlyReadItems(limit: 3)
-            .receive(on: DispatchQueue.main)
-            .share()
-
-        statsPublisher
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.handleError("Failed to load stats", error)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { [weak self] stats in
+                    self?.overallStats = stats
+                    self?.generateRealData()
                 }
-            }, receiveValue: { [weak self] stats in
-                self?.overallStats = stats
-            })
+            )
             .store(in: &cancellables)
-
-        recentItemsPublisher
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.handleError("Failed to load recent items", error)
-                }
-            }, receiveValue: { [weak self] items in
-                self?.recentlyReadItems = items
-            })
-            .store(in: &cancellables)
-            
-        Publishers.Zip(statsPublisher, recentItemsPublisher)
-            .map { _, _ in } 
+        
+        // Fetch daily activity
+        fetchDailyActivityData()
+        
+        // Fetch recently read items
+        dataService.fetchRecentlyReadItems(limit: 5)
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(_) = completion {
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { [weak self] items in
+                    self?.recentlyReadItems = items
                 }
-            }, receiveValue: { _ in })
+            )
             .store(in: &cancellables)
     }
     
-    private func fetchDailyActivityData() {
-        isLoading = true 
-
-        activityCancellable?.cancel() 
-
+    func fetchDailyActivityData() {
+        activityCancellable?.cancel()
+        
         activityCancellable = dataService.fetchDailyReadingActivity(forLastDays: selectedTimeRange.dayCount)
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                self?.isLoading = false 
-                if case .failure(let error) = completion {
-                    self?.handleError("Failed to load daily activity", error)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { [weak self] activity in
+                    self?.dailyReadingActivity = activity
                 }
-            }, receiveValue: { [weak self] activity in
-                self?.dailyReadingActivity = activity
-            })
-    }
-
-    private func handleError(_ messagePrefix: String, _ error: Error) {
-        let newErrorMessage = "\(messagePrefix): \(error.localizedDescription)"
-        if self.errorMessage == nil {
-            self.errorMessage = newErrorMessage
-        } else {
-            self.errorMessage?.append("\n\(newErrorMessage)")
-        }
-    }
-    
-    func fetchAllDashboardData() {
-        cancellables.removeAll() 
-        fetchInitialData() 
-        fetchDailyActivityData() 
+            )
     }
     
     func refreshData() {
         fetchAllDashboardData()
+    }
+    
+    // MARK: - Real Data Generation (Based on Collectible Data)
+    
+    private func generateRealData() {
+        guard overallStats != nil else {
+            // If overallStats are not yet available, we can't proceed with engagement metrics calculation
+            // and analytics fetching that might logically follow them.
+            return
+        }
+        
+        // Generate engagement metrics based on real data
+        engagementMetrics = calculateEngagementMetrics()
+        
+        // Fetch real analytics data
+        let speedTrendPublisher = dataService.fetchReadingSpeedTrendData(forLastDays: 7)
+        let timeDistributionPublisher = dataService.fetchTimeDistributionData()
+        let weeklyProgressPublisher = dataService.fetchWeeklyProgressData(forLastWeeks: 4)
+        let monthlyProgressPublisher = dataService.fetchMonthlyProgressData(forLastMonths: 3)
+
+        Publishers.Zip4(
+            speedTrendPublisher,
+            timeDistributionPublisher,
+            weeklyProgressPublisher,
+            monthlyProgressPublisher
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(receiveCompletion: { [weak self] completion in
+            if case .failure(let error) = completion {
+                let existingError = self?.errorMessage ?? ""
+                let analyticsError = "Failed to load analytics trends: \(error.localizedDescription)"
+                self?.errorMessage = existingError.isEmpty ? analyticsError : "\(existingError)\n\(analyticsError)"
+                // Set readingAnalytics to an empty state so UI can handle it gracefully
+                self?.readingAnalytics = ReadingAnalytics(readingSpeedTrend: [], readingTimeDistribution: [], weeklyProgress: [], monthlyProgress: [])
+            }
+        }, receiveValue: { [weak self] speedData, timeData, weeklyData, monthlyData in
+            self?.readingAnalytics = ReadingAnalytics(
+                readingSpeedTrend: speedData,
+                readingTimeDistribution: timeData,
+                weeklyProgress: weeklyData,
+                monthlyProgress: monthlyData
+            )
+        })
+        .store(in: &cancellables)
+    }
+    
+    private func calculateEngagementMetrics() -> EngagementMetrics {
+        // Get real dialogue interactions from UserDefaults
+        let dialogueInteractions = UserDefaults.standard.integer(forKey: "dialogueInteractionsCount")
+        
+        // Get real content generation count from UserDefaults
+        let contentGenerated = UserDefaults.standard.integer(forKey: "contentGenerationCount")
+        
+        // Calculate engagement based on real session data
+        let totalSessions = overallStats?.totalSessions ?? 0
+        let averageSessionEngagement = totalSessions > 0 ? min(1.0, Double(dialogueInteractions) / Double(totalSessions)) : 0.0
+        
+        return EngagementMetrics(
+            dialogueInteractions: dialogueInteractions,
+            contentGenerated: contentGenerated,
+            averageSessionEngagement: averageSessionEngagement
+        )
     }
 }

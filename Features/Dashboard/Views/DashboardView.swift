@@ -1,104 +1,141 @@
 import SwiftUI
-import Charts // Ensure this is imported for Charts and advanced Date formatting
+import Charts
+import CoreData
 
-struct DashboardView: View { // Renamed to DashboardView
+struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
-
+    @Environment(\.colorScheme) var colorScheme
+    
     var body: some View {
         NavigationView {
-            Group {
-                if viewModel.isLoading && viewModel.dailyReadingActivity.isEmpty {
-                    ProgressView("Loading Dashboard...")
-                } else if let errorMessage = viewModel.errorMessage {
-                    VStack {
-                        Text("Error")
-                            .font(.headline)
-                            .foregroundColor(.red)
-                        Text(errorMessage)
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                        Button("Retry") {
-                            viewModel.refreshData()
-                        }
-                        .padding(.top)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // View Type Selector (simplified to only student view)
+                    viewTypeSelector
+                    
+                    if viewModel.isLoading {
+                        loadingView
+                    } else if let errorMessage = viewModel.errorMessage {
+                        errorView(errorMessage)
+                    } else {
+                        // Main Dashboard Content
+                        studentDashboardContent
                     }
-                    .padding()
-                } else {
-                    dashboardContentView
                 }
+                .padding()
             }
             .navigationTitle("Dashboard")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if viewModel.isLoading {
-                        ProgressView()
-                    } else {
-                        Button {
-                            viewModel.refreshData()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                }
+            .navigationBarTitleDisplayMode(.large)
+            .refreshable {
+                viewModel.refreshData()
             }
         }
     }
-
-    private var dashboardContentView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Welcome Back!")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                Text("Here's your reading progress.")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                    .padding(.bottom)
-
-                overallStatsSection
-                    .padding(.bottom)
-                
-                recentlyReadSection
-                    .padding(.bottom)
-
-                chartsSection
-                
-                Spacer()
+    
+    // MARK: - View Type Selector
+    private var viewTypeSelector: some View {
+        HStack {
+            Text("Student View")
+                .font(.headline)
+                .foregroundColor(.primary)
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("Loading your reading data...")
+                .font(.headline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+    
+    // MARK: - Error View
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.largeTitle)
+                .foregroundColor(.orange)
+            
+            Text("Something went wrong")
+                .font(.headline)
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Button("Try Again") {
+                viewModel.refreshData()
             }
-            .padding()
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    // MARK: - Student Dashboard Content
+    private var studentDashboardContent: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // Enhanced Stats Section
+            enhancedStatsSection
+            
+            // Recently Read Section
+            recentlyReadSection
+            
+            // Engagement Metrics
+            engagementMetricsSection
+            
+            // Charts Section
+            chartsSection
         }
     }
-
-    private var overallStatsSection: some View {
-        VStack(alignment: .leading) {
+    
+    // MARK: - Enhanced Stats Section
+    private var enhancedStatsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Your Progress")
                 .font(.title2)
                 .fontWeight(.semibold)
-                .padding(.bottom, 8)
-
-            HStack(spacing: 16) {
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
                 StatCard(title: "Total Time", value: viewModel.totalReadingTimeDisplay, iconName: "timer", iconColor: .blue)
-                StatCard(title: "Streak", value: viewModel.currentStreakDisplay, iconName: "flame.fill", iconColor: .orange)
+                StatCard(title: "Current Streak", value: viewModel.currentStreakDisplay, iconName: "flame.fill", iconColor: .orange)
                 StatCard(title: "Words Read", value: viewModel.totalWordsReadDisplay, iconName: "text.book.closed.fill", iconColor: .green)
+                StatCard(title: "Reading Speed", value: viewModel.averageReadingSpeedDisplay, iconName: "speedometer", iconColor: .purple)
+                StatCard(title: "Books Read", value: viewModel.totalBooksReadDisplay, iconName: "books.vertical.fill", iconColor: .indigo)
+                StatCard(title: "Total Sessions", value: viewModel.totalSessionsDisplay, iconName: "clock.arrow.circlepath", iconColor: .teal)
+                StatCard(title: "Avg Session", value: viewModel.averageSessionLengthDisplay, iconName: "clock", iconColor: .pink)
+                StatCard(title: "Longest Streak", value: viewModel.longestStreakDisplay, iconName: "trophy.fill", iconColor: .yellow)
             }
         }
     }
-
+    
+    // MARK: - Recently Read Section
     private var recentlyReadSection: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Recently Read")
                 .font(.title2)
                 .fontWeight(.semibold)
-                .padding(.bottom, 8)
-
+            
             if viewModel.recentlyReadItems.isEmpty {
-                Text("No recently read items yet. Start reading to see them here!")
-                    .font(.callout)
-                    .foregroundColor(.gray)
+                Text("No recent reading activity")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
             } else {
                 ForEach(viewModel.recentlyReadItems) { item in
                     RecentlyReadRow(item: item)
@@ -106,212 +143,365 @@ struct DashboardView: View { // Renamed to DashboardView
             }
         }
     }
-
-    @ViewBuilder
-    private var chartsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Text("Reading Activity")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
-                // This Picker section is critical
-                Picker("Time Range", selection: $viewModel.selectedTimeRange) {
-                    ForEach(ActivityTimeRange.allCases) { range in // ActivityTimeRange must be visible here
-                        Text(range.rawValue).tag(range)
+    
+    // MARK: - Engagement Metrics Section
+    private var engagementMetricsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Engagement")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            if let engagement = viewModel.engagementMetrics {
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: 16) {
+                    EngagementCard(title: "AI Conversations", value: "\(engagement.dialogueInteractions)", iconName: "message.fill", color: .blue)
+                    EngagementCard(title: "Content Created", value: "\(engagement.contentGenerated)", iconName: "pencil.and.outline", color: .orange)
+                }
+                
+                // Engagement Score
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Overall Engagement")
+                        .font(.headline)
+                    
+                    HStack {
+                        ProgressView(value: viewModel.totalEngagementScore)
+                            .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                        
+                        Text("\(Int(viewModel.totalEngagementScore * 100))%")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
                     }
                 }
-                .pickerStyle(.menu)
-            }
-            .padding(.bottom, 8)
-
-            if #available(iOS 16.0, macOS 13.0, *) { // Charts require iOS 16+
-                if viewModel.isLoading && viewModel.dailyReadingActivity.isEmpty {
-                     HStack {
-                         Spacer()
-                         ProgressView("Loading chart data...")
-                         Spacer()
-                     }
-                     .frame(height: 400)
-                } else if viewModel.dailyReadingActivity.isEmpty && !viewModel.isLoading {
-                    Text("Not enough reading activity for the selected period to display charts.")
-                        .font(.callout)
-                        .foregroundColor(.gray)
-                        .padding()
-                        .frame(maxWidth: .infinity, minHeight: 400)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                } else if !viewModel.dailyReadingActivity.isEmpty {
-                    // Chart 1: Reading Duration (Bar Chart)
-                    VStack(alignment: .leading) {
-                        Text("Time Spent (Minutes)")
-                            .font(.headline)
-                        Chart(viewModel.dailyReadingActivity) { dataPoint in
-                            BarMark(
-                                x: .value("Date", dataPoint.date, unit: .day),
-                                y: .value("Minutes Read", dataPoint.duration / 60)
-                            )
-                            .foregroundStyle(Color.blue.gradient)
-                            .cornerRadius(4)
-                        }
-                        .chartXAxis {
-                            AxisMarks(values: .stride(by: appropriateStrideUnit(for: viewModel.selectedTimeRange))) {
-                                AxisGridLine()
-                                AxisTick()
-                                AxisValueLabel(format: xAxisDateStyle(for: viewModel.selectedTimeRange), centered: true)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks(preset: .automatic, position: .leading)
-                        }
-                        .frame(height: 200)
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-
-                    // Chart 2: Words Read (Line Chart)
-                    VStack(alignment: .leading) {
-                        Text("Words Read")
-                            .font(.headline)
-                        Chart(viewModel.dailyReadingActivity) { dataPoint in
-                            LineMark(
-                                x: .value("Date", dataPoint.date, unit: .day),
-                                y: .value("Words Read", dataPoint.wordsRead)
-                            )
-                            .foregroundStyle(Color.green.gradient)
-                            .interpolationMethod(.catmullRom)
-
-                            PointMark(
-                                x: .value("Date", dataPoint.date, unit: .day),
-                                y: .value("Words Read", dataPoint.wordsRead)
-                            )
-                            .foregroundStyle(Color.green)
-                            .symbolSize(CGSize(width: 5, height: 5))
-                        }
-                        .chartXAxis {
-                           AxisMarks(values: .stride(by: appropriateStrideUnit(for: viewModel.selectedTimeRange))) {
-                                AxisGridLine()
-                                AxisTick()
-                                AxisValueLabel(format: xAxisDateStyle(for: viewModel.selectedTimeRange), centered: true)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks(preset: .automatic, position: .leading)
-                        }
-                        .frame(height: 200)
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                }
-            } else {
-                Text("Charts are available on iOS 16+ and macOS 13+.\nPlease update your OS to see your reading activity.")
-                    .font(.callout)
-                    .foregroundColor(.gray)
-                    .padding()
-                    .frame(maxWidth: .infinity, minHeight: 200)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
             }
         }
     }
     
-    private func appropriateStrideUnit(for range: ActivityTimeRange) -> Calendar.Component {
-        switch range { // ActivityTimeRange must be visible here
-        case .last7Days:
-            return .day
-        case .last30Days:
-            return .weekOfYear 
-        case .last90Days:
-            return .month
+    // MARK: - Charts Section
+    private var chartsSection: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Reading Activity & Trends")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            // Time Range Selector for Daily Activity
+            Picker("Time Range", selection: $viewModel.selectedTimeRange) {
+                ForEach(ActivityTimeRange.allCases) { range in
+                    Text(range.rawValue).tag(range)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            
+            // Daily Activity Chart (existing)
+            Text("Daily Reading Duration")
+                .font(.headline)
+            if !viewModel.dailyReadingActivity.isEmpty {
+                Chart {
+                    ForEach(viewModel.dailyReadingActivity) { dataPoint in
+                        BarMark(
+                            x: .value("Date", dataPoint.date, unit: .day),
+                            y: .value("Duration", dataPoint.duration / 60) // Convert to minutes
+                        )
+                        .foregroundStyle(Color.blue.gradient)
+                    }
+                }
+                .frame(height: 200)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day)) { value in
+                        AxisGridLine()
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let minutes = value.as(Double.self) {
+                                Text("\(Int(minutes))m")
+                            }
+                        }
+                    }
+                }
+            } else {
+                standardNoDataView("daily reading activity")
+            }
+
+            // New Analytics Charts
+            if let analytics = viewModel.readingAnalytics {
+                // Reading Speed Trend
+                Divider().padding(.vertical, 8)
+                Text("Reading Speed Trend (Last 7 Days)")
+                    .font(.headline)
+                if !analytics.readingSpeedTrend.isEmpty {
+                    Chart {
+                        ForEach(analytics.readingSpeedTrend) { dataPoint in
+                            LineMark(
+                                x: .value("Date", dataPoint.date, unit: .day),
+                                y: .value("WPM", dataPoint.wordsPerMinute)
+                            )
+                            .foregroundStyle(Color.green.gradient)
+                            PointMark(
+                                x: .value("Date", dataPoint.date, unit: .day),
+                                y: .value("WPM", dataPoint.wordsPerMinute)
+                            )
+                            .foregroundStyle(Color.green)
+                            .annotation(position: .top) {
+                                Text("\(Int(dataPoint.wordsPerMinute))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day)) { value in
+                            AxisGridLine()
+                            AxisValueLabel(format: .dateTime.month().day())
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let wpm = value.as(Double.self) {
+                                    Text("\(Int(wpm)) WPM")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    standardNoDataView("reading speed trend")
+                }
+
+                // Time Distribution
+                Divider().padding(.vertical, 8)
+                Text("Reading Time by Hour of Day")
+                    .font(.headline)
+                if !analytics.readingTimeDistribution.isEmpty {
+                    Chart {
+                        ForEach(analytics.readingTimeDistribution) { dataPoint in
+                            BarMark(
+                                x: .value("Hour", "\(dataPoint.hourOfDay):00"), // Display hour as string
+                                y: .value("Time Spent", dataPoint.totalTimeSpent / 60) // Minutes
+                            )
+                            .foregroundStyle(Color.orange.gradient)
+                        }
+                    }
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks { value in // Simpler axis for discrete hours
+                            AxisGridLine()
+                            AxisValueLabel()
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let minutes = value.as(Double.self) {
+                                    Text("\(Int(minutes))m")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    standardNoDataView("reading time distribution")
+                }
+
+                // Weekly Progress
+                Divider().padding(.vertical, 8)
+                Text("Weekly Reading Progress (Last 4 Weeks)")
+                    .font(.headline)
+                if !analytics.weeklyProgress.isEmpty {
+                    Chart {
+                        ForEach(analytics.weeklyProgress) { dataPoint in
+                            BarMark(
+                                x: .value("Week", dataPoint.weekStartDate, unit: .weekOfYear),
+                                y: .value("Time Spent", dataPoint.totalTimeSpent / 3600) // Hours
+                            )
+                            .foregroundStyle(Color.purple.gradient)
+                        }
+                    }
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                            AxisGridLine()
+                            AxisValueLabel(format: .dateTime.month().day())
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let hours = value.as(Double.self) {
+                                    Text("\(String(format: "%.1f", hours))h")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    standardNoDataView("weekly progress")
+                }
+
+                // Monthly Progress
+                Divider().padding(.vertical, 8)
+                Text("Monthly Reading Progress (Last 3 Months)")
+                    .font(.headline)
+                if !analytics.monthlyProgress.isEmpty {
+                    Chart {
+                        ForEach(analytics.monthlyProgress) { dataPoint in
+                            BarMark(
+                                x: .value("Month", dataPoint.month, unit: .month),
+                                y: .value("Time Spent", dataPoint.totalTimeSpent / 3600) // Hours
+                            )
+                            .foregroundStyle(Color.red.gradient)
+                        }
+                    }
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .month)) { value in
+                            AxisGridLine()
+                            AxisValueLabel(format: .dateTime.month(.abbreviated))
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let hours = value.as(Double.self) {
+                                    Text("\(String(format: "%.1f", hours))h")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    standardNoDataView("monthly progress")
+                }
+            } else if !viewModel.isLoading { // Only show if not loading and analytics is nil
+                 standardNoDataView("detailed analytics trends")
+            }
         }
     }
 
-    // Corrected X-axis Date.FormatStyle
-    private func xAxisDateStyle(for range: ActivityTimeRange) -> Date.FormatStyle { // ActivityTimeRange must be visible here
-        switch range {
-        case .last7Days:
-            return Date.FormatStyle().weekday(.narrow)
-        case .last30Days:
-            return Date.FormatStyle().month(.abbreviated).day(.defaultDigits)
-        case .last90Days:
-            return Date.FormatStyle().month(.abbreviated)
-        }
+    // Helper for consistent "No Data" messages
+    private func standardNoDataView(_ dataDescription: String) -> some View {
+        Text("No \(dataDescription) data available.")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding()
     }
 }
 
-// MARK: - Subviews (StatCard, RecentlyReadRow)
+// MARK: - Supporting Views
+
 struct StatCard: View {
     let title: String
     let value: String
     let iconName: String
     let iconColor: Color
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: iconName)
                     .font(.title2)
                     .foregroundColor(iconColor)
-                Text(title)
-                    .font(.caption) 
-                    .foregroundColor(.gray)
+                Spacer()
             }
+            
             Text(value)
-                .font(.title3) 
+                .font(.title2)
                 .fontWeight(.bold)
+                .lineLimit(1)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
         }
         .padding()
-        .frame(maxWidth: .infinity, alignment: .leading) 
-        .background(Color(.systemGray6)) 
+        .background(Color(.systemGray6))
         .cornerRadius(12)
     }
 }
 
 struct RecentlyReadRow: View {
     let item: RecentlyReadItem
-
+    
     var body: some View {
         HStack {
-            Image(systemName: "book.fill") 
-                .font(.largeTitle)
-                .foregroundColor(.accentColor)
-                .frame(width: 40, height: 40)
-                .padding(.trailing, 8)
-
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.headline)
                     .lineLimit(1)
+                
                 if let author = item.author {
-                    Text("by \(author)")
+                    Text(author)
                         .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-                ProgressView(value: item.progress)
-                    .progressViewStyle(LinearProgressViewStyle())
-                Text("Last read: \(item.lastReadDate, style: .relative) ago")
+                
+                Text(item.lastReadDate, style: .relative)
                     .font(.caption)
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
+            
             Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundColor(.gray)
+            
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("\(Int(item.progress * 100))%")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.green)
+                
+                ProgressView(value: item.progress)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                    .frame(width: 60)
+            }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground)) 
-        .cornerRadius(10)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
-// MARK: - Previews
-struct DashboardView_Previews: PreviewProvider { // Updated preview name
-    static var previews: some View {
-        DashboardView()
-            .preferredColorScheme(.light)
-        DashboardView()
-            .preferredColorScheme(.dark)
+struct EngagementCard: View {
+    let title: String
+    let value: String
+    let iconName: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: iconName)
+                    .font(.title2)
+                    .foregroundColor(color)
+                Spacer()
+            }
+            
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
+}
+
+#Preview {
+    DashboardView()
 }

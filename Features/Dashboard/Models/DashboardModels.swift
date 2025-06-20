@@ -18,11 +18,77 @@ enum ActivityTimeRange: String, CaseIterable, Identifiable {
     }
 }
 
-// Represents overall reading statistics
+// MARK: - Real Reading Statistics (Based on Collectible Data)
 struct ReadingStats {
-    let totalReadingTime: TimeInterval // in seconds
-    let currentStreakInDays: Int
-    let totalWordsRead: Int
+    let totalReadingTime: TimeInterval // in seconds - from ReadingLog.duration
+    let currentStreakInDays: Int // calculated from ReadingLog.date
+    let totalWordsRead: Int // from ReadingLog.wordsRead
+    let averageReadingSpeed: Double // words per minute - calculated
+    let totalBooksRead: Int // count of Book entities with progress > 0
+    let totalSessions: Int // count of ReadingLog entities
+    let averageSessionLength: TimeInterval // calculated from total time / sessions
+    let longestStreak: Int // calculated from ReadingLog.date
+}
+
+// MARK: - Real Engagement Metrics (Based on Collectible Data)
+struct EngagementMetrics {
+    let dialogueInteractions: Int // count of dialogue sessions (can be tracked)
+    let contentGenerated: Int // count of generated content (can be tracked)
+    let averageSessionEngagement: Double // calculated from session data
+}
+
+// MARK: - Real Reading Analytics (Based on Collectible Data)
+struct ReadingAnalytics {
+    let readingSpeedTrend: [ReadingSpeedDataPoint]
+    let readingTimeDistribution: [TimeDistributionDataPoint]
+    let weeklyProgress: [WeeklyProgressDataPoint]
+    let monthlyProgress: [MonthlyProgressDataPoint]
+}
+
+struct ReadingSpeedDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let wordsPerMinute: Double
+    let sessionDuration: TimeInterval
+}
+
+struct TimeDistributionDataPoint: Identifiable {
+    let id = UUID()
+    let hourOfDay: Int
+    let totalTimeSpent: TimeInterval
+    let sessionsCount: Int
+}
+
+struct WeeklyProgressDataPoint: Identifiable {
+    let id = UUID()
+    let weekStartDate: Date
+    let totalTimeSpent: TimeInterval
+    let wordsRead: Int
+    let booksCompleted: Int
+}
+
+struct MonthlyProgressDataPoint: Identifiable {
+    let id = UUID()
+    let month: Date
+    let totalTimeSpent: TimeInterval
+    let wordsRead: Int
+    let booksCompleted: Int
+}
+
+// MARK: - Real Activity Tracking (Based on Collectible Data)
+struct RecentActivityItem: Identifiable {
+    let id = UUID()
+    let type: ActivityType
+    let title: String
+    let description: String
+    let timestamp: Date
+    let duration: TimeInterval?
+}
+
+enum ActivityType: String {
+    case reading = "Reading"
+    case dialogue = "Dialogue"
+    case contentGeneration = "Content Generation"
 }
 
 // Represents a single data point for charts (e.g., daily reading)
@@ -56,6 +122,11 @@ struct RecentlyReadItem: Identifiable, Hashable {
     }
 }
 
+// MARK: - Dashboard View Types
+enum DashboardViewType: String, CaseIterable {
+    case student = "Student"
+}
+
 // Helper to format TimeInterval into a user-friendly string like "Xh Ym"
 func formatTimeInterval(_ interval: TimeInterval) -> String {
     let totalSeconds = Int(interval)
@@ -69,4 +140,22 @@ func formatTimeInterval(_ interval: TimeInterval) -> String {
     } else {
         return "\(minutes)m"
     }
+}
+
+// Helper to format large numbers with K, M suffixes
+func formatLargeNumber(_ number: Int) -> String {
+    if number >= 1_000_000 {
+        return String(format: "%.1fM", Double(number) / 1_000_000)
+    } else if number >= 1_000 {
+        return String(format: "%.1fK", Double(number) / 1_000)
+    } else {
+        return "\(number)"
+    }
+}
+
+// Helper to calculate reading speed in WPM
+func calculateReadingSpeed(wordsRead: Int, timeSpent: TimeInterval) -> Double {
+    guard timeSpent > 0 else { return 0 }
+    let minutesSpent = timeSpent / 60
+    return Double(wordsRead) / minutesSpent
 }

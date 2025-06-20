@@ -4,6 +4,7 @@ import Combine
 
 class CoreDataDashboardService: DashboardDataServiceProtocol {
     private let context: NSManagedObjectContext
+    private let calendar = Calendar.current
 
     init(context: NSManagedObjectContext) {
         self.context = context
@@ -12,81 +13,42 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
     func fetchOverallStats() -> AnyPublisher<ReadingStats, Error> {
         Future<ReadingStats, Error> { [weak self] promise in
             guard let self = self else {
-                promise(.failure(DataServiceError.unknown)) // Or a specific deallocated error
+                promise(.failure(DataServiceError.unknown))
                 return
             }
             
-            self.context.perform { // Perform on context's queue
+            self.context.perform {
                 do {
-                    // Fetch all ReadingLogs
                     let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
                     let readingLogs = try self.context.fetch(request)
 
-                    let totalReadingTime = readingLogs.reduce(0) { $0 + $1.duration }
-                    let totalWordsRead = readingLogs.reduce(0) { $0 + Int($1.wordsRead) }
+                    let totalReadingTime = readingLogs.reduce(0) { $0 + $1.duration } // Int64
+                    let totalWordsRead = readingLogs.reduce(0) { $0 + Int($1.wordsRead) } // Int
                     
-                    // Streak calculation (simplified: assumes logs are somewhat ordered or we group by day)
-                    // For a robust streak, you'd need more complex daily aggregation.
-                    var currentStreak = 0
-                    if !readingLogs.isEmpty {
-                        let uniqueSortedDates = Set(readingLogs.map { Calendar.current.startOfDay(for: $0.date ?? Date()) })
-                            .sorted(by: >) // Sort in descending order (most recent first)
-                        
-                        if !uniqueSortedDates.isEmpty {
-                            var streak = 0
-                            var currentDate = Calendar.current.startOfDay(for: Date())
-                            var expectedDate = currentDate
-                            
-                            for dateInLog in uniqueSortedDates {
-                                if dateInLog == expectedDate {
-                                    streak += 1
-                                    expectedDate = Calendar.current.date(byAdding: .day, value: -1, to: expectedDate)!
-                                } else if dateInLog < expectedDate {
-                                    // Streak broken before this log if it's not consecutive
-                                    // and not for today or yesterday if today had no log
-                                    if streak > 0 && dateInLog != Calendar.current.date(byAdding: .day, value: -1, to: currentDate) && dateInLog != currentDate {
-                                        break // Break if gap and streak was already started
-                                    } else if streak == 0 && (dateInLog != currentDate && dateInLog != Calendar.current.date(byAdding: .day, value: -1, to: currentDate)) {
-                                        // if no streak yet and log is not today or yesterday, it doesn't start a current streak
-                                        break
-                                    } else if streak == 0 && (dateInLog == currentDate || dateInLog == Calendar.current.date(byAdding: .day, value: -1, to: currentDate)) {
-                                       // if no streak yet, and it's today or yesterday, start it
-                                       streak += 1
-                                       expectedDate = Calendar.current.date(byAdding: .day, value: -1, to: dateInLog)!
-                                    }
-                                } else { // dateInLog > expectedDate (should not happen if sorted correctly and expectedDate moves back)
-                                    break
-                                }
-                            }
-                            // If the most recent log isn't today or yesterday, streak is 0
-                            if let mostRecentLogDate = uniqueSortedDates.first {
-                               let todayStart = Calendar.current.startOfDay(for: Date())
-                               let yesterdayStart = Calendar.current.date(byAdding: .day, value: -1, to: todayStart)!
-                               if mostRecentLogDate != todayStart && mostRecentLogDate != yesterdayStart {
-                                   if !(streak > 0 && mostRecentLogDate == expectedDate) { // check if streak was broken before today but continued up to mostRecentLogDate
-                                     currentStreak = 0
-                                   } else {
-                                     currentStreak = streak
-                                   }
-                               } else {
-                                   currentStreak = streak
-                               }
-                            } else {
-                                currentStreak = 0
-                            }
-                        }
-                    }
-
+                    // MODIFIED: Calculate average reading speed from stored WPM per session
+                    let averageReadingSpeed = self.calculateAverageReadingSpeedFromLogs(logs: readingLogs)
+                    
+                    let totalBooksRead = self.calculateTotalBooksRead()
+                    let totalSessions = readingLogs.count
+                    let averageSessionLength = totalSessions > 0 ? Double(totalReadingTime) / Double(totalSessions) : 0
+                    
+                    let currentStreak = self.calculateCurrentStreak(logs: readingLogs)
+                    let longestStreak = self.calculateLongestStreak(logs: readingLogs)
 
                     let stats = ReadingStats(
                         totalReadingTime: Double(totalReadingTime),
                         currentStreakInDays: currentStreak,
-                        totalWordsRead: totalWordsRead
+                        totalWordsRead: totalWordsRead,
+                        averageReadingSpeed: averageReadingSpeed, // Now uses new calculation
+                        totalBooksRead: totalBooksRead,
+                        totalSessions: totalSessions,
+                        averageSessionLength: averageSessionLength,
+                        longestStreak: longestStreak
                     )
                     promise(.success(stats))
 
                 } catch {
-                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch ReadingLogs: \(error.localizedDescription)")))
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch ReadingLogs for OverallStats: \(error.localizedDescription)")))
                 }
             }
         }
@@ -103,39 +65,40 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
             self.context.perform {
                 do {
                     let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
-                    
-                    // Set date predicate for the last 'count' days
-                    let today = Calendar.current.startOfDay(for: Date())
-                    guard let startDate = Calendar.current.date(byAdding: .day, value: -(count - 1), to: today) else {
-                        promise(.success([])) // Should not happen
+                    let today = self.calendar.startOfDay(for: Date())
+                    guard let startDate = self.calendar.date(byAdding: .day, value: -(count - 1), to: today) else {
+                        promise(.success([]))
                         return
                     }
-                    request.predicate = NSPredicate(format: "date >= %@ AND date <= %@", startDate as NSDate, Calendar.current.date(byAdding: .day, value: 1, to: today)! as NSDate) // <= end of today
+                    // Fetch logs up to the end of today
+                    guard let endDate = self.calendar.date(byAdding: .day, value: 1, to: today) else {
+                         promise(.success([]))
+                        return
+                    }
+                    request.predicate = NSPredicate(format: "date >= %@ AND date < %@", startDate as NSDate, endDate as NSDate)
                     request.sortDescriptors = [NSSortDescriptor(keyPath: \ReadingLog.date, ascending: true)]
                     
                     let fetchedLogs = try self.context.fetch(request)
                     
-                    // Group logs by day
-                    let groupedByDay = Dictionary(grouping: fetchedLogs) { log -> Date in
-                        return Calendar.current.startOfDay(for: log.date ?? Date()) // Group by start of day
+                    var activityByDay = [Date: (duration: TimeInterval, wordsRead: Int)]()
+                    for log in fetchedLogs {
+                        guard let logDate = log.date else { continue }
+                        let day = self.calendar.startOfDay(for: logDate)
+                        let current = activityByDay[day] ?? (0, 0)
+                        activityByDay[day] = (current.duration + Double(log.duration), current.wordsRead + Int(log.wordsRead))
                     }
                     
                     var activityPoints: [ReadingActivityDataPoint] = []
                     for dayOffset in 0..<count {
-                        guard let specificDate = Calendar.current.date(byAdding: .day, value: -dayOffset, to: today) else { continue }
-                        let logsForDay = groupedByDay[specificDate] ?? []
-                        
-                        let totalDurationForDay = logsForDay.reduce(0) { $0 + $1.duration }
-                        let totalWordsForDay = logsForDay.reduce(0) { $0 + Int($1.wordsRead) }
-                        
-                        // Add a point even if there's no activity, for chart continuity
+                        guard let specificDate = self.calendar.date(byAdding: .day, value: -dayOffset, to: today) else { continue }
+                        let dataForDay = activityByDay[specificDate] ?? (0,0)
                         activityPoints.append(ReadingActivityDataPoint(
                             date: specificDate,
-                            duration: Double(totalDurationForDay),
-                            wordsRead: totalWordsForDay
+                            duration: dataForDay.duration,
+                            wordsRead: dataForDay.wordsRead
                         ))
                     }
-                    
+                    // Ensure the points are sorted by date as the chart might expect this.
                     promise(.success(activityPoints.sorted(by: { $0.date < $1.date })))
                     
                 } catch {
@@ -152,20 +115,15 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
                 promise(.failure(DataServiceError.unknown))
                 return
             }
-            
             self.context.perform {
                 do {
                     let request: NSFetchRequest<Book> = Book.fetchRequest()
-                    // Fetch books that have been read recently and are not archived
-                    request.predicate = NSPredicate(format: "lastReadDate != NIL AND isArchived == NO")
+                    request.predicate = NSPredicate(format: "lastReadDate != NIL")
                     request.sortDescriptors = [NSSortDescriptor(keyPath: \Book.lastReadDate, ascending: false)]
                     request.fetchLimit = limit
-                    
                     let fetchedBooks = try self.context.fetch(request)
-                    
                     let recentItems = fetchedBooks.map { bookEntity -> RecentlyReadItem in
                         RecentlyReadItem(
-                            // id: bookEntity.id ?? UUID(), // Assuming Book entity has an id
                             title: bookEntity.title ?? "Unknown Title",
                             author: bookEntity.author,
                             progress: Double(bookEntity.progress),
@@ -173,7 +131,6 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
                         )
                     }
                     promise(.success(recentItems))
-                    
                 } catch {
                     promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch recent books: \(error.localizedDescription)")))
                 }
@@ -181,12 +138,272 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
         }
         .eraseToAnyPublisher()
     }
+
+    // MARK: - NEW: Real Historical/Analytical Data Fetching
+
+    func fetchReadingSpeedTrendData(forLastDays count: Int) -> AnyPublisher<[ReadingSpeedDataPoint], Error> {
+        Future<[ReadingSpeedDataPoint], Error> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(DataServiceError.unknown))
+                return
+            }
+            self.context.perform {
+                do {
+                    let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
+                    let today = self.calendar.startOfDay(for: Date())
+                    guard let startDate = self.calendar.date(byAdding: .day, value: -(count - 1), to: today) else {
+                        promise(.success([])); return
+                    }
+                    guard let endDate = self.calendar.date(byAdding: .day, value: 1, to: today) else {
+                         promise(.success([])); return
+                    }
+                    request.predicate = NSPredicate(format: "date >= %@ AND date < %@", startDate as NSDate, endDate as NSDate)
+                    // Fetch logs with WPM > 0 as WPM is the key metric here
+                    // request.predicate = NSPredicate(format: "date >= %@ AND date < %@ AND wordsPerMinute > 0", startDate as NSDate, endDate as NSDate)
+                    request.sortDescriptors = [NSSortDescriptor(keyPath: \ReadingLog.date, ascending: true)]
+                    
+                    let fetchedLogs = try self.context.fetch(request)
+                    
+                    // For simplicity, create one point per log. Could also average WPM per day.
+                    let trendPoints = fetchedLogs.compactMap { log -> ReadingSpeedDataPoint? in
+                        guard let logDate = log.date, log.wordsPerMinute > 0 else { return nil }
+                        return ReadingSpeedDataPoint(
+                            date: logDate,
+                            wordsPerMinute: Double(log.wordsPerMinute),
+                            sessionDuration: Double(log.duration)
+                        )
+                    }
+                    promise(.success(trendPoints))
+                } catch {
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch reading speed trend: \(error.localizedDescription)")))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchTimeDistributionData() -> AnyPublisher<[TimeDistributionDataPoint], Error> {
+        Future<[TimeDistributionDataPoint], Error> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(DataServiceError.unknown))
+                return
+            }
+            self.context.perform {
+                do {
+                    let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
+                    let readingLogs = try self.context.fetch(request)
+                    
+                    var timeDistribution = [Int: (totalTime: TimeInterval, sessions: Int)]()
+                    for hour in 0..<24 { timeDistribution[hour] = (0, 0) } // Initialize
+                    
+                    for log in readingLogs {
+                        guard let logDate = log.date else { continue }
+                        let hour = self.calendar.component(.hour, from: logDate)
+                        var current = timeDistribution[hour] ?? (0,0)
+                        current.totalTime += Double(log.duration)
+                        current.sessions += 1
+                        timeDistribution[hour] = current
+                    }
+                    
+                    let distributionPoints = timeDistribution.map { hour, data -> TimeDistributionDataPoint in
+                        TimeDistributionDataPoint(hourOfDay: hour, totalTimeSpent: data.totalTime, sessionsCount: data.sessions)
+                    }.sorted(by: { $0.hourOfDay < $1.hourOfDay })
+                    
+                    promise(.success(distributionPoints))
+                } catch {
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch time distribution: \(error.localizedDescription)")))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchWeeklyProgressData(forLastWeeks count: Int) -> AnyPublisher<[WeeklyProgressDataPoint], Error> {
+        Future<[WeeklyProgressDataPoint], Error> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(DataServiceError.unknown))
+                return
+            }
+            self.context.perform {
+                do {
+                    let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
+                    let today = self.calendar.startOfDay(for: Date())
+                    // Calculate start date for the entire period
+                    guard let overallStartDate = self.calendar.date(byAdding: .weekOfYear, value: -(count - 1), to: today) else {
+                        promise(.success([])); return
+                    }
+                     guard let overallStartDateForPeriod = self.calendar.date(from: self.calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: overallStartDate)) else {
+                        promise(.success([])); return
+                    }
+
+                    request.predicate = NSPredicate(format: "date >= %@", overallStartDateForPeriod as NSDate)
+                    let readingLogs = try self.context.fetch(request)
+                    
+                    var weeklyData = [Date: (time: TimeInterval, words: Int, books: Int)]()
+                    
+                    for log in readingLogs {
+                        guard let logDate = log.date else { continue }
+                        guard let weekStartDate = self.calendar.date(from: self.calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: logDate)) else { continue }
+                        
+                        var current = weeklyData[weekStartDate] ?? (0,0,0)
+                        current.time += Double(log.duration)
+                        current.words += Int(log.wordsRead)
+                        // Note: booksCompleted is harder to track per log; this needs a more robust solution
+                        // if you want to count books actually *finished* in that week.
+                        // For now, it's illustrative or would need to be 0 unless explicitly tracked.
+                        weeklyData[weekStartDate] = current
+                    }
+                    
+                    var progressPoints: [WeeklyProgressDataPoint] = []
+                    for i in 0..<count {
+                        guard let weekLoopDate = self.calendar.date(byAdding: .weekOfYear, value: -i, to: today) else { continue }
+                        guard let currentWeekStartDate = self.calendar.date(from: self.calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: weekLoopDate)) else { continue }
+
+                        let data = weeklyData[currentWeekStartDate] ?? (0,0,0)
+                        progressPoints.append(WeeklyProgressDataPoint(
+                            weekStartDate: currentWeekStartDate,
+                            totalTimeSpent: data.time,
+                            wordsRead: data.words,
+                            booksCompleted: data.books // Placeholder until better tracking
+                        ))
+                    }
+                    promise(.success(progressPoints.sorted(by: { $0.weekStartDate < $1.weekStartDate })))
+                } catch {
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch weekly progress: \(error.localizedDescription)")))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func fetchMonthlyProgressData(forLastMonths count: Int) -> AnyPublisher<[MonthlyProgressDataPoint], Error> {
+        Future<[MonthlyProgressDataPoint], Error> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(DataServiceError.unknown))
+                return
+            }
+            self.context.perform {
+                do {
+                    let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
+                    let today = self.calendar.startOfDay(for: Date())
+                    guard let overallStartDate = self.calendar.date(byAdding: .month, value: -(count - 1), to: today) else {
+                        promise(.success([])); return
+                    }
+                    guard let overallStartDateForPeriod = self.calendar.date(from: self.calendar.dateComponents([.year, .month], from: overallStartDate)) else {
+                        promise(.success([])); return
+                    }
+
+                    request.predicate = NSPredicate(format: "date >= %@", overallStartDateForPeriod as NSDate)
+                    let readingLogs = try self.context.fetch(request)
+
+                    var monthlyData = [Date: (time: TimeInterval, words: Int, books: Int)]()
+
+                    for log in readingLogs {
+                        guard let logDate = log.date else { continue }
+                        guard let monthStartDate = self.calendar.date(from: self.calendar.dateComponents([.year, .month], from: logDate)) else { continue }
+                        
+                        var current = monthlyData[monthStartDate] ?? (0,0,0)
+                        current.time += Double(log.duration)
+                        current.words += Int(log.wordsRead)
+                        monthlyData[monthStartDate] = current
+                    }
+
+                    var progressPoints: [MonthlyProgressDataPoint] = []
+                     for i in 0..<count {
+                        guard let monthLoopDate = self.calendar.date(byAdding: .month, value: -i, to: today) else { continue }
+                        guard let currentMonthStartDate = self.calendar.date(from: self.calendar.dateComponents([.year, .month], from: monthLoopDate)) else { continue }
+                        
+                        let data = monthlyData[currentMonthStartDate] ?? (0,0,0)
+                        progressPoints.append(MonthlyProgressDataPoint(
+                            month: currentMonthStartDate,
+                            totalTimeSpent: data.time,
+                            wordsRead: data.words,
+                            booksCompleted: data.books // Placeholder
+                        ))
+                    }
+                    promise(.success(progressPoints.sorted(by: { $0.month < $1.month })))
+                } catch {
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch monthly progress: \(error.localizedDescription)")))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Helper Methods
+    
+    // MODIFIED: To use stored wordsPerMinute from ReadingLog
+    private func calculateAverageReadingSpeedFromLogs(logs: [ReadingLog]) -> Double {
+        let logsWithWPM = logs.filter { $0.wordsPerMinute > 0 }
+        guard !logsWithWPM.isEmpty else { return 0 }
+        
+        let totalWPM = logsWithWPM.reduce(0.0) { $0 + Double($1.wordsPerMinute) }
+        return totalWPM / Double(logsWithWPM.count)
+    }
+    
+    private func calculateTotalBooksRead() -> Int {
+        let request: NSFetchRequest<Book> = Book.fetchRequest()
+        // Consider a book "read" if it has any progress or is marked completed.
+        // If you add an `isCompleted` flag to Book, you can use that.
+        request.predicate = NSPredicate(format: "progress > 0") 
+        do {
+            return try context.fetch(request).count
+        } catch {
+            print("Failed to fetch total books read: \(error)")
+            return 0
+        }
+    }
+    
+    private func calculateCurrentStreak(logs: [ReadingLog]) -> Int {
+        guard !logs.isEmpty else { return 0 }
+        let uniqueSortedDates = Set(logs.compactMap { $0.date }.map { self.calendar.startOfDay(for: $0) }).sorted(by: >)
+        if uniqueSortedDates.isEmpty { return 0 }
+        
+        var streak = 0
+        var expectedDate = self.calendar.startOfDay(for: Date())
+        
+        for date in uniqueSortedDates {
+            if date == expectedDate {
+                streak += 1
+                expectedDate = self.calendar.date(byAdding: .day, value: -1, to: expectedDate)!
+            } else if date < expectedDate { // A gap means the streak ended before this log
+                break
+            }
+            // If date > expectedDate, it means logs from the future (should not happen) or multiple logs on the same day already processed.
+        }
+        // If the most recent reading day wasn't today, the current streak is 0 unless today is the start of a new streak.
+        if let mostRecentLogDate = uniqueSortedDates.first, !self.calendar.isDateInToday(mostRecentLogDate) {
+             // If the streak didn't start today, and the last log wasn't today, it's 0.
+             // However, if the streak logic correctly counts back from today, this check might be redundant.
+             // The loop structure itself should handle this. if expectedDate (which starts as today) is never matched, streak remains 0.
+        }
+        return streak
+    }
+    
+    private func calculateLongestStreak(logs: [ReadingLog]) -> Int {
+        guard !logs.isEmpty else { return 0 }
+        let uniqueSortedDates = Set(logs.compactMap { $0.date }.map { self.calendar.startOfDay(for: $0) }).sorted() // Ascending
+        if uniqueSortedDates.isEmpty { return 0 }
+        
+        var longestStreak = 0
+        var currentStreak = 0
+        var previousDate: Date?
+        
+        for date in uniqueSortedDates {
+            if let prev = previousDate {
+                if let diff = self.calendar.dateComponents([.day], from: prev, to: date).day, diff == 1 {
+                    currentStreak += 1
+                } else { // Gap or same day (Set handles same day, so this is a gap > 1 day)
+                    longestStreak = max(longestStreak, currentStreak)
+                    currentStreak = 1 // Start new streak
+                }
+            } else {
+                currentStreak = 1 // First day of any streak
+            }
+            previousDate = date
+        }
+        return max(longestStreak, currentStreak) // Check once more for the last ongoing streak
+    }
 }
 
-// Ensure DataServiceError is defined (likely in DashboardDataService.swift or a shared location)
-// enum DataServiceError: Error, LocalizedError {
-//     case networkError(reason: String)
-//     case coreDataError(reason: String)
-//     case unknown
-// ...
-// }
+

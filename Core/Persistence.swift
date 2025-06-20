@@ -18,6 +18,7 @@ struct PersistenceController {
         book1.author = "Preview Author"
         book1.lastReadDate = Date()
         book1.progress = 0.5
+        book1.isArchived = false // Ensure preview book is not archived
 
         let log1 = ReadingLog(context: viewContext)
         log1.id = UUID()
@@ -83,6 +84,35 @@ struct PersistenceController {
                 print("Error saving context: \(nsError), \(nsError.userInfo)")
                 // fatalError("Unresolved error \(nsError), \(nsError.userInfo)") // Avoid fatalError in production
             }
+        }
+    }
+
+    // MARK: - CoreData Migration Utility
+    /// Call this once after adding the `isArchived` attribute to Book to ensure all existing books are visible to the dashboard.
+    func migrateBooksSetIsArchivedAndLastReadDateIfNeeded() {
+        let context = container.viewContext
+        let fetchRequest: NSFetchRequest<Book> = Book.fetchRequest()
+        do {
+            let books = try context.fetch(fetchRequest)
+            var didChange = false
+            for book in books {
+                // Set isArchived = false if nil
+                if book.value(forKey: "isArchived") == nil {
+                    book.setValue(false, forKey: "isArchived")
+                    didChange = true
+                }
+                // Optionally, set lastReadDate if nil (for testing)
+                if book.lastReadDate == nil {
+                    book.lastReadDate = Date()
+                    didChange = true
+                }
+            }
+            if didChange {
+                try context.save()
+                print("[Migration] Updated Book records with missing isArchived/lastReadDate.")
+            }
+        } catch {
+            print("[Migration] Error updating Book records: \(error)")
         }
     }
 }

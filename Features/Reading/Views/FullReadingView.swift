@@ -1,8 +1,14 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let dashboardNeedsRefresh = Notification.Name("dashboardNeedsRefresh")
+}
+
 struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = "" // For the TextField in the sheet
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var progressTimer: Timer?
 
     // Reading Settings
     @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
@@ -23,26 +29,18 @@ struct FullReadingView: View {
     
     private var itemTitle: String
 
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if viewModel.isLoading {
-                    ProgressView("Loading Content...")
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .foregroundColor(currentTheme.primaryTextColor) // Apply text color
-                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
-                } else if let errorMessage = viewModel.errorMessage {
-                    Text("Error: \(errorMessage)")
-                        .foregroundColor(.red) // Error messages might keep a distinct color
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
-                    Button("Retry") {
-                        viewModel.fetchFullContent()
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Loading content...")
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize)))
+                            .foregroundColor(currentTheme.primaryTextColor)
                     }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .tint(currentTheme.primaryTextColor)
-                    .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 2))) // Apply font style
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let story = viewModel.story {
                     StoryDetailView(story: story,
                                     baseFontSize: selectedFontSize,
@@ -76,6 +74,38 @@ struct FullReadingView: View {
         // This is a simple way to make the navigation bar match the theme.
         // For more complex styling, you'd use UIAppearance or custom modifiers.
         .toolbarColorScheme(currentTheme == .dark ? .dark : .light, for: .navigationBar)
+        .onAppear {
+            viewModel.startReadingSession()
+            // Start progress tracking timer
+            startProgressTimer()
+        }
+        .onDisappear {
+            viewModel.finishReadingSession()
+            // Stop progress tracking timer
+            stopProgressTimer()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background {
+                viewModel.finishReadingSession()
+                stopProgressTimer()
+            } else if newPhase == .active {
+                startProgressTimer()
+            }
+        }
+    }
+    
+    // MARK: - Progress Tracking
+    
+    private func startProgressTimer() {
+        // Update progress every 30 seconds
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+            viewModel.updateReadingProgress()
+        }
+    }
+    
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
     }
 }
 
