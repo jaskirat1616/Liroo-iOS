@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import FirebaseFirestore
 import CoreData // Add this import for CoreData access
+import FirebaseAuth
 
 import FirebaseFirestore // Assuming Firebase for content fetching
 
@@ -67,27 +68,37 @@ class FullReadingViewModel: ObservableObject {
     }
 
     // MARK: - CoreData Book Update
-    private func markBookAsRead(withID id: String?, orTitle title: String?, progress: Double? = nil, author: String? = nil) {
+    private func markBookAsRead(withID id: String?, orTitle title: String?, progress: Double?, author: String?, collectionName: String) {
         let context = PersistenceController.shared.container.viewContext
         let fetchRequest: NSFetchRequest<Book> = Book.fetchRequest()
-        if let id = id, let uuid = UUID(uuidString: id) {
-            fetchRequest.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)
+        
+        // First try to find by Firestore document ID (stored as string)
+        if let id = id, !id.isEmpty {
+            fetchRequest.predicate = NSPredicate(format: "firestoreID == %@", id)
         } else if let title = title, !title.isEmpty {
             fetchRequest.predicate = NSPredicate(format: "title == %@", title)
         } else {
             return // No valid identifier
         }
+        
         fetchRequest.fetchLimit = 1
         do {
             let book = try context.fetch(fetchRequest).first ?? Book(context: context)
-            if let id = id, let uuid = UUID(uuidString: id) { book.id = uuid }
+            
+            // Store the Firestore document ID as a string (not UUID)
+            if let id = id, !id.isEmpty {
+                book.firestoreID = id
+            }
+            
             book.title = title
             book.lastReadDate = Date()
             book.isArchived = false
+            book.collectionName = collectionName // Store the collection name
             if let progress = progress { book.progress = Float(progress) }
             if let author = author { book.author = author }
+            
             try context.save()
-            print("[Reading] Updated/Created Book: id=\(String(describing: book.id)), title=\(book.title ?? "nil"), progress=\(book.progress), author=\(book.author ?? "nil"), lastReadDate=\(String(describing: book.lastReadDate)), isArchived=\(book.isArchived)")
+            print("[Reading] Updated/Created Book: firestoreID=\(book.firestoreID ?? "nil"), title=\(book.title ?? "nil"), progress=\(book.progress), author=\(book.author ?? "nil"), lastReadDate=\(String(describing: book.lastReadDate)), isArchived=\(book.isArchived), collectionName=\(book.collectionName ?? "nil")")
             NotificationCenter.default.post(name: .dashboardNeedsRefresh, object: nil)
         } catch {
             print("Failed to update or create Book: \(error)")
@@ -130,6 +141,14 @@ class FullReadingViewModel: ObservableObject {
     }
 
     func fetchFullContent() {
+        // Check if user is authenticated
+        guard Auth.auth().currentUser != nil else {
+            isLoading = false
+            errorMessage = "Please sign in to access content."
+            print("[Reading] User not authenticated")
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         story = nil
@@ -141,12 +160,25 @@ class FullReadingViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self.isLoading = false
                 if let error = error {
-                    self.errorMessage = "Failed to load content: \(error.localizedDescription)"
+                    // Provide more specific error messages
+                    let nsError = error as NSError
+                    switch nsError.code {
+                    case 0: // Network error
+                        self.errorMessage = "Network connection failed. Please check your internet connection and try again."
+                    case 7: // Permission denied
+                        self.errorMessage = "Access denied. Please make sure you're signed in."
+                    case 13: // Unavailable
+                        self.errorMessage = "Service temporarily unavailable. Please try again later."
+                    default:
+                        self.errorMessage = "Failed to load content: \(error.localizedDescription)"
+                    }
+                    print("[Reading] Firestore error: \(error.localizedDescription), Code: \(nsError.code)")
                     return
                 }
 
                 guard let document = document, document.exists else {
-                    self.errorMessage = "Document does not exist."
+                    self.errorMessage = "Content not found. The document may have been deleted or moved."
+                    print("[Reading] Document does not exist: \(self.collectionName)/\(self.itemID)")
                     return
                 }
                 
@@ -157,7 +189,8 @@ class FullReadingViewModel: ObservableObject {
                         // Don't log reading session here - wait for actual reading
                         print("[Reading] Loaded story: \(self.story?.title ?? "Unknown")")
                      } catch {
-                        self.errorMessage = "Failed to decode story: \(error.localizedDescription)"
+                        self.errorMessage = "Failed to decode story content: \(error.localizedDescription)"
+                        print("[Reading] Story decode error: \(error)")
                      }
                 } else if self.collectionName == "userGeneratedContent" { // Adjust collection name if different
                      do {
@@ -166,9 +199,11 @@ class FullReadingViewModel: ObservableObject {
                         print("[Reading] Loaded user content: \(self.userContent?.topic ?? "Unknown")")
                      } catch {
                         self.errorMessage = "Failed to decode user content: \(error.localizedDescription)"
+                        print("[Reading] User content decode error: \(error)")
                      }
                 } else {
-                    self.errorMessage = "Unknown content type."
+                    self.errorMessage = "Unknown content type: \(self.collectionName)"
+                    print("[Reading] Unknown collection: \(self.collectionName)")
                 }
             }
         }
@@ -305,15 +340,15 @@ class FullReadingViewModel: ObservableObject {
         print("[Reading] Session finished. Duration: \(actualSessionDuration) seconds, Est. Words for Session: \(estimatedWordsInThisSession), Est. Session WPM: \(sessionWPM), Overall Content Progress: \(overallContentProgress)")
         
         // Only log session if there was actual reading activity
-        if actualSessionDuration > 30 && estimatedWordsInThisSession > 0 { // Minimum 30 seconds and some words read
+        if actualSessionDuration > 30 && estimatedWordsInThisSession > 0 {
             if let story = self.story {
-                let bookUUID = story.id.flatMap { UUID(uuidString: $0) }
-                self.markBookAsRead(withID: story.id, orTitle: story.title, progress: overallContentProgress, author: nil)
-                self.logReadingSession(bookId: bookUUID, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
+                // Use the Firestore document ID directly for the book relationship
+                self.markBookAsRead(withID: story.id, orTitle: story.title, progress: overallContentProgress, author: nil, collectionName: self.collectionName)
+                self.logReadingSession(bookId: nil, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
             } else if let userContent = self.userContent {
-                let bookUUID = userContent.id.flatMap { UUID(uuidString: $0) }
-                self.markBookAsRead(withID: userContent.id, orTitle: userContent.topic, progress: overallContentProgress, author: nil)
-                self.logReadingSession(bookId: bookUUID, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
+                // Use the Firestore document ID directly for the book relationship
+                self.markBookAsRead(withID: userContent.id, orTitle: userContent.topic, progress: overallContentProgress, author: nil, collectionName: self.collectionName)
+                self.logReadingSession(bookId: nil, duration: actualSessionDuration, wordsRead: estimatedWordsInThisSession, wordsPerMinute: sessionWPM)
             }
         }
         

@@ -13,6 +13,9 @@ protocol DashboardDataServiceProtocol {
     func fetchWeeklyProgressData(forLastWeeks count: Int) -> AnyPublisher<[WeeklyProgressDataPoint], Error>
     func fetchMonthlyProgressData(forLastMonths count: Int) -> AnyPublisher<[MonthlyProgressDataPoint], Error>
     
+    // Added for detailed streak information
+    func fetchStreakInfo() -> AnyPublisher<StreakInfo, Error>
+    
     // A combined fetch method might also be useful for fetching all dashboard data at once
     // func fetchFullDashboardDataPackage() -> AnyPublisher<FullDashboardData, Error>
     // struct FullDashboardData {
@@ -50,7 +53,9 @@ class MockDashboardDataService: DashboardDataServiceProtocol {
                     totalBooksRead: totalBooksRead,
                     totalSessions: totalSessions,
                     averageSessionLength: averageSessionLength,
-                    longestStreak: longestStreak
+                    longestStreak: longestStreak,
+                    comprehensionScore: Bool.random() ? Double.random(in: 0.6...0.95) : nil, // Mocked optional
+                    readingLevel: Bool.random() ? "Level \(Int.random(in: 5...10))" : nil   // Mocked optional
                 )
                 promise(.success(stats))
             }
@@ -87,10 +92,12 @@ class MockDashboardDataService: DashboardDataServiceProtocol {
                 for i in 0..<limit {
                     items.append(
                         RecentlyReadItem(
+                            itemID: "mock\(i+1)",
                             title: "Mock Book \(i+1)",
                             author: "Author \(Character(UnicodeScalar("A".unicodeScalars.first!.value + UInt32(i))!))",
                             progress: Double.random(in: 0.1...0.95),
-                            lastReadDate: Calendar.current.date(byAdding: .day, value: -Int.random(in: 1...20), to: Date())!
+                            lastReadDate: Calendar.current.date(byAdding: .day, value: -Int.random(in: 1...20), to: Date())!,
+                            collectionName: "stories"
                         )
                     )
                 }
@@ -188,6 +195,53 @@ class MockDashboardDataService: DashboardDataServiceProtocol {
                     ))
                 }
                 promise(.success(progressData.sorted(by: { $0.month < $1.month })))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    // Mock implementation for fetchStreakInfo
+    func fetchStreakInfo() -> AnyPublisher<StreakInfo, Error> {
+        Future<StreakInfo, Error> { promise in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.7) {
+                let currentStreak = Int.random(in: 0...45)
+                let longestStreak = max(currentStreak, Int.random(in: 20...150))
+                let lastRead = Calendar.current.date(byAdding: .day, value: -Int.random(in: 0...2), to: Date())!
+                let streakStartDate = currentStreak > 0 ? Calendar.current.date(byAdding: .day, value: -(currentStreak - 1), to: Calendar.current.startOfDay(for: lastRead)) : nil
+                
+                let milestones = [7, 30, 100, 365]
+                var nextMilestone: Int? = nil
+                var daysToNext: Int? = nil
+                
+                for ms in milestones {
+                    if currentStreak < ms {
+                        nextMilestone = ms
+                        daysToNext = ms - currentStreak
+                        break
+                    }
+                }
+
+                // Create achievements for each milestone
+                let achievements = milestones.map { milestone in
+                    Achievement(
+                        name: "Streak: \(milestone) Days",
+                        description: "Maintain a reading streak for \(milestone) days in a row!",
+                        requiredStreak: milestone,
+                        unlocked: currentStreak >= milestone
+                    )
+                }
+
+                let streakInfo = StreakInfo(
+                    currentStreak: currentStreak,
+                    longestStreak: longestStreak,
+                    streakStartDate: streakStartDate,
+                    lastReadingDate: lastRead,
+                    streakMilestones: milestones,
+                    nextMilestone: nextMilestone,
+                    daysUntilNextMilestone: daysToNext,
+                    achievements: achievements
+                )
+                promise(.success(streakInfo))
             }
         }
         .eraseToAnyPublisher()

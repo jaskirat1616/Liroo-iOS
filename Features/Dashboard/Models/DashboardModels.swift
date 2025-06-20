@@ -28,6 +28,29 @@ struct ReadingStats {
     let totalSessions: Int // count of ReadingLog entities
     let averageSessionLength: TimeInterval // calculated from total time / sessions
     let longestStreak: Int // calculated from ReadingLog.date
+    let comprehensionScore: Double? // Percentage based on quiz performance
+    let readingLevel: String?      // User's current reading level
+}
+
+// MARK: - Streak Information (Based on dashboardddtls.md)
+struct Achievement: Identifiable {
+    let id = UUID()
+    let name: String
+    let description: String
+    let requiredStreak: Int
+    let unlocked: Bool
+}
+
+struct StreakInfo: Identifiable {
+    let id = UUID() // Added for Identifiable conformance if needed in UI lists
+    let currentStreak: Int
+    let longestStreak: Int
+    let streakStartDate: Date?
+    let lastReadingDate: Date?
+    let streakMilestones: [Int] // e.g., [7, 30, 100, 365]
+    let nextMilestone: Int?
+    let daysUntilNextMilestone: Int?
+    let achievements: [Achievement] // New: list of achievements
 }
 
 // MARK: - Real Engagement Metrics (Based on Collectible Data)
@@ -109,10 +132,12 @@ struct ReadingActivityDataPoint: Identifiable, Hashable {
 // Represents a recently read item
 struct RecentlyReadItem: Identifiable, Hashable {
     let id = UUID()
+    let itemID: String?
     let title: String
     let author: String?
     let progress: Double // 0.0 to 1.0
     let lastReadDate: Date
+    let collectionName: String // NEW: e.g., 'stories' or 'userContent'
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)

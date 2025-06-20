@@ -43,7 +43,9 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
                         totalBooksRead: totalBooksRead,
                         totalSessions: totalSessions,
                         averageSessionLength: averageSessionLength,
-                        longestStreak: longestStreak
+                        longestStreak: longestStreak,
+                        comprehensionScore: nil, // Placeholder - Data source to be determined
+                        readingLevel: nil        // Placeholder - Data source to be determined
                     )
                     promise(.success(stats))
 
@@ -118,16 +120,19 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
             self.context.perform {
                 do {
                     let request: NSFetchRequest<Book> = Book.fetchRequest()
-                    request.predicate = NSPredicate(format: "lastReadDate != NIL")
+                    // MODIFIED PREDICATE: Ensure only non-archived books are fetched
+                    request.predicate = NSPredicate(format: "lastReadDate != NIL AND isArchived == NO")
                     request.sortDescriptors = [NSSortDescriptor(keyPath: \Book.lastReadDate, ascending: false)]
                     request.fetchLimit = limit
                     let fetchedBooks = try self.context.fetch(request)
                     let recentItems = fetchedBooks.map { bookEntity -> RecentlyReadItem in
                         RecentlyReadItem(
+                            itemID: bookEntity.firestoreID,
                             title: bookEntity.title ?? "Unknown Title",
                             author: bookEntity.author,
                             progress: Double(bookEntity.progress),
-                            lastReadDate: bookEntity.lastReadDate ?? Date()
+                            lastReadDate: bookEntity.lastReadDate ?? Date(),
+                            collectionName: bookEntity.collectionName ?? "stories"
                         )
                     }
                     promise(.success(recentItems))
@@ -330,6 +335,74 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
         .eraseToAnyPublisher()
     }
     
+    // MARK: - Streak Info Calculation
+    func fetchStreakInfo() -> AnyPublisher<StreakInfo, Error> {
+        Future<StreakInfo, Error> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(DataServiceError.unknown))
+                return
+            }
+            
+            self.context.perform {
+                do {
+                    let request: NSFetchRequest<ReadingLog> = ReadingLog.fetchRequest()
+                    let readingLogs = try self.context.fetch(request)
+                    
+                    let currentStreak = self.calculateCurrentStreak(logs: readingLogs)
+                    let longestStreak = self.calculateLongestStreak(logs: readingLogs)
+                    
+                    let sortedLogs = readingLogs.compactMap { $0.date }.sorted(by: >) // Descending for most recent
+                    let lastReadingDate = sortedLogs.first
+                    
+                    var streakStartDate: Date? = nil
+                    if currentStreak > 0, let lastDate = lastReadingDate {
+                        streakStartDate = self.calendar.date(byAdding: .day, value: -(currentStreak - 1), to: self.calendar.startOfDay(for: lastDate))
+                    }
+                    
+                    let streakMilestones = [7, 30, 100, 365] // From dashboardddtls.md
+                    var nextMilestone: Int? = nil
+                    var daysUntilNextMilestone: Int? = nil
+                    
+                    if currentStreak >= 0 { // Ensure streak is not negative
+                        for milestone in streakMilestones {
+                            if currentStreak < milestone {
+                                nextMilestone = milestone
+                                daysUntilNextMilestone = milestone - currentStreak
+                                break
+                            }
+                        }
+                    }
+
+                    // Create achievements for each milestone
+                    let achievements = streakMilestones.map { milestone in
+                        Achievement(
+                            name: "Streak: \(milestone) Days",
+                            description: "Maintain a reading streak for \(milestone) days in a row!",
+                            requiredStreak: milestone,
+                            unlocked: currentStreak >= milestone
+                        )
+                    }
+
+                    let streakInfo = StreakInfo(
+                        currentStreak: currentStreak,
+                        longestStreak: longestStreak,
+                        streakStartDate: streakStartDate,
+                        lastReadingDate: lastReadingDate,
+                        streakMilestones: streakMilestones,
+                        nextMilestone: nextMilestone,
+                        daysUntilNextMilestone: daysUntilNextMilestone,
+                        achievements: achievements
+                    )
+                    promise(.success(streakInfo))
+                    
+                } catch {
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch ReadingLogs for StreakInfo: \(error.localizedDescription)")))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
     // MARK: - Helper Methods
     
     // MODIFIED: To use stored wordsPerMinute from ReadingLog

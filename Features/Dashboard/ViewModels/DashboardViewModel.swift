@@ -7,6 +7,7 @@ class DashboardViewModel: ObservableObject {
     @Published var overallStats: ReadingStats?
     @Published var dailyReadingActivity: [ReadingActivityDataPoint] = []
     @Published var recentlyReadItems: [RecentlyReadItem] = []
+    @Published var streakInfo: StreakInfo?
     
     // Real collectible data
     @Published var engagementMetrics: EngagementMetrics?
@@ -86,14 +87,15 @@ class DashboardViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // Fetch overall stats
-        dataService.fetchOverallStats()
+        let overallStatsPublisher = dataService.fetchOverallStats()
             .receive(on: DispatchQueue.main)
+            .share()
+
+        overallStatsPublisher
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
                     if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
+                        self?.appendErrorMessage(error.localizedDescription)
                     }
                 },
                 receiveValue: { [weak self] stats in
@@ -104,7 +106,19 @@ class DashboardViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Fetch daily activity
-        fetchDailyActivityData()
+        dataService.fetchDailyReadingActivity(forLastDays: selectedTimeRange.dayCount)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.appendErrorMessage(error.localizedDescription)
+                    }
+                },
+                receiveValue: { [weak self] activity in
+                    self?.dailyReadingActivity = activity
+                }
+            )
+            .store(in: &cancellables)
         
         // Fetch recently read items
         dataService.fetchRecentlyReadItems(limit: 5)
@@ -112,7 +126,7 @@ class DashboardViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
+                        self?.appendErrorMessage(error.localizedDescription)
                     }
                 },
                 receiveValue: { [weak self] items in
@@ -120,6 +134,36 @@ class DashboardViewModel: ObservableObject {
                 }
             )
             .store(in: &cancellables)
+
+        // Fetch streak info
+        let streakInfoPublisher = dataService.fetchStreakInfo()
+            .receive(on: DispatchQueue.main)
+            .share()
+
+        streakInfoPublisher
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                         self?.appendErrorMessage("Failed to load streak info: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { [weak self] newStreakInfo in
+                    self?.streakInfo = newStreakInfo
+                }
+            )
+            .store(in: &cancellables)
+
+        // Combine primary publishers to set isLoading to false once all complete
+        Publishers.CombineLatest3(
+            overallStatsPublisher.map { _ in () }.catch { _ in Just(()) },
+            dataService.fetchDailyReadingActivity(forLastDays: selectedTimeRange.dayCount).map { _ in () }.catch { _ in Just(()) },
+            streakInfoPublisher.map { _ in () }.catch { _ in Just(()) }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(receiveValue: { [weak self] _, _, _ in
+            self?.isLoading = false
+        })
+        .store(in: &cancellables)
     }
     
     func fetchDailyActivityData() {
@@ -203,5 +247,14 @@ class DashboardViewModel: ObservableObject {
             contentGenerated: contentGenerated,
             averageSessionEngagement: averageSessionEngagement
         )
+    }
+    
+    // Helper to append error messages
+    private func appendErrorMessage(_ message: String) {
+        if errorMessage == nil {
+            errorMessage = message
+        } else {
+            errorMessage?.append("\n\(message)")
+        }
     }
 }

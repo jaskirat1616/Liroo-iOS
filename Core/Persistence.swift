@@ -12,6 +12,8 @@ struct PersistenceController {
         let viewContext = controller.container.viewContext
         
         // Add sample data for previews
+        // Comment out or remove the creation of the sample book
+        /*
         let book1 = Book(context: viewContext)
         book1.id = UUID()
         book1.title = "SwiftUI for Dummies (Preview)"
@@ -19,20 +21,22 @@ struct PersistenceController {
         book1.lastReadDate = Date()
         book1.progress = 0.5
         book1.isArchived = false // Ensure preview book is not archived
+        */
 
+        // You can keep other sample data if needed, for example, for ReadingLog
         let log1 = ReadingLog(context: viewContext)
         log1.id = UUID()
         log1.date = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         log1.duration = 30 * 60 // 30 minutes
         log1.wordsRead = 1500
-        // book1.addToReadingLogs(log1) // If you add relationship
+        // book1.addToReadingLogs(log1) // If you add relationship - this would now cause an error if book1 is removed
 
         let log2 = ReadingLog(context: viewContext)
         log2.id = UUID()
         log2.date = Calendar.current.date(byAdding: .day, value: -2, to: Date())!
         log2.duration = 60 * 60 // 1 hour
         log2.wordsRead = 3000
-        // book1.addToReadingLogs(log2) // If you add relationship
+        // book1.addToReadingLogs(log2) // This would also cause an error if book1 is removed
 
         do {
             try viewContext.save()
@@ -102,14 +106,17 @@ struct PersistenceController {
                     didChange = true
                 }
                 // Optionally, set lastReadDate if nil (for testing)
+                // Commenting this out to prevent old data from appearing new
+                /*
                 if book.lastReadDate == nil {
                     book.lastReadDate = Date()
                     didChange = true
                 }
+                */
             }
             if didChange {
                 try context.save()
-                print("[Migration] Updated Book records with missing isArchived/lastReadDate.")
+                print("[Migration] Updated Book records with missing isArchived.") // Modified log message
             }
         } catch {
             print("[Migration] Error updating Book records: \(error)")
