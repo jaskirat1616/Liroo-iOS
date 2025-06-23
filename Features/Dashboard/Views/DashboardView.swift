@@ -5,27 +5,23 @@ import CoreData
 struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
     @Environment(\.colorScheme) var colorScheme
+    @StateObject private var profileViewModel = ProfileViewModel()
     
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // View Type Selector (simplified to only student view)
-                    viewTypeSelector
-                    
-                    if viewModel.isLoading {
-                        loadingView
-                    } else if let errorMessage = viewModel.errorMessage {
-                        errorView(errorMessage)
-                    } else {
-                        // Main Dashboard Content
-                        studentDashboardContent
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    dashboardHeader
+                    weeklyReadingProgressSection
+                    dashboardGridSection
+                    streaksSection
+                    recentReadingsSection
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.top, 8)
             }
-            .navigationTitle("Dashboard")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("")
+            .navigationBarHidden(true)
             .refreshable {
                 viewModel.refreshData()
             }
@@ -35,18 +31,232 @@ struct DashboardView: View {
         }
     }
     
-    // MARK: - View Type Selector
-    private var viewTypeSelector: some View {
-        HStack {
-            Text("Student View")
+    // MARK: - Dashboard Header
+    private var dashboardHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            if let urlString = profileViewModel.profile?.avatarURL, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .frame(width: 44, height: 44)
+                    case .success(let image):
+                        image.resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                    case .failure:
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable()
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                            .foregroundColor(.gray)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                    .foregroundColor(.gray)
+            }
+            Text("Hello, \(profileViewModel.profile?.name ?? "Jessica")")
                 .font(.headline)
                 .foregroundColor(.primary)
             Spacer()
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.systemGray6))
-        .cornerRadius(10)
+        .padding(.bottom, 4)
+    }
+    
+    // MARK: - Weekly Reading Progress Section
+    private var weeklyReadingProgressSection: some View {
+        let dailyGoal: TimeInterval = 20 * 60 // 20 minutes in seconds
+        let weekStart = startOfCurrentWeek()
+        let calendar = Calendar.current
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Weekly reading progress")
+                .font(.custom("OpenDyslexic-Regular", size: 20))
+                .fontWeight(.bold)
+                .padding(.bottom, 2)
+            HStack(spacing: 12) {
+                ForEach(0..<7) { offset in
+                    let dayDate = calendar.date(byAdding: .day, value: offset, to: weekStart) ?? weekStart
+                    let totalDuration = viewModel.dailyReadingActivity
+                        .filter { calendar.isDate($0.date, inSameDayAs: dayDate) }
+                        .reduce(0) { $0 + $1.duration }
+                    let progress = min(totalDuration / dailyGoal, 1.0)
+                    ZStack {
+                        Circle()
+                            .stroke(Color(.systemGray5), lineWidth: 6)
+                            .frame(width: 40, height: 40)
+                        Circle()
+                            .trim(from: 0, to: progress)
+                            .stroke(progress >= 1.0 ? Color.green : Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 40, height: 40)
+                        Text("\(Int(totalDuration/60))")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(progress >= 1.0 ? .green : .blue)
+                    }
+                }
+            }
+        }
+        .padding(.bottom, 8)
+    }
+    
+    // Helper: Start of current week (Sunday)
+    private func startOfCurrentWeek() -> Date {
+        let calendar = Calendar.current
+        let today = Date()
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        return calendar.date(from: components) ?? today
+    }
+    
+    // MARK: - Dashboard Grid Section (Compact 2x2, high-value metrics)
+    private var dashboardGridSection: some View {
+        let metrics: [(title: String, value: String, icon: String, color: Color)] = [
+            ("Current Streak", "\(viewModel.overallStats?.currentStreakInDays ?? 0)", "flame.fill", .orange),
+            ("Active Days", "\(activeDaysThisMonth())", "calendar", .blue),
+            ("Books Read", viewModel.totalBooksReadDisplay, "books.vertical.fill", .indigo),
+            ("Total Time", viewModel.totalReadingTimeDisplay, "timer", .green)
+        ]
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
+        return LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(0..<metrics.count, id: \.self) { i in
+                VStack(spacing: 6) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 60)
+                        Image(systemName: metrics[i].icon)
+                            .font(.system(size: 28))
+                            .foregroundColor(metrics[i].color)
+                    }
+                    Text(metrics[i].value)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    Text(metrics[i].title)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .padding(6)
+                .background(Color(.systemGray6))
+                .cornerRadius(14)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+    
+    // MARK: - Challenges Section (Detailed List)
+    private var streaksSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Challenges")
+                .font(.title2)
+                .fontWeight(.regular)
+                .padding(.top, 8)
+            if let stats = viewModel.challengeStats {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(sortedChallenges(stats.challenges)) { challenge in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Image(systemName: challenge.isCompleted ? "checkmark.circle.fill" : (challenge.isLocked ? "lock.fill" : "play.circle.fill"))
+                                    .foregroundColor(challenge.isCompleted ? .green : (challenge.isLocked ? .gray : .blue))
+                                Text(challenge.displayName)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if challenge.isCompleted, challenge.points > 0 {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "star.fill").foregroundColor(.yellow).font(.caption)
+                                        Text("+\(challenge.points)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            Text(challenge.description)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                            if challenge.isInProgress {
+                                ProgressView(value: challenge.progressPercentage)
+                                    .progressViewStyle(LinearProgressViewStyle(tint: Color.blue))
+                                    .frame(height: 4)
+                                Text("\(challenge.currentProgress)/\(challenge.targetProgress)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    if stats.challenges.isEmpty {
+                        Text("No challenges available")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.systemGray5))
+                .cornerRadius(16)
+            } else {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemGray5))
+                    .frame(height: 120)
+            }
+        }
+        .padding(.bottom, 4)
+    }
+    
+    // Helper: Sort challenges by status
+    private func sortedChallenges(_ challenges: [Challenge]) -> [Challenge] {
+        challenges.sorted {
+            if $0.isCompleted != $1.isCompleted {
+                return $0.isCompleted && !$1.isCompleted
+            } else if $0.isLocked != $1.isLocked {
+                return !$0.isLocked && $1.isLocked
+            } else {
+                return $0.displayName < $1.displayName
+            }
+        }
+    }
+    
+    // MARK: - Recent Readings Section
+    private var recentReadingsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recent readings")
+                .font(.title2)
+                .fontWeight(.regular)
+                .padding(.top, 8)
+            if viewModel.recentlyReadItems.isEmpty {
+                Text("No recent reading activity")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(viewModel.recentlyReadItems.prefix(5)) { item in
+                            RecentlyReadRow(item: item)
+                                .frame(width: 180)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.bottom, 8)
     }
     
     // MARK: - Loading View
@@ -572,8 +782,18 @@ struct DashboardView: View {
                 StatCard(title: "Total Time", value: viewModel.totalReadingTimeDisplay, iconName: "timer", iconColor: .blue)
                 StatCard(title: "Words Read", value: viewModel.totalWordsReadDisplay, iconName: "text.book.closed.fill", iconColor: .green)
                 StatCard(title: "Books Read", value: viewModel.totalBooksReadDisplay, iconName: "books.vertical.fill", iconColor: .indigo)
+                StatCard(title: "Active Days This Month", value: "\(activeDaysThisMonth())", iconName: "calendar", iconColor: .orange)
             }
         }
+    }
+    
+    // Helper: Count active reading days in the current month
+    private func activeDaysThisMonth() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        let days = Set(viewModel.dailyReadingActivity.filter { $0.date >= startOfMonth && $0.duration > 0 }.map { calendar.startOfDay(for: $0.date) })
+        return days.count
     }
     
     // MARK: - Recently Read Section (limit 3)
@@ -678,7 +898,6 @@ struct StatCard: View {
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
-                .lineLimit(1)
             
             Text(title)
                 .font(.caption)

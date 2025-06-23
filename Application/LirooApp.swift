@@ -33,7 +33,7 @@ struct LirooApp: App {
                     MainTabView()
                         .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 } else {
-                    LoginView()
+                    SplashScreenView()
                 }
             }
             .environmentObject(authViewModel)

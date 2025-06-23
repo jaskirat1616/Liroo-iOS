@@ -3,6 +3,7 @@ import SwiftUI
 struct SignupView: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     @State private var name = ""
     @State private var email = ""
@@ -15,155 +16,161 @@ struct SignupView: View {
     @State private var errorMessage = ""
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Header
-                Text("Create Account")
-                    .font(.system(size: 32, weight: .bold))
-                    .padding(.top, 40)
+        NavigationView {
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(
+                        colors: colorScheme == .dark ? 
+                            [.cyan.opacity(0.2), Color(.systemBackground), Color(.systemBackground)] :
+                            [.cyan.opacity(0.4), .white, .white]
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
-                // Name Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Full Name")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("", text: $name)
-                        .textContentType(.name)
-                        .autocapitalization(.words)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Spacer(minLength: 40)
+                        
+                        VStack(spacing: 16) {
+                            Text("Sign up")
+                                .font(.title)
+                                .fontWeight(.bold)
+                            Text("Create your Liroo account")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.bottom, 24)
+                        
+                        VStack(spacing: 18) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Full Name")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                TextField("Enter your full name", text: $name)
+                                    .textContentType(.name)
+                                    .autocapitalization(.words)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Email")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                TextField("Enter your email", text: $email)
+                                    .textContentType(.emailAddress)
+                                    .keyboardType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Password")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                SecureField("Create a password", text: $password)
+                                    .textContentType(.newPassword)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Confirm Password")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                SecureField("Re-enter your password", text: $confirmPassword)
+                                    .textContentType(.newPassword)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Topics you're interested in (comma-separated)")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                TextField("e.g., history, science, art", text: $interestedTopicsString)
+                                    .autocapitalization(.none)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            
+                            Toggle("Are you a student?", isOn: $isStudent)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 8)
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("A little about yourself (Optional)")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                TextEditor(text: $additionalInfo)
+                                    .frame(height: 80)
+                                    .padding(4)
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                                    )
+                            }
+                        }
+                        .padding(12)
+                        .background(Color(.systemBackground).opacity(0.95))
+                        .cornerRadius(20)
+                        .padding(.horizontal)
+                        
+                        Button(action: signUp) {
+                            if authViewModel.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Text("Create Account")
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
                         .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                // Email Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Email")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("", text: $email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                // Password Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Password")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    SecureField("", text: $password)
-                        .textContentType(.newPassword)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                // Confirm Password Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Confirm Password")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    SecureField("", text: $confirmPassword)
-                        .textContentType(.newPassword)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                // Interested Topics Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Topics you're interested in (comma-separated)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("e.g., history, science, art", text: $interestedTopicsString)
-                        .autocapitalization(.none)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                
-                // Student Status Toggle
-                Toggle("Are you a student?", isOn: $isStudent)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                
-                // Additional Info TextEditor
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("A little about yourself (Optional)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    TextEditor(text: $additionalInfo)
-                        .frame(height: 100)
-                        .padding(4)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                        )
-                }
-                .padding(.horizontal)
-                
-                // Sign Up Button
-                Button(action: signUp) {
-                    if authViewModel.isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    } else {
-                        Text("Create Account")
+                        .background(colorScheme == .dark ? .white : .black)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                        .cornerRadius(22)
+                        .padding(.horizontal)
+                        .disabled(authViewModel.isLoading)
+                        
+                        HStack {
+                            Text("Already have an account?")
+                                .foregroundColor(.secondary)
+                            Button("Sign In") {
+                                dismiss()
+                            }
                             .fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                        }
+                        .padding(.top, 16)
+                        
+                        Spacer(minLength: 40)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.accentColor)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .padding(.horizontal)
-                .disabled(authViewModel.isLoading)
-                
-                // Sign In Link
-                HStack {
-                    Text("Already have an account?")
-                        .foregroundColor(.secondary)
-                    Button("Sign In") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundColor(.accentColor)
-                }
-                .padding(.top, 20)
             }
-            .padding(.bottom, 50)
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage)
+            .navigationBarHidden(true)
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
+            }
         }
     }
     
     private func signUp() {
-        // Clear previous errors
         authViewModel.errorMessage = nil
         errorMessage = ""
         
-        // Validate inputs
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Please enter your name"
             showError = true
@@ -190,10 +197,9 @@ struct SignupView: View {
         
         Task {
             do {
-                // Convert interestedTopicsString to array
                 let topicsArray = interestedTopicsString.split(separator: ",")
-                                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                                    .filter { !$0.isEmpty }
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
 
                 try await authViewModel.signUp(
                     email: email,
@@ -213,8 +219,6 @@ struct SignupView: View {
 }
 
 #Preview {
-    NavigationView {
-        SignupView()
-            .environmentObject(AuthViewModel())
-    }
+    SignupView()
+        .environmentObject(AuthViewModel())
 }
