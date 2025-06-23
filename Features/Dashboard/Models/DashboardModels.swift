@@ -32,25 +32,161 @@ struct ReadingStats {
     let readingLevel: String?      // User's current reading level
 }
 
-// MARK: - Streak Information (Based on dashboardddtls.md)
-struct Achievement: Identifiable {
+// MARK: - Enhanced Unified Challenges System
+enum ChallengeType: String, CaseIterable {
+    case streak = "Streak"
+    case reading = "Reading"
+    case engagement = "Engagement"
+    case speed = "Speed"
+    case comprehension = "Comprehension"
+    case weekly = "Weekly"
+    case monthly = "Monthly"
+}
+
+enum ChallengeStatus: String, CaseIterable {
+    case locked = "Locked"
+    case inProgress = "In Progress"
+    case completed = "Completed"
+    case mastered = "Mastered"
+    case expired = "Expired"
+}
+
+enum ChallengeLevel: Int, CaseIterable {
+    case bronze = 1
+    case silver = 2
+    case gold = 3
+    case platinum = 4
+    case diamond = 5
+    
+    var name: String {
+        switch self {
+        case .bronze: return "Bronze"
+        case .silver: return "Silver"
+        case .gold: return "Gold"
+        case .platinum: return "Platinum"
+        case .diamond: return "Diamond"
+        }
+    }
+    
+    var multiplier: Double {
+        switch self {
+        case .bronze: return 1.0
+        case .silver: return 1.5
+        case .gold: return 2.0
+        case .platinum: return 3.0
+        case .diamond: return 5.0
+        }
+    }
+}
+
+enum ChallengeFrequency: String, CaseIterable {
+    case oneTime = "One Time"
+    case recurring = "Recurring"
+    case progressive = "Progressive"
+    case weekly = "Weekly"
+    case monthly = "Monthly"
+}
+
+struct Challenge: Identifiable {
     let id = UUID()
     let name: String
     let description: String
-    let requiredStreak: Int
-    let unlocked: Bool
+    let type: ChallengeType
+    let status: ChallengeStatus
+    let level: ChallengeLevel
+    let frequency: ChallengeFrequency
+    let currentProgress: Int
+    let targetProgress: Int
+    let iconName: String
+    let iconColor: String
+    let reward: String?
+    let points: Int // Points earned for completion
+    let unlockedDate: Date?
+    let completedDate: Date?
+    let expiresAt: Date? // For time-limited challenges
+    let nextLevelTarget: Int? // For progressive challenges
+    let completionCount: Int // How many times this challenge has been completed
+    
+    var progressPercentage: Double {
+        guard targetProgress > 0 else { return 0 }
+        return min(Double(currentProgress) / Double(targetProgress), 1.0)
+    }
+    
+    var isCompleted: Bool {
+        return status == .completed || status == .mastered
+    }
+    
+    var isInProgress: Bool {
+        return status == .inProgress
+    }
+    
+    var isLocked: Bool {
+        return status == .locked
+    }
+    
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return Date() > expiresAt
+    }
+    
+    var canProgress: Bool {
+        return frequency == .progressive && isCompleted
+    }
+    
+    var nextLevelName: String? {
+        guard canProgress, let nextLevel = ChallengeLevel(rawValue: level.rawValue + 1) else { return nil }
+        return "\(name) - \(nextLevel.name)"
+    }
+    
+    var displayName: String {
+        if level == .bronze {
+            return name
+        } else {
+            return "\(name) - \(level.name)"
+        }
+    }
 }
 
-struct StreakInfo: Identifiable {
-    let id = UUID() // Added for Identifiable conformance if needed in UI lists
+struct ChallengeStats {
     let currentStreak: Int
     let longestStreak: Int
     let streakStartDate: Date?
     let lastReadingDate: Date?
-    let streakMilestones: [Int] // e.g., [7, 30, 100, 365]
-    let nextMilestone: Int?
-    let daysUntilNextMilestone: Int?
-    let achievements: [Achievement] // New: list of achievements
+    let totalChallenges: Int
+    let completedChallenges: Int
+    let inProgressChallenges: Int
+    let totalPoints: Int
+    let level: ChallengeLevel
+    let challenges: [Challenge]
+    let recentCompletions: [Challenge] // Last 5 completed challenges
+    let upcomingChallenges: [Challenge] // Next available challenges
+    
+    var completionRate: Double {
+        guard totalChallenges > 0 else { return 0 }
+        return Double(completedChallenges) / Double(totalChallenges)
+    }
+    
+    var nextMilestone: Challenge? {
+        return challenges.first { $0.status == .inProgress }
+    }
+    
+    var canLevelUp: Bool {
+        return totalPoints >= pointsNeededForNextLevel
+    }
+    
+    var pointsNeededForNextLevel: Int {
+        switch level {
+        case .bronze: return 100
+        case .silver: return 250
+        case .gold: return 500
+        case .platinum: return 1000
+        case .diamond: return 2000
+        }
+    }
+    
+    var nextLevel: ChallengeLevel? {
+        return ChallengeLevel(rawValue: level.rawValue + 1)
+    }
 }
 
 // MARK: - Real Engagement Metrics (Based on Collectible Data)

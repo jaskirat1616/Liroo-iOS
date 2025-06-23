@@ -89,10 +89,8 @@ struct DashboardView: View {
     // MARK: - Student Dashboard Content
     private var studentDashboardContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Gamified Streaks Section
-            streaksSection
-            // Achievements Section
-            achievementsSection
+            // Unified Challenges Section
+            challengesSection
             // Key Stats Section
             keyStatsSection
             // Recently Read Section (limit 3)
@@ -102,109 +100,463 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Gamified Streaks Section
-    private var streaksSection: some View {
+    // MARK: - Unified Challenges Section
+    private var challengesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Streaks")
-                .font(.title2)
-                .fontWeight(.bold)
-            HStack(spacing: 24) {
-                VStack {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.orange)
-                    Text("Current Streak")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("\(viewModel.streakInfo?.currentStreak ?? 0) days")
-                        .font(.title2)
-                        .fontWeight(.bold)
+            HStack {
+                Text("Challenges")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Spacer()
+                if let challengeStats = viewModel.challengeStats {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text("\(challengeStats.completedChallenges)/\(challengeStats.totalChallenges)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(.systemGray5))
+                                .cornerRadius(8)
+                            
+                            // Level Badge
+                            HStack(spacing: 4) {
+                                let levelIconName = levelIcon(for: challengeStats.level)
+                                let levelColorValue = levelColor(for: challengeStats.level)
+                                
+                                Image(systemName: levelIconName)
+                                    .font(.caption)
+                                    .foregroundColor(levelColorValue)
+                                Text(challengeStats.level.name)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(levelColorValue)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(levelColor(for: challengeStats.level).opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        
+                        // Points Progress
+                        if challengeStats.canLevelUp {
+                            Text("🎉 Ready to Level Up!")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                                .fontWeight(.semibold)
+                        } else {
+                            let pointsText = "\(challengeStats.totalPoints)/\(challengeStats.pointsNeededForNextLevel) points"
+                            Text(pointsText)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
-                VStack {
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.yellow)
-                    Text("Longest Streak")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text("\(viewModel.streakInfo?.longestStreak ?? 0) days")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                }
-                if let nextMilestone = viewModel.streakInfo?.nextMilestone, let daysLeft = viewModel.streakInfo?.daysUntilNextMilestone {
+            }
+            
+            // Current Streak Overview
+            if let challengeStats = viewModel.challengeStats {
+                HStack(spacing: 20) {
+                    // Current Streak
                     VStack {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.blue)
-                        Text("Next Milestone")
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.orange)
+                        Text("Current")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("\(nextMilestone) days")
+                        Text("\(challengeStats.currentStreak)")
                             .font(.title2)
                             .fontWeight(.bold)
-                        Text("\(daysLeft) days left!")
+                        Text("days")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Longest Streak
+                    VStack {
+                        Image(systemName: "trophy.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.yellow)
+                        Text("Longest")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("\(challengeStats.longestStreak)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("days")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Completion Rate
+                    VStack {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 32))
+                            .foregroundColor(.blue)
+                        Text("Progress")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        let completionPercentage = Int(challengeStats.completionRate * 100)
+                        Text("\(completionPercentage)%")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("complete")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-            }
-            // Milestone Progress Bar
-            if let streakInfo = viewModel.streakInfo, let nextMilestone = streakInfo.nextMilestone {
-                let progress = Double(streakInfo.currentStreak) / Double(nextMilestone)
-                ProgressView(value: progress) {
-                    Text("Progress to next milestone")
-                        .font(.caption)
+                .padding(.vertical, 8)
+                
+                // Level Up Progress Bar
+                if !challengeStats.canLevelUp {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Level Progress")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            let progressText = "\(challengeStats.totalPoints)/\(challengeStats.pointsNeededForNextLevel)"
+                            Text(progressText)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        let progressValue = Double(challengeStats.totalPoints) / Double(challengeStats.pointsNeededForNextLevel)
+                        let progressColor = levelColor(for: challengeStats.level)
+                        ProgressView(value: progressValue)
+                            .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                            .frame(height: 6)
+                    }
+                    .padding(.vertical, 4)
+                }
+                
+                // Active Challenges
+                let activeChallenges = challengeStats.challenges.filter { $0.isInProgress }
+                if !activeChallenges.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Active Challenges")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        ForEach(activeChallenges) { challenge in
+                            ChallengeRow(challenge: challenge)
+                        }
+                    }
+                }
+                
+                // Recent Completions with Celebration
+                if !challengeStats.recentCompletions.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Recent Achievements")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                            Spacer()
+                            Image(systemName: "star.fill")
+                                .foregroundColor(.yellow)
+                                .font(.caption)
+                        }
+                        
+                        ForEach(challengeStats.recentCompletions) { challenge in
+                            CompletedChallengeRow(challenge: challenge)
+                        }
+                    }
+                }
+                
+                // Upcoming Challenges
+                if !challengeStats.upcomingChallenges.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Upcoming Challenges")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        ForEach(challengeStats.upcomingChallenges) { challenge in
+                            ChallengeRow(challenge: challenge)
+                        }
+                    }
+                }
+                
+                // Progressive Challenges (can be leveled up)
+                let progressiveChallenges = challengeStats.challenges.filter { $0.canProgress }
+                if !progressiveChallenges.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Level Up Opportunities")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        ForEach(progressiveChallenges) { challenge in
+                            ProgressiveChallengeRow(challenge: challenge)
+                        }
+                    }
+                }
+            } else {
+                // Loading or no data state
+                VStack(spacing: 12) {
+                    Image(systemName: "trophy")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
+                    Text("Loading challenges...")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                .progressViewStyle(LinearProgressViewStyle(tint: .orange))
+                .frame(maxWidth: .infinity)
+                .padding()
             }
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(14)
     }
-
-    // MARK: - Achievements Section
-    private var achievementsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Achievements")
-                .font(.title2)
-                .fontWeight(.bold)
-            if let achievements = viewModel.streakInfo?.achievements {
-                ForEach(achievements) { achievement in
-                    HStack(spacing: 12) {
-                        Image(systemName: achievement.unlocked ? "checkmark.seal.fill" : "lock.fill")
-                            .foregroundColor(achievement.unlocked ? .green : .gray)
-                            .font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(achievement.name)
-                                .font(.headline)
-                            Text(achievement.description)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+    
+    // MARK: - Enhanced Challenge Row Component
+    private func ChallengeRow(challenge: Challenge) -> some View {
+        HStack(spacing: 12) {
+            // Icon with Level Badge
+            ZStack {
+                Image(systemName: challenge.iconName)
+                    .font(.title2)
+                    .foregroundColor(Color(challenge.iconColor))
+                    .frame(width: 32, height: 32)
+                
+                if challenge.level != .bronze {
+                    VStack {
                         Spacer()
-                        if achievement.unlocked {
-                            Text("Unlocked")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        } else {
-                            Text("Locked")
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                        HStack {
+                            Spacer()
+                            Text(challenge.level.name.prefix(1))
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .frame(width: 12, height: 12)
+                                .background(levelColor(for: challenge.level))
+                                .clipShape(Circle())
                         }
                     }
-                    .padding(8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
+                    .frame(width: 32, height: 32)
                 }
-            } else {
-                Text("No achievements yet.")
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(challenge.displayName)
                     .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Text(challenge.description)
+                    .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(2)
+                
+                // Progress Bar
+                if challenge.isInProgress {
+                    ProgressView(value: challenge.progressPercentage)
+                        .progressViewStyle(LinearProgressViewStyle(tint: Color(challenge.iconColor)))
+                        .frame(height: 4)
+                    
+                    Text("\(challenge.currentProgress)/\(challenge.targetProgress)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Frequency Badge
+                if challenge.frequency != .oneTime {
+                    Text(challenge.frequency.rawValue)
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+            
+            Spacer()
+            
+            // Status Badge with Points
+            VStack(spacing: 4) {
+                if challenge.isCompleted {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title3)
+                } else if challenge.isInProgress {
+                    Image(systemName: "play.circle.fill")
+                        .foregroundColor(Color(challenge.iconColor))
+                        .font(.title3)
+                } else {
+                    Image(systemName: "lock.fill")
+                        .foregroundColor(.gray)
+                        .font(.title3)
+                }
+                
+                if let reward = challenge.reward {
+                    Text(reward)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                if challenge.points > 0 {
+                    Text("+\(challenge.points)")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                }
             }
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(.systemGray4), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Completed Challenge Row (Celebration Style)
+    private func CompletedChallengeRow(challenge: Challenge) -> some View {
+        HStack(spacing: 12) {
+            // Celebration Icon
+            ZStack {
+                Image(systemName: challenge.iconName)
+                    .font(.title2)
+                    .foregroundColor(Color(challenge.iconColor))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundColor(.yellow)
+                    .offset(x: 12, y: -12)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(challenge.displayName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.green)
+                
+                let timeInterval = challenge.completedDate?.timeIntervalSinceNow ?? 0
+                let daysAgo = Int(abs(timeInterval / 86400)) // Convert to days
+                let completionText = "Completed \(daysAgo) days ago"
+                Text(completionText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                if challenge.completionCount > 1 {
+                    let completionCountText = "Completed \(challenge.completionCount) times"
+                    Text(completionCountText)
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                        .fontWeight(.semibold)
+                }
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.title3)
+                
+                Text("+\(challenge.points)")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.green)
+                
+                if let reward = challenge.reward {
+                    Text(reward)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.green.opacity(0.05))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Progressive Challenge Row (Can Level Up)
+    private func ProgressiveChallengeRow(challenge: Challenge) -> some View {
+        HStack(spacing: 12) {
+            // Level Up Icon
+            ZStack {
+                Image(systemName: challenge.iconName)
+                    .font(.title2)
+                    .foregroundColor(Color(challenge.iconColor))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .offset(x: 12, y: -12)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                let displayName = challenge.nextLevelName ?? challenge.displayName
+                Text(displayName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.orange)
+                
+                let nextLevel = ChallengeLevel(rawValue: challenge.level.rawValue + 1)
+                let nextLevelName = nextLevel?.name ?? ""
+                let levelUpText = "Level up to \(challenge.level.name) → \(nextLevelName)"
+                Text(levelUpText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                if let nextTarget = challenge.nextLevelTarget {
+                    let targetText = "Next target: \(nextTarget)"
+                    Text(targetText)
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                        .fontWeight(.semibold)
+                }
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 4) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .foregroundColor(.orange)
+                    .font(.title3)
+                
+                Text("Level Up")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.orange)
+            }
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.05))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Helper Functions for Level Colors and Icons
+    private func levelColor(for level: ChallengeLevel) -> Color {
+        switch level {
+        case .bronze: return .brown
+        case .silver: return .gray
+        case .gold: return .yellow
+        case .platinum: return .blue
+        case .diamond: return .purple
+        }
+    }
+    
+    private func levelIcon(for level: ChallengeLevel) -> String {
+        switch level {
+        case .bronze: return "circle.fill"
+        case .silver: return "circle.fill"
+        case .gold: return "star.fill"
+        case .platinum: return "crown.fill"
+        case .diamond: return "diamond.fill"
+        }
     }
 
     // MARK: - Key Stats Section

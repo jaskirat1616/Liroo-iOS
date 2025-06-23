@@ -7,7 +7,7 @@ class DashboardViewModel: ObservableObject {
     @Published var overallStats: ReadingStats?
     @Published var dailyReadingActivity: [ReadingActivityDataPoint] = []
     @Published var recentlyReadItems: [RecentlyReadItem] = []
-    @Published var streakInfo: StreakInfo?
+    @Published var challengeStats: ChallengeStats?
     
     // Real collectible data
     @Published var engagementMetrics: EngagementMetrics?
@@ -135,20 +135,20 @@ class DashboardViewModel: ObservableObject {
             )
             .store(in: &cancellables)
 
-        // Fetch streak info
-        let streakInfoPublisher = dataService.fetchStreakInfo()
+        // Fetch challenge stats
+        let challengeStatsPublisher = dataService.fetchChallengeStats()
             .receive(on: DispatchQueue.main)
             .share()
 
-        streakInfoPublisher
+        challengeStatsPublisher
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
-                         self?.appendErrorMessage("Failed to load streak info: \(error.localizedDescription)")
+                         self?.appendErrorMessage("Failed to load challenge stats: \(error.localizedDescription)")
                     }
                 },
-                receiveValue: { [weak self] newStreakInfo in
-                    self?.streakInfo = newStreakInfo
+                receiveValue: { [weak self] newChallengeStats in
+                    self?.challengeStats = newChallengeStats
                 }
             )
             .store(in: &cancellables)
@@ -157,7 +157,7 @@ class DashboardViewModel: ObservableObject {
         Publishers.CombineLatest3(
             overallStatsPublisher.map { _ in () }.catch { _ in Just(()) },
             dataService.fetchDailyReadingActivity(forLastDays: selectedTimeRange.dayCount).map { _ in () }.catch { _ in Just(()) },
-            streakInfoPublisher.map { _ in () }.catch { _ in Just(()) }
+            challengeStatsPublisher.map { _ in () }.catch { _ in Just(()) }
         )
         .receive(on: DispatchQueue.main)
         .sink(receiveValue: { [weak self] _, _, _ in

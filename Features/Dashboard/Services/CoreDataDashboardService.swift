@@ -335,9 +335,9 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
         .eraseToAnyPublisher()
     }
     
-    // MARK: - Streak Info Calculation
-    func fetchStreakInfo() -> AnyPublisher<StreakInfo, Error> {
-        Future<StreakInfo, Error> { [weak self] promise in
+    // MARK: - Challenge Stats Calculation
+    func fetchChallengeStats() -> AnyPublisher<ChallengeStats, Error> {
+        Future<ChallengeStats, Error> { [weak self] promise in
             guard let self = self else {
                 promise(.failure(DataServiceError.unknown))
                 return
@@ -359,48 +359,240 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
                         streakStartDate = self.calendar.date(byAdding: .day, value: -(currentStreak - 1), to: self.calendar.startOfDay(for: lastDate))
                     }
                     
-                    let streakMilestones = [7, 30, 100, 365] // From dashboardddtls.md
-                    var nextMilestone: Int? = nil
-                    var daysUntilNextMilestone: Int? = nil
+                    // Create challenges based on user's reading data
+                    let challenges = self.createChallenges(
+                        currentStreak: currentStreak,
+                        longestStreak: longestStreak,
+                        readingLogs: readingLogs
+                    )
                     
-                    if currentStreak >= 0 { // Ensure streak is not negative
-                        for milestone in streakMilestones {
-                            if currentStreak < milestone {
-                                nextMilestone = milestone
-                                daysUntilNextMilestone = milestone - currentStreak
-                                break
-                            }
-                        }
-                    }
-
-                    // Create achievements for each milestone
-                    let achievements = streakMilestones.map { milestone in
-                        Achievement(
-                            name: "Streak: \(milestone) Days",
-                            description: "Maintain a reading streak for \(milestone) days in a row!",
-                            requiredStreak: milestone,
-                            unlocked: currentStreak >= milestone
-                        )
-                    }
-
-                    let streakInfo = StreakInfo(
+                    // Calculate total points and determine level
+                    let totalPoints = challenges.filter { $0.isCompleted }.reduce(0) { $0 + $1.points }
+                    let level = self.calculateUserLevel(totalPoints: totalPoints)
+                    
+                    // Get recent completions (last 5 completed challenges)
+                    let recentCompletions = challenges
+                        .filter { $0.isCompleted }
+                        .sorted { ($0.completedDate ?? Date.distantPast) > ($1.completedDate ?? Date.distantPast) }
+                        .prefix(5)
+                        .map { $0 }
+                    
+                    // Get upcoming challenges (next 3 locked challenges)
+                    let upcomingChallenges = challenges
+                        .filter { $0.isLocked }
+                        .prefix(3)
+                        .map { $0 }
+                    
+                    let challengeStats = ChallengeStats(
                         currentStreak: currentStreak,
                         longestStreak: longestStreak,
                         streakStartDate: streakStartDate,
                         lastReadingDate: lastReadingDate,
-                        streakMilestones: streakMilestones,
-                        nextMilestone: nextMilestone,
-                        daysUntilNextMilestone: daysUntilNextMilestone,
-                        achievements: achievements
+                        totalChallenges: challenges.count,
+                        completedChallenges: challenges.filter { $0.isCompleted }.count,
+                        inProgressChallenges: challenges.filter { $0.isInProgress }.count,
+                        totalPoints: totalPoints,
+                        level: level,
+                        challenges: challenges,
+                        recentCompletions: Array(recentCompletions),
+                        upcomingChallenges: Array(upcomingChallenges)
                     )
-                    promise(.success(streakInfo))
+                    promise(.success(challengeStats))
                     
                 } catch {
-                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch ReadingLogs for StreakInfo: \(error.localizedDescription)")))
+                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch ReadingLogs for ChallengeStats: \(error.localizedDescription)")))
                 }
             }
         }
         .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Enhanced Challenge Creation Helper
+    private func createChallenges(currentStreak: Int, longestStreak: Int, readingLogs: [ReadingLog]) -> [Challenge] {
+        let totalBooksRead = self.calculateTotalBooksRead()
+        let totalWordsRead = readingLogs.reduce(0) { $0 + Int($1.wordsRead) }
+        let averageWPM = self.calculateAverageReadingSpeedFromLogs(logs: readingLogs)
+        let totalSessions = readingLogs.count
+        
+        var challenges: [Challenge] = []
+        
+        // Streak Challenges (Progressive)
+        challenges.append(Challenge(
+            name: "Reading Streak",
+            description: "Read for consecutive days",
+            type: .streak,
+            status: currentStreak >= 7 ? .completed : (currentStreak > 0 ? .inProgress : .locked),
+            level: currentStreak >= 100 ? .diamond : 
+                   currentStreak >= 50 ? .platinum :
+                   currentStreak >= 30 ? .gold :
+                   currentStreak >= 7 ? .silver : .bronze,
+            frequency: .progressive,
+            currentProgress: min(currentStreak, 7),
+            targetProgress: 7,
+            iconName: "flame.fill",
+            iconColor: "orange",
+            reward: "🔥 Streak Master",
+            points: 50,
+            unlockedDate: currentStreak >= 7 ? Date() : nil,
+            completedDate: currentStreak >= 7 ? Date() : nil,
+            expiresAt: nil,
+            nextLevelTarget: currentStreak >= 7 ? 30 : nil,
+            completionCount: currentStreak >= 7 ? 1 : 0
+        ))
+        
+        // Weekly Challenge
+        let weeklyTarget = 5 // 5 reading sessions per week
+        let weeklySessions = readingLogs.filter { log in
+            guard let logDate = log.date else { return false }
+            let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            return logDate >= weekAgo
+        }.count
+        
+        challenges.append(Challenge(
+            name: "Weekly Reader",
+            description: "Complete \(weeklyTarget) reading sessions this week",
+            type: .weekly,
+            status: weeklySessions >= weeklyTarget ? .completed : (weeklySessions > 0 ? .inProgress : .locked),
+            level: .bronze,
+            frequency: .weekly,
+            currentProgress: min(weeklySessions, weeklyTarget),
+            targetProgress: weeklyTarget,
+            iconName: "calendar",
+            iconColor: "blue",
+            reward: "📅 Weekly Warrior",
+            points: 25,
+            unlockedDate: weeklySessions > 0 ? Date() : nil,
+            completedDate: weeklySessions >= weeklyTarget ? Date() : nil,
+            expiresAt: Calendar.current.date(byAdding: .day, value: 7, to: Date()),
+            nextLevelTarget: nil,
+            completionCount: weeklySessions >= weeklyTarget ? 1 : 0
+        ))
+        
+        // Reading Challenges (Progressive)
+        challenges.append(Challenge(
+            name: "Book Completion",
+            description: "Complete books",
+            type: .reading,
+            status: totalBooksRead >= 5 ? .completed : (totalBooksRead > 0 ? .inProgress : .locked),
+            level: totalBooksRead >= 50 ? .diamond :
+                   totalBooksRead >= 25 ? .platinum :
+                   totalBooksRead >= 10 ? .gold :
+                   totalBooksRead >= 5 ? .silver : .bronze,
+            frequency: .progressive,
+            currentProgress: min(totalBooksRead, 5),
+            targetProgress: 5,
+            iconName: "book.fill",
+            iconColor: "green",
+            reward: "📚 Book Worm",
+            points: 100,
+            unlockedDate: totalBooksRead > 0 ? Date() : nil,
+            completedDate: totalBooksRead >= 5 ? Date() : nil,
+            expiresAt: nil,
+            nextLevelTarget: totalBooksRead >= 5 ? 10 : nil,
+            completionCount: totalBooksRead >= 5 ? 1 : 0
+        ))
+        
+        // Speed Challenges (Progressive)
+        challenges.append(Challenge(
+            name: "Speed Reader",
+            description: "Read at high WPM",
+            type: .speed,
+            status: averageWPM >= 250 ? .completed : (averageWPM > 200 ? .inProgress : .locked),
+            level: averageWPM >= 400 ? .diamond :
+                   averageWPM >= 300 ? .platinum :
+                   averageWPM >= 250 ? .gold :
+                   averageWPM >= 200 ? .silver : .bronze,
+            frequency: .progressive,
+            currentProgress: Int(min(averageWPM, 250)),
+            targetProgress: 250,
+            iconName: "bolt.fill",
+            iconColor: "yellow",
+            reward: "⚡ Speed Demon",
+            points: 75,
+            unlockedDate: averageWPM > 200 ? Date() : nil,
+            completedDate: averageWPM >= 250 ? Date() : nil,
+            expiresAt: nil,
+            nextLevelTarget: averageWPM >= 250 ? 300 : nil,
+            completionCount: averageWPM >= 250 ? 1 : 0
+        ))
+        
+        // Engagement Challenges (Progressive)
+        challenges.append(Challenge(
+            name: "Consistent Reader",
+            description: "Complete reading sessions",
+            type: .engagement,
+            status: totalSessions >= 50 ? .completed : (totalSessions > 10 ? .inProgress : .locked),
+            level: totalSessions >= 500 ? .diamond :
+                   totalSessions >= 200 ? .platinum :
+                   totalSessions >= 100 ? .gold :
+                   totalSessions >= 50 ? .silver : .bronze,
+            frequency: .progressive,
+            currentProgress: min(totalSessions, 50),
+            targetProgress: 50,
+            iconName: "clock.fill",
+            iconColor: "indigo",
+            reward: "⏰ Consistent",
+            points: 60,
+            unlockedDate: totalSessions > 10 ? Date() : nil,
+            completedDate: totalSessions >= 50 ? Date() : nil,
+            expiresAt: nil,
+            nextLevelTarget: totalSessions >= 50 ? 100 : nil,
+            completionCount: totalSessions >= 50 ? 1 : 0
+        ))
+        
+        // Word Count Challenge (Progressive)
+        challenges.append(Challenge(
+            name: "Word Devourer",
+            description: "Read words",
+            type: .reading,
+            status: totalWordsRead >= 100000 ? .completed : (totalWordsRead > 10000 ? .inProgress : .locked),
+            level: totalWordsRead >= 1000000 ? .diamond :
+                   totalWordsRead >= 500000 ? .platinum :
+                   totalWordsRead >= 250000 ? .gold :
+                   totalWordsRead >= 100000 ? .silver : .bronze,
+            frequency: .progressive,
+            currentProgress: min(totalWordsRead, 100000),
+            targetProgress: 100000,
+            iconName: "textformat",
+            iconColor: "teal",
+            reward: "📖 Word Devourer",
+            points: 150,
+            unlockedDate: totalWordsRead > 10000 ? Date() : nil,
+            completedDate: totalWordsRead >= 100000 ? Date() : nil,
+            expiresAt: nil,
+            nextLevelTarget: totalWordsRead >= 100000 ? 250000 : nil,
+            completionCount: totalWordsRead >= 100000 ? 1 : 0
+        ))
+        
+        // Monthly Challenge
+        let monthlyTarget = 20 // 20 hours of reading per month
+        let monthlyHours = readingLogs.filter { log in
+            guard let logDate = log.date else { return false }
+            let monthAgo = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+            return logDate >= monthAgo
+        }.reduce(0) { $0 + Double($1.duration) } / 3600
+        
+        challenges.append(Challenge(
+            name: "Monthly Marathon",
+            description: "Read for \(monthlyTarget) hours this month",
+            type: .monthly,
+            status: monthlyHours >= Double(monthlyTarget) ? .completed : (monthlyHours > 0 ? .inProgress : .locked),
+            level: .bronze,
+            frequency: .monthly,
+            currentProgress: Int(min(monthlyHours, Double(monthlyTarget))),
+            targetProgress: monthlyTarget,
+            iconName: "clock.badge",
+            iconColor: "purple",
+            reward: "🏃 Monthly Marathoner",
+            points: 200,
+            unlockedDate: monthlyHours > 0 ? Date() : nil,
+            completedDate: monthlyHours >= Double(monthlyTarget) ? Date() : nil,
+            expiresAt: Calendar.current.date(byAdding: .month, value: 1, to: Date()),
+            nextLevelTarget: nil,
+            completionCount: monthlyHours >= Double(monthlyTarget) ? 1 : 0
+        ))
+        
+        return challenges
     }
 
     // MARK: - Helper Methods
@@ -476,6 +668,22 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
             previousDate = date
         }
         return max(longestStreak, currentStreak) // Check once more for the last ongoing streak
+    }
+
+    private func calculateUserLevel(totalPoints: Int) -> ChallengeLevel {
+        // Implement your logic to determine the user's level based on total points
+        // This is a placeholder and should be replaced with the actual implementation
+        if totalPoints >= 1000 {
+            return .diamond
+        } else if totalPoints >= 500 {
+            return .platinum
+        } else if totalPoints >= 250 {
+            return .gold
+        } else if totalPoints >= 100 {
+            return .silver
+        } else {
+            return .bronze
+        }
     }
 }
 
