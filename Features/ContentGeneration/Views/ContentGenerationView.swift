@@ -196,15 +196,14 @@ struct ContentGenerationView: View {
     
     // MARK: - Header Section
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Content Generation")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+                .font(.system(size: 28, weight: .bold, design: .default))
             
             Text("Transform your text into engaging content with AI-powered generation")
-                .font(.body)
+                .font(.system(size: 16, weight: .regular))
                 .foregroundColor(.secondary)
-                .multilineTextAlignment(.leading)
+                .lineLimit(2)
         }
         .padding(.horizontal, 4)
     }
@@ -213,36 +212,49 @@ struct ContentGenerationView: View {
     private var inputSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Input Text")
-                .font(.headline)
-                .fontWeight(.semibold)
+                .font(.system(size: 18, weight: .semibold))
             
             // Text Editor
             VStack(alignment: .leading, spacing: 12) {
-                ZStack(alignment: .topTrailing) {
+                ZStack(alignment: .bottomTrailing) {
                     TextEditor(text: Binding(
                         get: { String(viewModel.inputText.prefix(5000)) },
                         set: { viewModel.inputText = String($0.prefix(5000)) }
                     ))
-                    .frame(minHeight: 120)
+                    .frame(minHeight: 160)
                     .padding(12)
-                    .background(Color(.systemGray6))
+                    .background(Color.clear)
                     .cornerRadius(12)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(.systemGray4), lineWidth: 1)
+                        Group {
+                            if viewModel.inputText.isEmpty {
+                                VStack {
+                                    HStack {
+                                        Text("Enter your text here or use OCR to scan from images...")
+                                            .foregroundColor(.secondary)
+                                            .font(.system(size: 16, weight: .regular))
+                                            .padding(.leading, 16)
+                                            .padding(.top, 20)
+                                        Spacer()
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
                     )
                     
                     // Character count
                     Text("\(viewModel.inputText.count)/5000")
-                        .font(.caption)
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(viewModel.inputText.count > 4500 ? .red : .secondary)
-                        .padding([.top, .trailing], 16)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 4)
                                 .fill(Color(.systemBackground))
-                                .padding(.top, 8)
-                                .padding(.trailing, 8)
                         )
+                        .padding(.trailing, 12)
+                        .padding(.bottom, 12)
                 }
                 
                 // OCR Buttons
@@ -285,13 +297,13 @@ struct ContentGenerationView: View {
                 
                 // OCR Status
                 if ocrViewModel.isProcessing {
-                    HStack {
+                    HStack(spacing: 8) {
                         ProgressView()
-                            .scaleEffect(0.8)
+                            .scaleEffect(0.7)
                         Text(ocrViewModel.totalPages > 1 ? 
                              "Processing page \(ocrViewModel.currentPage) of \(ocrViewModel.totalPages)..." :
                              "Scanning image...")
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -299,20 +311,25 @@ struct ContentGenerationView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
                 } else if let ocrError = ocrViewModel.errorMessage {
-                    Text("OCR Error: \(ocrError)")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.red)
+                        Text("OCR Error: \(ocrError)")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
                 }
             }
         }
-        .padding(16)
+        .padding(20)
         .background(Color(.systemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
     // MARK: - Daily Limit Section
@@ -325,49 +342,50 @@ struct ContentGenerationView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Daily Generation Limit")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 18, weight: .semibold))
                 Spacer()
                 Text("\(used)/\(limit)")
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(atLimit ? .red : .primary)
             }
             
             // Progress Bar
             ProgressView(value: progress)
                 .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
-                .frame(height: 6)
+                .frame(height: 4)
             
             if atLimit {
-                Text("Daily limit reached. Try again tomorrow!")
-                    .font(.caption)
-                    .foregroundColor(.red)
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                    Text("Daily limit reached. Try again tomorrow!")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.red)
+                }
             } else {
                 Text("\(limit - used) generations remaining today")
-                    .font(.caption)
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
-        .padding(16)
+        .padding(20)
         .background(Color(.systemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
     // MARK: - Configuration Section
     private var configurationSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             Text("Configuration")
-                .font(.headline)
-                .fontWeight(.semibold)
+                .font(.system(size: 18, weight: .semibold))
             
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 // Reading Level Selection
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Reading Level")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                     
                     Picker("Reading Level", selection: $viewModel.selectedLevel) {
                         ForEach(ReadingLevel.allCases, id: \.self) { level in
@@ -378,10 +396,9 @@ struct ContentGenerationView: View {
                 }
                 
                 // Content Type Selection
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Content Type")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                     
                     Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
                         ForEach(SummarizationTier.allCases, id: \.self) { tier in
@@ -393,14 +410,14 @@ struct ContentGenerationView: View {
                 
                 // Story-specific options
                 if viewModel.selectedSummarizationTier == .story {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 20) {
                         Divider()
+                            .padding(.vertical, 4)
                         
                         // Genre Selection
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 10) {
                             Text("Genre")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                                .font(.system(size: 16, weight: .medium))
                             
                             Picker("Genre", selection: $viewModel.selectedGenre) {
                                 ForEach(StoryGenre.allCases, id: \.self) { genre in
@@ -412,20 +429,19 @@ struct ContentGenerationView: View {
                         }
                         
                         // Main Character Input
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 10) {
                             Text("Main Character (Optional)")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                                .font(.system(size: 16, weight: .medium))
                             
                             TextField("Enter character name", text: $viewModel.mainCharacter)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .font(.system(size: 16, weight: .regular))
                         }
                         
                         // Image Style Selection
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 10) {
                             Text("Image Style")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
+                                .font(.system(size: 16, weight: .medium))
                             
                             Picker("Image Style", selection: $viewModel.selectedImageStyle) {
                                 ForEach(ImageStyle.allCases, id: \.self) { style in
@@ -439,10 +455,10 @@ struct ContentGenerationView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(20)
         .background(Color(.systemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
     // MARK: - Generate Button
@@ -452,21 +468,20 @@ struct ContentGenerationView: View {
                 await viewModel.generateContent()
             }
         }) {
-            HStack {
+            HStack(spacing: 8) {
                 if viewModel.isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8)
                 }
                 Text(viewModel.isLoading ? "Generating..." : "Generate Content")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 17, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.accentColor)
             .foregroundColor(.white)
-            .cornerRadius(16)
+            .cornerRadius(12)
         }
         .disabled(viewModel.isLoading || viewModel.todayGenerationCount >= 8)
         .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.6 : 1.0)
@@ -474,29 +489,33 @@ struct ContentGenerationView: View {
     
     // MARK: - Error Section
     private func errorSection(_ message: String) -> some View {
-        Text(message)
-            .font(.subheadline)
-            .foregroundColor(.red)
-            .padding(16)
-            .background(Color.red.opacity(0.1))
-            .cornerRadius(12)
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red)
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red)
+        }
+        .padding(16)
+        .background(Color.red.opacity(0.1))
+        .cornerRadius(12)
     }
     
     // MARK: - Generated Content Section
     private var generatedContentSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 20) {
             Text("Generated Content")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.system(size: 22, weight: .bold))
             
             ForEach(viewModel.blocks) { block in
                 ContentBlockView(block: block)
             }
         }
-        .padding(16)
+        .padding(20)
         .background(Color(.systemBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
 }
 
@@ -509,18 +528,17 @@ struct OCRButton: View {
     
     var body: some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.subheadline)
+                    .font(.system(size: 12, weight: .medium))
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.system(size: 12, weight: .medium))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(color.opacity(0.1))
-            .foregroundColor(color)
-            .cornerRadius(8)
+            .padding(.vertical, 8)
+            .background(Color(.systemGray6))
+            .foregroundColor(.primary)
+            .cornerRadius(6)
         }
     }
 }

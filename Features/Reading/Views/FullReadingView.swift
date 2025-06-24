@@ -8,6 +8,7 @@ struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = "" // For the TextField in the sheet
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var progressTimer: Timer?
 
     // Reading Settings
@@ -46,7 +47,7 @@ struct FullReadingView: View {
                                     baseFontSize: selectedFontSize,
                                     primaryTextColor: currentTheme.primaryTextColor,
                                     secondaryTextColor: currentTheme.secondaryTextColor,
-                                    fontStyle: currentFontStyle) // Pass font style
+                                    fontStyle: currentFontStyle)
                         .environmentObject(viewModel) // Inject viewModel
                 } else if let userContent = viewModel.userContent {
                     UserContentDetailView(userContent: userContent,
@@ -62,12 +63,34 @@ struct FullReadingView: View {
                         .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize))) // Apply font style
                 }
             }
-            .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity) // Allow VStack to expand
         }
-        .background(currentTheme.backgroundColor.edgesIgnoringSafeArea(.all)) // Apply background color to ScrollView
+        .background(
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ?
+                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
         .navigationTitle(itemTitle) // Use the passed itemTitle
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ?
+                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            ),
+            for: .navigationBar
+        )
         .sheet(isPresented: $viewModel.isShowingDialogueView) {
             DialogueSheetView(viewModel: viewModel, userDialogueInput: $userDialogueInput, theme: currentTheme, fontStyle: currentFontStyle) // Pass fontStyle
         }

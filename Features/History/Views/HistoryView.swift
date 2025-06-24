@@ -29,7 +29,9 @@ struct HistoryView: View {
                                 itemID: item.originalDocumentID,
                                 collectionName: item.originalCollectionName,
                                 itemTitle: item.title
-                            )) {
+                            )
+                                           
+                            ) {
                                 HistoryRow(item: item)
                             }
                         }
