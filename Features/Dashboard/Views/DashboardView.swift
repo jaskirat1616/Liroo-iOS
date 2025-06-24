@@ -249,8 +249,16 @@ struct DashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(viewModel.recentlyReadItems.prefix(5)) { item in
-                            RecentlyReadRow(item: item)
-                                .frame(width: 180)
+                            NavigationLink(
+                                destination: FullReadingView(
+                                    itemID: item.itemID ?? item.title,
+                                    collectionName: item.collectionName,
+                                    itemTitle: item.title
+                                )
+                            ) {
+                                RecentlyReadRow(item: item)
+                                    .frame(width: 180)
+                            }
                         }
                     }
                 }

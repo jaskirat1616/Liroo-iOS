@@ -126,13 +126,17 @@ struct DialogueSheetView: View {
                         Text("Discussing Paragraph:")
                             .font(fontStyle.getFont(size: 12, weight: .medium)) // Apply font style to caption
                             .foregroundColor(theme.secondaryTextColor) // Use theme color
-                        Text(selectedParagraph)
-                            .font(fontStyle.getFont(size: 14)) // Apply font style to paragraph
-                            .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 10))
-                            .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6)) // Adjust background for contrast
-                            .foregroundColor(theme.primaryTextColor) // Use theme color
-                            .cornerRadius(8)
-                            .lineLimit(nil) // Allow multiple lines for the paragraph
+                        
+                        MarkdownRenderer.MarkdownTextView(
+                            markdownText: selectedParagraph,
+                            baseFontSize: 14,
+                            primaryTextColor: theme.primaryTextColor,
+                            secondaryTextColor: theme.secondaryTextColor,
+                            fontStyle: fontStyle
+                        )
+                        .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 10))
+                        .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6)) // Adjust background for contrast
+                        .cornerRadius(8)
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 10)
@@ -260,13 +264,17 @@ struct MessageView: View {
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
 
                 } else {
-                    Text(message.text)
-                        .padding(10)
-                        .font(fontStyle.getFont(size: 16)) // Apply font style to AI message
-                        .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
-                        .foregroundColor(theme.primaryTextColor) // Use theme color
-                        .cornerRadius(10)
-                        .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+                    MarkdownRenderer.MarkdownTextView(
+                        markdownText: message.text,
+                        baseFontSize: 16,
+                        primaryTextColor: theme.primaryTextColor,
+                        secondaryTextColor: theme.secondaryTextColor,
+                        fontStyle: fontStyle
+                    )
+                    .padding(10)
+                    .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
+                    .cornerRadius(10)
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
                 }
                 Spacer()
             }

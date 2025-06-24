@@ -14,10 +14,14 @@ struct QuizBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let question = block.content, !question.isEmpty {
-                Text(question)
-                    .font(fontStyle.getFont(size: CGFloat(baseFontSize), weight: .semibold))
-                    .foregroundColor(primaryTextColor)
-                    .padding(.bottom, 8)
+                MarkdownRenderer.MarkdownTextView(
+                    markdownText: question,
+                    baseFontSize: baseFontSize,
+                    primaryTextColor: primaryTextColor,
+                    secondaryTextColor: secondaryTextColor,
+                    fontStyle: fontStyle
+                )
+                .padding(.bottom, 8)
             }
 
             if let options = block.options {
@@ -75,9 +79,14 @@ struct QuizBlockView: View {
                         Text("Explanation:")
                             .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.85), weight: .bold))
                             .foregroundColor(primaryTextColor)
-                        Text(explanationText)
-                            .font(fontStyle.getFont(size: CGFloat(baseFontSize * 0.85)))
-                            .foregroundColor(primaryTextColor)
+                        
+                        MarkdownRenderer.MarkdownTextView(
+                            markdownText: explanationText,
+                            baseFontSize: baseFontSize * 0.85,
+                            primaryTextColor: primaryTextColor,
+                            secondaryTextColor: secondaryTextColor,
+                            fontStyle: fontStyle
+                        )
                     }
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -42,14 +42,17 @@ struct StoryDetailView: View {
                     .font(fontStyle.getFont(size: CGFloat(baseFontSize + 4), weight: .semibold))
                     .foregroundColor(primaryTextColor)
                     .padding(.top)
-                Text(overview)
-                    .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
-                    .foregroundColor(primaryTextColor)
-                    .lineSpacing(CGFloat(baseFontSize * 0.3))
-                    .contentShape(Rectangle())
-                    .onTapGesture {
+                
+                MarkdownRenderer.MarkdownTextView(
+                    markdownText: overview,
+                    baseFontSize: baseFontSize,
+                    primaryTextColor: primaryTextColor,
+                    secondaryTextColor: secondaryTextColor,
+                    fontStyle: fontStyle,
+                    onTapGesture: {
                         viewModel.initiateDialogue(paragraph: overview, originalContent: fullStoryText)
                     }
+                )
             }
 
             if let chapters = story.chapters, !chapters.isEmpty {
@@ -60,44 +63,51 @@ struct StoryDetailView: View {
                 
                 ForEach(chapters) { chapter in
                     VStack(alignment: .leading, spacing: 8) {
+                        if let imageUrlString = chapter.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
+                            GeometryReader { geometry in
+                                AsyncImage(url: imageUrl) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    case .success(let image):
+                                        image.resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                            .clipped()
+                                            .cornerRadius(8)
+                                    case .failure:
+                                        EmptyView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    @unknown default:
+                                        EmptyView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    }
+                                }
+                            }
+                            .frame(height: 220)
+                            .padding(.vertical)
+                        } else {
+                            Color.clear.frame(height: 0)
+                        }
+                        
                         if let chapterTitle = chapter.title, !chapterTitle.isEmpty {
                             Text(chapterTitle)
                                 .font(fontStyle.getFont(size: CGFloat(baseFontSize + 2), weight: .medium))
                                 .foregroundColor(primaryTextColor)
                         }
+                        
                         if let content = chapter.content, !content.isEmpty {
-                            Text(content)
-                                .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
-                                .foregroundColor(primaryTextColor)
-                                .lineSpacing(CGFloat(baseFontSize * 0.3))
-                                .contentShape(Rectangle())
-                                .onTapGesture {
+                            MarkdownRenderer.MarkdownTextView(
+                                markdownText: content,
+                                baseFontSize: baseFontSize,
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                                fontStyle: fontStyle,
+                                onTapGesture: {
                                     viewModel.initiateDialogue(paragraph: content, originalContent: fullStoryText)
                                 }
-                        }
-                        if let imageUrlString = chapter.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
-                            AsyncImage(url: imageUrl) { phase in
-                                switch phase {
-                                case .empty:
-                                    ProgressView()
-                                        .frame(height: 200)
-                                case .success(let image):
-                                    image.resizable()
-                                         .aspectRatio(contentMode: .fit)
-                                         .cornerRadius(8)
-                                         .frame(maxHeight: 200)
-                                case .failure:
-                                    Image(systemName: "photo.artframe")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(maxHeight: 200)
-                                        .foregroundColor(secondaryTextColor)
-                                @unknown default:
-                                    EmptyView()
-                                        .frame(height: 200)
-                                }
-                            }
-                            .padding(.vertical)
+                            )
                         }
                     }
                     .padding(.vertical)

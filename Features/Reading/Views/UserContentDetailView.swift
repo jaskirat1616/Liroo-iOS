@@ -54,6 +54,34 @@ struct UserContentDetailView: View {
                 
                 ForEach(blocks) { block in
                     VStack(alignment: .leading, spacing: 8) {
+                        if let imageUrlString = block.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
+                            GeometryReader { geometry in
+                                AsyncImage(url: imageUrl) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    case .success(let image):
+                                        image.resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                            .clipped()
+                                            .cornerRadius(8)
+                                    case .failure:
+                                        EmptyView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    @unknown default:
+                                        EmptyView()
+                                            .frame(width: geometry.size.width, height: geometry.size.width)
+                                    }
+                                }
+                            }
+                            .frame(height: 220)
+                            .padding(.vertical)
+                        } else {
+                            Color.clear.frame(height: 0)
+                        }
+                        
                         if let type = block.type {
                             if type.lowercased() != "multiplechoicequestion" {
                                 Text(type.capitalized)
@@ -62,45 +90,22 @@ struct UserContentDetailView: View {
                                     .padding(.bottom, 2)
                             }
                         }
-
+                        
                         if block.type?.lowercased() != "multiplechoicequestion" && block.type?.lowercased() != "image" && block.type?.lowercased() != "quizheading", let content = block.content, !content.isEmpty {
-                            Text(content)
-                                .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
-                                .foregroundColor(primaryTextColor)
-                                .lineSpacing(CGFloat(baseFontSize * 0.3))
-                                .contentShape(Rectangle())
-                                .onTapGesture {
+                            MarkdownRenderer.MarkdownTextView(
+                                markdownText: content,
+                                baseFontSize: baseFontSize,
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                                fontStyle: fontStyle,
+                                onTapGesture: {
                                     if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                         viewModel.initiateDialogue(paragraph: content, originalContent: fullUserContentText)
                                     }
                                 }
+                            )
                         }
                         
-                        if block.type?.lowercased() != "multiplechoicequestion", let imageUrlString = block.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
-                            AsyncImage(url: imageUrl) { phase in
-                                switch phase {
-                                case .empty:
-                                    ProgressView()
-                                        .frame(height: 200)
-                                case .success(let image):
-                                    image.resizable()
-                                         .aspectRatio(contentMode: .fit)
-                                         .cornerRadius(8)
-                                         .frame(maxHeight: 200)
-                                case .failure:
-                                    Image(systemName: "photo.artframe")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(maxHeight: 200)
-                                        .foregroundColor(secondaryTextColor)
-                                @unknown default:
-                                    EmptyView()
-                                        .frame(height: 200)
-                                }
-                            }
-                            .padding(.vertical)
-                        }
-
                         if block.type?.lowercased() == "multiplechoicequestion" {
                             QuizBlockView(block: block,
                                           baseFontSize: baseFontSize,
