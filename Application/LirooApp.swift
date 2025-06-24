@@ -28,15 +28,9 @@ struct LirooApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if authViewModel.isAuthenticated {
-                    MainTabView()
-                        .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                } else {
-                    SplashScreenView()
-                }
-            }
-            .environmentObject(authViewModel)
+            SplashScreenView()
+                .environmentObject(authViewModel)
+                .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }
 }
