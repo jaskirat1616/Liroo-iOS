@@ -6,54 +6,38 @@ struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var profileViewModel = ProfileViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    dashboardHeader
-                    weeklyReadingProgressSection
-                    dashboardGridSection
-                    streaksSection
-                    recentReadingsSection
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardHeader
+                weeklyReadingProgressSection
+                dashboardGridSection
+                streaksSection
+                recentReadingsSection
             }
-            .navigationTitle("")
-            .navigationBarHidden(true)
-            .refreshable {
-                viewModel.refreshData()
-            }
-            .onAppear {
-                viewModel.refreshData()
-            }
-            .background(
-                        LinearGradient(
-                            gradient: Gradient(
-                                colors: colorScheme == .dark ?
-                                [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
-                                [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
-                            ),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .ignoresSafeArea()
-                    )
-            
+            .padding(.horizontal)
+            .padding(.top, 8)
+        }
+        .refreshable {
+            viewModel.refreshData()
+        }
+        .onAppear {
+            viewModel.refreshData()
         }
         .background(
-                    LinearGradient(
-                        gradient: Gradient(
-                            colors: colorScheme == .dark ?
-                            [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
-                            [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
-                        ),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                )
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ?
+                    [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                    [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
     }
     
     // MARK: - Dashboard Header

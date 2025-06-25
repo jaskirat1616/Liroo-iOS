@@ -20,173 +20,161 @@ struct ContentGenerationView: View {
     @State private var showCameraPermissionAlert = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background gradient matching other screens
-                LinearGradient(
-                    gradient: Gradient(
-                        colors: colorScheme == .dark ? 
-                            [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
-                            [.cyan.opacity(0.2), .white, .white]
-                    ),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Header Section
-                        headerSection
-                        
-                        // Input Section
-                        inputSection
-                        
-                        // Daily Limit Section
-                        dailyLimitSection
-                        
-                        // Configuration Section
-                        configurationSection
-                        
-                        // Generate Button
-                        generateButton
-                        
-                        // Error Message
-                        if let errorMessage = viewModel.errorMessage {
-                            errorSection(errorMessage)
-                        }
-                        
-                        // Generated Content
-                        if !viewModel.blocks.isEmpty {
-                            generatedContentSection
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-            }
-            .navigationTitle("Generate Content")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.accentColor)
-                }
-            }
-            // MARK: - OCR and File Import Sheet Modifiers
-            .photosPicker(
-                isPresented: $showingPhotosPicker,
-                selection: $selectedPhotoItem,
-                matching: .images,
-                photoLibrary: .shared()
+        ZStack {
+            // Background gradient matching other screens
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ? 
+                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .onChange(of: selectedPhotoItem) { newItem in
-                Task {
-                    // Only clear if we're actually going to process a new item
-                    if newItem != nil {
-                        ocrViewModel.setImageForProcessing(nil)
-                        if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                            if let uiImage = UIImage(data: data) {
+            .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header Section
+                    headerSection
+                    
+                    // Input Section
+                    inputSection
+                    
+                    // Daily Limit Section
+                    dailyLimitSection
+                    
+                    // Configuration Section
+                    configurationSection
+                    
+                    // Generate Button
+                    generateButton
+                    
+                    // Error Message
+                    if let errorMessage = viewModel.errorMessage {
+                        errorSection(errorMessage)
+                    }
+                    
+                    // Generated Content
+                    if !viewModel.blocks.isEmpty {
+                        generatedContentSection
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 20)
+            }
+        }
+        // MARK: - OCR and File Import Sheet Modifiers
+        .photosPicker(
+            isPresented: $showingPhotosPicker,
+            selection: $selectedPhotoItem,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: selectedPhotoItem) { newItem in
+            Task {
+                // Only clear if we're actually going to process a new item
+                if newItem != nil {
+                    ocrViewModel.setImageForProcessing(nil)
+                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                        if let uiImage = UIImage(data: data) {
+                            ocrViewModel.setImageForProcessing(uiImage)
+                            return
+                        }
+                    }
+                    ocrViewModel.errorMessage = "Could not load image from library."
+                }
+            }
+        }
+        .sheet(isPresented: $showingFileImporter) {
+            FilePickerView(
+                selectedFileURL: .constant(nil),
+                allowedFileTypes: [.image, .pdf],
+                onFilePicked: { url in
+                    // Clear previous state once at the beginning
+                    ocrViewModel.setImageForProcessing(nil)
+                    ocrViewModel.errorMessage = nil
+
+                    let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+                    defer {
+                        if shouldStopAccessing {
+                            url.stopAccessingSecurityScopedResource()
+                        }
+                    }
+
+                    do {
+                        let resources = try url.resourceValues(forKeys: [.contentTypeKey])
+                        guard let contentType = resources.contentType else {
+                            ocrViewModel.errorMessage = "Could not determine the file type."
+                            return
+                        }
+
+                        if contentType.conforms(to: .image) {
+                            let imageData = try Data(contentsOf: url)
+                            if let uiImage = UIImage(data: imageData) {
                                 ocrViewModel.setImageForProcessing(uiImage)
-                                return
-                            }
-                        }
-                        ocrViewModel.errorMessage = "Could not load image from library."
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFileImporter) {
-                FilePickerView(
-                    selectedFileURL: .constant(nil),
-                    allowedFileTypes: [.image, .pdf],
-                    onFilePicked: { url in
-                        // Clear previous state once at the beginning
-                        ocrViewModel.setImageForProcessing(nil)
-                        ocrViewModel.errorMessage = nil
-
-                        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-                        defer {
-                            if shouldStopAccessing {
-                                url.stopAccessingSecurityScopedResource()
-                            }
-                        }
-
-                        do {
-                            let resources = try url.resourceValues(forKeys: [.contentTypeKey])
-                            guard let contentType = resources.contentType else {
-                                ocrViewModel.errorMessage = "Could not determine the file type."
-                                return
-                            }
-
-                            if contentType.conforms(to: .image) {
-                                let imageData = try Data(contentsOf: url)
-                                if let uiImage = UIImage(data: imageData) {
-                                    ocrViewModel.setImageForProcessing(uiImage)
-                                } else {
-                                    ocrViewModel.errorMessage = "Failed to convert the selected file to an image. The file might be corrupted or in an unsupported format."
-                                }
-                            } else if contentType.conforms(to: .pdf) {
-                                // Use the OCRViewModel's processFile method for PDF handling
-                                ocrViewModel.processFile(at: url, fileType: contentType)
                             } else {
-                                let fileExtension = contentType.preferredFilenameExtension ?? "unknown"
-                                ocrViewModel.errorMessage = "Unsupported file type selected: \(fileExtension)."
+                                ocrViewModel.errorMessage = "Failed to convert the selected file to an image. The file might be corrupted or in an unsupported format."
                             }
-                        } catch {
-                            ocrViewModel.errorMessage = "Could not load data from the file: \(error.localizedDescription)"
-                        }
-                    }
-                )
-            }
-            // MARK: - Camera Picker Sheet Modifier
-            .sheet(isPresented: $showingCameraPicker) {
-                CameraPickerView(
-                    selectedImage: $capturedImageByCamera, // Still bind for potential preview
-                    onImagePicked: { pickedImage in
-                        print("📸 ContentGenerationView: CameraPickerView onImagePicked callback received. Image is nil? \(pickedImage == nil)")
-                        if let img = pickedImage {
-                            print("📸 ContentGenerationView: Valid image received from callback. Sending to OCR.")
-                            self.ocrViewModel.setImageForProcessing(img)
-                            // Optionally, still set capturedImageByCamera if you want it for a preview display
-                            // self.capturedImageByCamera = img 
+                        } else if contentType.conforms(to: .pdf) {
+                            // Use the OCRViewModel's processFile method for PDF handling
+                            ocrViewModel.processFile(at: url, fileType: contentType)
                         } else {
-                            print("📸 ContentGenerationView: Image from callback is nil (picker cancelled or error).")
-                            // Optionally, clear any existing preview if an image was picked then cancelled
-                            // self.capturedImageByCamera = nil
-                            // We might also want to clear OCR error/state if user cancels
-                            // self.ocrViewModel.setImageForProcessing(nil) // This would clear recognized text too
+                            let fileExtension = contentType.preferredFilenameExtension ?? "unknown"
+                            ocrViewModel.errorMessage = "Unsupported file type selected: \(fileExtension)."
                         }
-                    }
-                )
-            }
-            // Alert for camera permission
-            .alert("Camera Access Denied", isPresented: $showCameraPermissionAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString), UIApplication.shared.canOpenURL(url) {
-                        UIApplication.shared.open(url)
+                    } catch {
+                        ocrViewModel.errorMessage = "Could not load data from the file: \(error.localizedDescription)"
                     }
                 }
-            } message: {
-                Text("To use the camera for OCR, please grant camera access in Settings.")
-            }
-            .onChange(of: ocrViewModel.recognizedText) { newText in
-                print("🔄 ContentGenerationView: ocrViewModel.recognizedText changed. New text: \"\(newText)\". Error message: \"\(ocrViewModel.errorMessage ?? "None")\"")
-                if !newText.isEmpty && ocrViewModel.errorMessage == nil {
-                    print("🔄 ContentGenerationView: Updating viewModel.inputText with recognized text.")
-                    viewModel.inputText = newText
-                } else if newText.isEmpty && ocrViewModel.errorMessage == nil {
-                     print("🔄 ContentGenerationView: Recognized text is empty, but no OCR error. Not updating input text.")
-                } else if ocrViewModel.errorMessage != nil {
-                     print("🔄 ContentGenerationView: OCR error exists. Not updating input text from recognizedText.")
+            )
+        }
+        // MARK: - Camera Picker Sheet Modifier
+        .sheet(isPresented: $showingCameraPicker) {
+            CameraPickerView(
+                selectedImage: $capturedImageByCamera, // Still bind for potential preview
+                onImagePicked: { pickedImage in
+                    print("📸 ContentGenerationView: CameraPickerView onImagePicked callback received. Image is nil? \(pickedImage == nil)")
+                    if let img = pickedImage {
+                        print("📸 ContentGenerationView: Valid image received from callback. Sending to OCR.")
+                        self.ocrViewModel.setImageForProcessing(img)
+                        // Optionally, still set capturedImageByCamera if you want it for a preview display
+                        // self.capturedImageByCamera = img 
+                    } else {
+                        print("📸 ContentGenerationView: Image from callback is nil (picker cancelled or error).")
+                        // Optionally, clear any existing preview if an image was picked then cancelled
+                        // self.capturedImageByCamera = nil
+                        // We might also want to clear OCR error/state if user cancels
+                        // self.ocrViewModel.setImageForProcessing(nil) // This would clear recognized text too
+                    }
+                }
+            )
+        }
+        // Alert for camera permission
+        .alert("Camera Access Denied", isPresented: $showCameraPermissionAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString), UIApplication.shared.canOpenURL(url) {
+                    UIApplication.shared.open(url)
                 }
             }
-            .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
-                if let story = viewModel.currentStory {
-                    StoryView(story: story)
-                }
+        } message: {
+            Text("To use the camera for OCR, please grant camera access in Settings.")
+        }
+        .onChange(of: ocrViewModel.recognizedText) { newText in
+            print("🔄 ContentGenerationView: ocrViewModel.recognizedText changed. New text: \"\(newText)\". Error message: \"\(ocrViewModel.errorMessage ?? "None")\"")
+            if !newText.isEmpty && ocrViewModel.errorMessage == nil {
+                print("🔄 ContentGenerationView: Updating viewModel.inputText with recognized text.")
+                viewModel.inputText = newText
+            } else if newText.isEmpty && ocrViewModel.errorMessage == nil {
+                 print("🔄 ContentGenerationView: Recognized text is empty, but no OCR error. Not updating input text.")
+            } else if ocrViewModel.errorMessage != nil {
+                 print("🔄 ContentGenerationView: OCR error exists. Not updating input text from recognizedText.")
+            }
+        }
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
+            if let story = viewModel.currentStory {
+                StoryView(story: story)
             }
         }
         .task {

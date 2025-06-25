@@ -29,17 +29,15 @@ struct HistoryView: View {
                                 itemID: item.originalDocumentID,
                                 collectionName: item.originalCollectionName,
                                 itemTitle: item.title
-                            )
-                                           
-                            ) {
+                            )) {
                                 HistoryRow(item: item)
                             }
                         }
                     }
+                    .listStyle(PlainListStyle())
+                    .scrollContentBackground(.hidden)
                 }
-                
             }
-            
             .navigationTitle("History")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -52,10 +50,7 @@ struct HistoryView: View {
                 }
             }
         }
-        .onAppear {
-            // Optionally refresh if view appears and items are empty or stale
-            // For now, data is fetched on init.
-        }
+        .navigationViewStyle(.stack)
     }
 
     // Placeholder for the row view

@@ -1,62 +1,48 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab: Tab = .dashboard
+    @StateObject private var coordinator = AppCoordinator()
     @EnvironmentObject private var authViewModel: AuthViewModel
 
-    // You might access the context here if MainTabView itself needs to perform Core Data operations
-    // @Environment(\.managedObjectContext) private var viewContext 
-    // However, for now, DashboardScreen gets its data via DashboardViewModel which will use a service.
-
-    enum Tab: Hashable { // Added Hashable for potential future use with .tag
-        case dashboard
-        case reading
-        case profile
-        case generation
-        case settings
-
-    }
-
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardView() // Assuming DashboardView is the correct name of your dashboard screen
+        TabView(selection: $coordinator.currentTab) {
+            DashboardView()
                 .tabItem {
                     Label("Dashboard", systemImage: "square.grid.2x2.fill")
                 }
-                .tag(Tab.dashboard)
-
+                .tag(AppCoordinator.Tab.dashboard)
 
             ContentGenerationView()
                 .tabItem {
                     Label("Generate", systemImage: "wand.and.stars")
                 }
-                .tag(Tab.generation)
+                .tag(AppCoordinator.Tab.generation)
             
             HistoryView()
                 .tabItem {
                     Label("History", systemImage: "list.bullet.rectangle.portrait")
                 }
-                  .tag(Tab.reading)
+                .tag(AppCoordinator.Tab.history)
             
-            ProfileView() // Your actual or new placeholder ProfileView
+            ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.fill")
                 }
-                .tag(Tab.profile)
+                .tag(AppCoordinator.Tab.profile)
 
-             SettingsView() // Add SettingsView as a tab
+            SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
                 }
-                 .tag(Tab.settings)
+                .tag(AppCoordinator.Tab.settings)
         }
+        .environmentObject(coordinator)
     }
 }
 
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {
         MainTabView()
-            // For previews that might involve Core Data dependent views within MainTabView
             .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
     }
 }
