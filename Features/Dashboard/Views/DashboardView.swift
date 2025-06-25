@@ -28,7 +28,32 @@ struct DashboardView: View {
             .onAppear {
                 viewModel.refreshData()
             }
+            .background(
+                        LinearGradient(
+                            gradient: Gradient(
+                                colors: colorScheme == .dark ?
+                                [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                                [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                            ),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .ignoresSafeArea()
+                    )
+            
         }
+        .background(
+                    LinearGradient(
+                        gradient: Gradient(
+                            colors: colorScheme == .dark ?
+                            [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                            [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                        ),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .ignoresSafeArea()
+                )
     }
     
     // MARK: - Dashboard Header

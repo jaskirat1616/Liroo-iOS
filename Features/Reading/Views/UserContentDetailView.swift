@@ -53,10 +53,7 @@ struct UserContentDetailView: View {
             Text(userContent.topic ?? "Generated Content")
                 .font(.system(size: 28, weight: .bold, design: .default))
                 .foregroundColor(primaryTextColor)
-            
-            Text("AI-Generated Content")
-                .font(.system(size: 16, weight: .regular))
-                .foregroundColor(secondaryTextColor)
+
             
             if let level = userContent.level {
                 HStack {
@@ -72,7 +69,7 @@ struct UserContentDetailView: View {
                 }
             }
         }
-        .padding(8)
+        .padding(12)
         .background(Color(.systemBackground).opacity(0.8))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -149,7 +146,7 @@ struct UserContentBlockView: View {
                     case .success(let image):
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
+                            .aspectRatio(contentMode: .fill)
                             .frame(maxHeight: 300)
                             .cornerRadius(12)
                     case .failure:

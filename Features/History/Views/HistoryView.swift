@@ -37,7 +37,9 @@ struct HistoryView: View {
                         }
                     }
                 }
+                
             }
+            
             .navigationTitle("History")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

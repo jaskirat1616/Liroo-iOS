@@ -69,8 +69,8 @@ struct FullReadingView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ?
-                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
-                        [.cyan.opacity(0.2), .white, .white]
+                    [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                    [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
                 endPoint: .bottom
@@ -83,8 +83,8 @@ struct FullReadingView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ?
-                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
-                        [.cyan.opacity(0.2), .white, .white]
+                        [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
                 endPoint: .bottom
