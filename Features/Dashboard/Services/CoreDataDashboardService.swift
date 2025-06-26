@@ -1,10 +1,13 @@
 import Foundation
 import CoreData
 import Combine
+import FirebaseFirestore
+import FirebaseAuth
 
 class CoreDataDashboardService: DashboardDataServiceProtocol {
     private let context: NSManagedObjectContext
     private let calendar = Calendar.current
+    private var cancellables = Set<AnyCancellable>()
 
     init(context: NSManagedObjectContext) {
         self.context = context
@@ -117,29 +120,107 @@ class CoreDataDashboardService: DashboardDataServiceProtocol {
                 promise(.failure(DataServiceError.unknown))
                 return
             }
-            self.context.perform {
-                do {
-                    let request: NSFetchRequest<Book> = Book.fetchRequest()
-                    // MODIFIED PREDICATE: Ensure only non-archived books are fetched
-                    request.predicate = NSPredicate(format: "lastReadDate != NIL AND isArchived == NO")
-                    request.sortDescriptors = [NSSortDescriptor(keyPath: \Book.lastReadDate, ascending: false)]
-                    request.fetchLimit = limit
-                    let fetchedBooks = try self.context.fetch(request)
-                    let recentItems = fetchedBooks.map { bookEntity -> RecentlyReadItem in
-                        RecentlyReadItem(
-                            itemID: bookEntity.firestoreID,
-                            title: bookEntity.title ?? "Unknown Title",
-                            author: bookEntity.author,
-                            progress: Double(bookEntity.progress),
-                            lastReadDate: bookEntity.lastReadDate ?? Date(),
-                            collectionName: bookEntity.collectionName ?? "stories"
-                        )
+            
+            // Fetch books from Core Data
+            let booksPublisher = Future<[RecentlyReadItem], Error> { [weak self] booksPromise in
+                guard let self = self else {
+                    booksPromise(.failure(DataServiceError.unknown))
+                    return
+                }
+                self.context.perform {
+                    do {
+                        let request: NSFetchRequest<Book> = Book.fetchRequest()
+                        request.predicate = NSPredicate(format: "lastReadDate != NIL AND isArchived == NO")
+                        request.sortDescriptors = [NSSortDescriptor(keyPath: \Book.lastReadDate, ascending: false)]
+                        request.fetchLimit = limit
+                        let fetchedBooks = try self.context.fetch(request)
+                        let recentItems = fetchedBooks.map { bookEntity -> RecentlyReadItem in
+                            RecentlyReadItem(
+                                itemID: bookEntity.firestoreID,
+                                title: bookEntity.title ?? "Unknown Title",
+                                author: bookEntity.author,
+                                progress: Double(bookEntity.progress),
+                                lastReadDate: bookEntity.lastReadDate ?? Date(),
+                                collectionName: bookEntity.collectionName ?? "stories",
+                                type: .story,
+                                sectionCount: nil,
+                                duration: nil,
+                                level: nil
+                            )
+                        }
+                        booksPromise(.success(recentItems))
+                    } catch {
+                        booksPromise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch recent books: \(error.localizedDescription)")))
                     }
-                    promise(.success(recentItems))
-                } catch {
-                    promise(.failure(DataServiceError.coreDataError(reason: "Failed to fetch recent books: \(error.localizedDescription)")))
                 }
             }
+            
+            // Fetch lectures from Firestore
+            let lecturesPublisher = Future<[RecentlyReadItem], Error> { lecturesPromise in
+                guard let userId = Auth.auth().currentUser?.uid else {
+                    lecturesPromise(.success([]))
+                    return
+                }
+                
+                let db = Firestore.firestore()
+                db.collection("lectures")
+                    .whereField("userId", isEqualTo: userId)
+                    .order(by: "createdAt", descending: true)
+                    .limit(to: limit)
+                    .getDocuments { snapshot, error in
+                        if let error = error {
+                            lecturesPromise(.failure(DataServiceError.firestoreError(reason: error.localizedDescription)))
+                            return
+                        }
+                        
+                        do {
+                            let lectures = try snapshot?.documents.compactMap { document in
+                                try document.data(as: FirebaseLecture.self)
+                            } ?? []
+                            
+                            let lectureItems = lectures.map { lecture -> RecentlyReadItem in
+                                let sections = lecture.sections ?? []
+                                let estimatedDuration = TimeInterval(sections.count * 120) // 2 minutes per section
+                                
+                                print("[Dashboard] Creating lecture item - ID: \(lecture.id ?? "nil"), Title: \(lecture.title)")
+                                
+                                return RecentlyReadItem(
+                                    itemID: lecture.id,
+                                    title: lecture.title,
+                                    author: nil,
+                                    progress: 1.0, // Lectures are considered "completed" when created
+                                    lastReadDate: lecture.createdAt?.dateValue() ?? Date(),
+                                    collectionName: "lectures",
+                                    type: .lecture,
+                                    sectionCount: sections.count,
+                                    duration: estimatedDuration,
+                                    level: lecture.level
+                                )
+                            }
+                            lecturesPromise(.success(lectureItems))
+                        } catch {
+                            lecturesPromise(.failure(DataServiceError.firestoreError(reason: "Failed to decode lectures: \(error.localizedDescription)")))
+                        }
+                    }
+            }
+            
+            // Combine books and lectures, sort by date, and limit
+            Publishers.CombineLatest(booksPublisher, lecturesPublisher)
+                .map { books, lectures in
+                    let combined = books + lectures
+                    return combined.sorted { $0.lastReadDate > $1.lastReadDate }.prefix(limit).map { $0 }
+                }
+                .sink(
+                    receiveCompletion: { completion in
+                        if case .failure(let error) = completion {
+                            promise(.failure(error))
+                        }
+                    },
+                    receiveValue: { items in
+                        promise(.success(Array(items)))
+                    }
+                )
+                .store(in: &self.cancellables)
         }
         .eraseToAnyPublisher()
     }

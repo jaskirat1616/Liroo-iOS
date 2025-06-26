@@ -35,8 +35,30 @@ class LocalDashboardDataService: DashboardDataServiceProtocol {
     }()
     
     private var localRecentItems: [RecentlyReadItem] = [
-        RecentlyReadItem(itemID: "local1", title: "Local Adventures", author: "Dev User", progress: 0.6, lastReadDate: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, collectionName: "stories"),
-        RecentlyReadItem(itemID: "local2", title: "Coding for Fun", author: "Test User", progress: 0.25, lastReadDate: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, collectionName: "stories")
+        RecentlyReadItem(
+            itemID: "local1", 
+            title: "Local Adventures", 
+            author: "Dev User", 
+            progress: 0.6, 
+            lastReadDate: Calendar.current.date(byAdding: .day, value: -1, to: Date())!, 
+            collectionName: "stories",
+            type: .story,
+            sectionCount: nil,
+            duration: nil,
+            level: nil
+        ),
+        RecentlyReadItem(
+            itemID: "local2", 
+            title: "Coding for Fun", 
+            author: "Test User", 
+            progress: 0.25, 
+            lastReadDate: Calendar.current.date(byAdding: .day, value: -3, to: Date())!, 
+            collectionName: "stories",
+            type: .story,
+            sectionCount: nil,
+            duration: nil,
+            level: nil
+        )
     ]
 
     func fetchOverallStats() -> AnyPublisher<ReadingStats, Error> {

@@ -11,11 +11,6 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
 
 struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
-    @State private var isPresentingLecture = false
-    @State private var isLoadingLecture = false
-    @State private var selectedLecture: Lecture? = nil
-    @State private var selectedLectureAudioFiles: [AudioFile] = []
-    @State private var lectureLoadError: String? = nil
     @State private var selectedFilter: HistoryFilter = .all
 
     var filteredItems: [UserHistoryEntry] {
@@ -68,9 +63,10 @@ struct HistoryView: View {
                         List {
                             ForEach(filteredItems) { item in
                                 if item.type == .lecture {
-                                    Button {
-                                        loadLectureAndPresent(id: item.originalDocumentID)
-                                    } label: {
+                                    NavigationLink(destination: LectureDestinationView(
+                                        lectureID: item.originalDocumentID,
+                                        lectureTitle: item.title
+                                    )) {
                                         LectureHistoryRow(item: item)
                                     }
                                 } else {
@@ -99,85 +95,6 @@ struct HistoryView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(viewModel.isLoading)
-            }
-        }
-        .sheet(isPresented: $isPresentingLecture) {
-            if let lecture = selectedLecture {
-                LectureView(lecture: lecture, audioFiles: selectedLectureAudioFiles)
-            } else if isLoadingLecture {
-                VStack(spacing: 20) {
-                    ProgressView()
-                    Text("Loading lecture...")
-                }
-                .padding()
-            } else if let error = lectureLoadError {
-                VStack(spacing: 20) {
-                    Text("Failed to load lecture")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Button("Dismiss") { isPresentingLecture = false }
-                }
-                .padding()
-            }
-        }
-    }
-
-    private func loadLectureAndPresent(id: String) {
-        isLoadingLecture = true
-        isPresentingLecture = true
-        selectedLecture = nil
-        selectedLectureAudioFiles = []
-        lectureLoadError = nil
-
-        let db = Firestore.firestore()
-        db.collection("lectures").document(id).getDocument { snapshot, error in
-            DispatchQueue.main.async {
-                isLoadingLecture = false
-                if let error = error {
-                    lectureLoadError = error.localizedDescription
-                    return
-                }
-                do {
-                    guard let firebaseLecture = try snapshot?.data(as: FirebaseLecture.self) else {
-                        lectureLoadError = "Lecture not found or could not decode."
-                        return
-                    }
-                    // Convert to Lecture and AudioFile models
-                    let sections = (firebaseLecture.sections ?? []).enumerated().map { index, section in
-                        LectureSection(
-                            id: UUID(uuidString: section.sectionId) ?? UUID(),
-                            title: section.title ?? "Section \(index + 1)",
-                            script: section.script ?? "",
-                            imagePrompt: section.imagePrompt ?? "",
-                            imageUrl: section.imageUrl,
-                            order: section.order ?? (index + 1)
-                        )
-                    }
-                    let lecture = Lecture(
-                        id: UUID(uuidString: firebaseLecture.id ?? "") ?? UUID(),
-                        title: firebaseLecture.title,
-                        sections: sections,
-                        level: ReadingLevel(rawValue: firebaseLecture.level) ?? .standard,
-                        imageStyle: firebaseLecture.imageStyle
-                    )
-                    let audioFiles = (firebaseLecture.audioFiles ?? []).map { audio in
-                        AudioFile(
-                            id: UUID(),
-                            type: AudioFileType(rawValue: audio.type ?? "section_script") ?? .sectionScript,
-                            text: audio.text ?? "",
-                            url: audio.url ?? "",
-                            filename: audio.filename ?? "",
-                            section: audio.section
-                        )
-                    }
-                    selectedLecture = lecture
-                    selectedLectureAudioFiles = audioFiles
-                } catch {
-                    lectureLoadError = error.localizedDescription
-                }
             }
         }
     }
@@ -248,6 +165,117 @@ struct HistoryView: View {
                 return .customPrimary
             case .lecture:
                 return .purple
+            }
+        }
+    }
+}
+
+// MARK: - Lecture Destination View
+struct LectureDestinationView: View {
+    let lectureID: String
+    let lectureTitle: String
+    @State private var lecture: Lecture? = nil
+    @State private var audioFiles: [AudioFile] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack(spacing: 20) {
+                    ProgressView()
+                    Text("Loading lecture...")
+                        .foregroundColor(.secondary)
+                }
+            } else if let errorMessage = errorMessage {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.red)
+                    Text("Failed to load lecture")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else if let lecture = lecture {
+                LectureView(lecture: lecture, audioFiles: audioFiles)
+            }
+        }
+        .navigationTitle("Lecture")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            loadLecture()
+        }
+    }
+    
+    private func loadLecture() {
+        isLoading = true
+        errorMessage = nil
+        
+        print("[LectureDestinationView] Loading lecture with ID: \(lectureID)")
+        
+        let db = Firestore.firestore()
+        db.collection("lectures").document(lectureID).getDocument { snapshot, error in
+            DispatchQueue.main.async {
+                isLoading = false
+                if let error = error {
+                    print("[LectureDestinationView] Error loading lecture: \(error.localizedDescription)")
+                    errorMessage = error.localizedDescription
+                    return
+                }
+                
+                print("[LectureDestinationView] Document exists: \(snapshot?.exists ?? false)")
+                
+                do {
+                    guard let firebaseLecture = try snapshot?.data(as: FirebaseLecture.self) else {
+                        print("[LectureDestinationView] Failed to decode lecture data")
+                        errorMessage = "Lecture not found or could not decode."
+                        return
+                    }
+                    
+                    print("[LectureDestinationView] Successfully decoded lecture - ID: \(firebaseLecture.id ?? "nil"), Title: \(firebaseLecture.title)")
+                    print("[LectureDestinationView] Audio files count: \(firebaseLecture.audioFiles?.count ?? 0)")
+                    
+                    // Convert to Lecture and AudioFile models
+                    let sections = (firebaseLecture.sections ?? []).enumerated().map { index, section in
+                        LectureSection(
+                            id: UUID(uuidString: section.sectionId) ?? UUID(),
+                            title: section.title ?? "Section \(index + 1)",
+                            script: section.script ?? "",
+                            imagePrompt: section.imagePrompt ?? "",
+                            imageUrl: section.imageUrl,
+                            order: section.order ?? (index + 1)
+                        )
+                    }
+                    let lecture = Lecture(
+                        id: UUID(uuidString: firebaseLecture.id ?? "") ?? UUID(),
+                        title: firebaseLecture.title,
+                        sections: sections,
+                        level: ReadingLevel(rawValue: firebaseLecture.level) ?? .standard,
+                        imageStyle: firebaseLecture.imageStyle
+                    )
+                    let audioFiles = (firebaseLecture.audioFiles ?? []).map { audio in
+                        AudioFile(
+                            id: UUID(),
+                            type: AudioFileType(rawValue: audio.type ?? "section_script") ?? .sectionScript,
+                            text: audio.text ?? "",
+                            url: audio.url ?? "",
+                            filename: audio.filename ?? "",
+                            section: audio.section
+                        )
+                    }
+                    self.lecture = lecture
+                    self.audioFiles = audioFiles
+                    
+                    print("[LectureDestinationView] Lecture loaded successfully - Sections: \(sections.count), AudioFiles: \(audioFiles.count)")
+                } catch {
+                    print("[LectureDestinationView] Decoding error: \(error.localizedDescription)")
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }

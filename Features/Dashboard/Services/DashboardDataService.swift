@@ -90,16 +90,40 @@ class MockDashboardDataService: DashboardDataServiceProtocol {
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                 var items: [RecentlyReadItem] = []
                 for i in 0..<limit {
-                    items.append(
-                        RecentlyReadItem(
-                            itemID: "mock\(i+1)",
-                            title: "Mock Book \(i+1)",
-                            author: "Author \(Character(UnicodeScalar("A".unicodeScalars.first!.value + UInt32(i))!))",
-                            progress: Double.random(in: 0.1...0.95),
-                            lastReadDate: Calendar.current.date(byAdding: .day, value: -Int.random(in: 1...20), to: Date())!,
-                            collectionName: "stories"
+                    // Create a mix of books and lectures
+                    let isLecture = i % 3 == 0 // Every 3rd item is a lecture
+                    
+                    if isLecture {
+                        items.append(
+                            RecentlyReadItem(
+                                itemID: "lecture\(i+1)",
+                                title: "Mock Lecture \(i+1)",
+                                author: nil,
+                                progress: 1.0,
+                                lastReadDate: Calendar.current.date(byAdding: .day, value: -Int.random(in: 1...20), to: Date())!,
+                                collectionName: "lectures",
+                                type: .lecture,
+                                sectionCount: Int.random(in: 3...8),
+                                duration: TimeInterval(Int.random(in: 300...900)), // 5-15 minutes
+                                level: ["Beginner", "Intermediate", "Advanced"].randomElement()
+                            )
                         )
-                    )
+                    } else {
+                        items.append(
+                            RecentlyReadItem(
+                                itemID: "book\(i+1)",
+                                title: "Mock Book \(i+1)",
+                                author: "Author \(Character(UnicodeScalar("A".unicodeScalars.first!.value + UInt32(i))!))",
+                                progress: Double.random(in: 0.1...0.95),
+                                lastReadDate: Calendar.current.date(byAdding: .day, value: -Int.random(in: 1...20), to: Date())!,
+                                collectionName: "stories",
+                                type: .story,
+                                sectionCount: nil,
+                                duration: nil,
+                                level: nil
+                            )
+                        )
+                    }
                 }
                 promise(.success(Array(items.prefix(limit).shuffled())))
             }
@@ -362,6 +386,7 @@ extension Bool {
 enum DataServiceError: Error, LocalizedError {
     case networkError(reason: String)
     case coreDataError(reason: String)
+    case firestoreError(reason: String)
     case unknown
 
     var errorDescription: String? {
@@ -370,6 +395,8 @@ enum DataServiceError: Error, LocalizedError {
             return "Network Error: \(reason)"
         case .coreDataError(let reason):
             return "Database Error: \(reason)"
+        case .firestoreError(let reason):
+            return "Firestore Error: \(reason)"
         case .unknown:
             return "An unknown error occurred."
         }

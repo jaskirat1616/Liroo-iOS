@@ -41,6 +41,15 @@ class DashboardViewModel: ObservableObject {
     var totalBooksReadDisplay: String {
         "\(overallStats?.totalBooksRead ?? 0) books"
     }
+    var totalLecturesDisplay: String {
+        let lectureCount = recentlyReadItems.filter { $0.type == .lecture }.count
+        return "\(lectureCount) lectures"
+    }
+    var totalContentDisplay: String {
+        let bookCount = overallStats?.totalBooksRead ?? 0
+        let lectureCount = recentlyReadItems.filter { $0.type == .lecture }.count
+        return "\(bookCount + lectureCount) items"
+    }
     var totalSessionsDisplay: String {
         "\(overallStats?.totalSessions ?? 0) sessions"
     }

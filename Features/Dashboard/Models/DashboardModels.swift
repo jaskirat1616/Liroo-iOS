@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // Enum for time range selection in Dashboard charts
 // THIS IS THE ONLY PLACE THIS ENUM SHOULD BE DEFINED
@@ -273,13 +274,47 @@ struct RecentlyReadItem: Identifiable, Hashable {
     let author: String?
     let progress: Double // 0.0 to 1.0
     let lastReadDate: Date
-    let collectionName: String // NEW: e.g., 'stories' or 'userContent'
+    let collectionName: String // e.g., 'stories', 'userContent', 'lectures'
+    let type: RecentlyReadItemType // NEW: to distinguish between different content types
+    let sectionCount: Int? // NEW: for lectures - number of sections
+    let duration: TimeInterval? // NEW: for lectures - estimated duration
+    let level: String? // NEW: for lectures - reading level
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
     static func == (lhs: RecentlyReadItem, rhs: RecentlyReadItem) -> Bool {
         lhs.id == rhs.id
+    }
+}
+
+// NEW: Enum to distinguish between different content types
+enum RecentlyReadItemType: String, CaseIterable {
+    case book = "Book"
+    case story = "Story"
+    case userContent = "UserContent"
+    case lecture = "Lecture"
+    
+    var iconName: String {
+        switch self {
+        case .book, .story:
+            return "book.closed.fill"
+        case .userContent:
+            return "doc.text.fill"
+        case .lecture:
+            return "mic.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .book, .story:
+            return .orange
+        case .userContent:
+            return .customPrimary
+        case .lecture:
+            return .purple
+        }
     }
 }
 

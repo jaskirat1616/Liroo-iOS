@@ -139,8 +139,8 @@ struct DashboardView: View {
         let metrics: [(title: String, value: String, icon: String, color: Color)] = [
             ("Current Streak", "\(viewModel.overallStats?.currentStreakInDays ?? 0)", "flame.fill", .orange),
             ("Active Days", "\(activeDaysThisMonth())", "calendar", .customPrimary),
-            ("Books Read", viewModel.totalBooksReadDisplay, "books.vertical.fill", .indigo),
-            ("Total Time", viewModel.totalReadingTimeDisplay, "timer", .green)
+            ("Lectures", viewModel.totalLecturesDisplay, "mic.fill", .purple),
+            ("Total Content", viewModel.totalContentDisplay, "books.vertical.fill", .indigo)
         ]
         let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
         return LazyVGrid(columns: columns, spacing: 8) {
@@ -265,15 +265,27 @@ struct DashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(viewModel.recentlyReadItems.prefix(5)) { item in
-                            NavigationLink(
-                                destination: FullReadingView(
-                                    itemID: item.itemID ?? item.title,
-                                    collectionName: item.collectionName,
-                                    itemTitle: item.title
-                                )
-                            ) {
-                                RecentlyReadRow(item: item)
-                                    .frame(width: 180)
+                            if item.type == .lecture {
+                                NavigationLink(
+                                    destination: LectureDestinationView(
+                                        lectureID: item.itemID ?? "",
+                                        lectureTitle: item.title
+                                    )
+                                ) {
+                                    RecentlyReadRow(item: item)
+                                        .frame(width: 180)
+                                }
+                            } else {
+                                NavigationLink(
+                                    destination: FullReadingView(
+                                        itemID: item.itemID ?? item.title,
+                                        collectionName: item.collectionName,
+                                        itemTitle: item.title
+                                    )
+                                ) {
+                                    RecentlyReadRow(item: item)
+                                        .frame(width: 180)
+                                }
                             }
                         }
                     }
@@ -281,6 +293,45 @@ struct DashboardView: View {
             }
         }
         .padding(.bottom, 8)
+    }
+    
+    // MARK: - Recently Read Section (limit 3)
+    private var recentlyReadSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Recently Read")
+                .font(.title2)
+                .fontWeight(.semibold)
+            if viewModel.recentlyReadItems.prefix(3).isEmpty {
+                Text("No recent reading activity")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ForEach(viewModel.recentlyReadItems.prefix(3)) { item in
+                    if item.type == .lecture {
+                        NavigationLink(
+                            destination: LectureDestinationView(
+                                lectureID: item.itemID ?? "",
+                                lectureTitle: item.title
+                            )
+                        ) {
+                            RecentlyReadRow(item: item)
+                        }
+                    } else {
+                        NavigationLink(
+                            destination: FullReadingView(
+                                itemID: item.itemID ?? item.title,
+                                collectionName: item.collectionName,
+                                itemTitle: item.title
+                            )
+                        ) {
+                            RecentlyReadRow(item: item)
+                        }
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Loading View
@@ -820,34 +871,6 @@ struct DashboardView: View {
         return days.count
     }
     
-    // MARK: - Recently Read Section (limit 3)
-    private var recentlyReadSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Recently Read")
-                .font(.title2)
-                .fontWeight(.semibold)
-            if viewModel.recentlyReadItems.prefix(3).isEmpty {
-                Text("No recent reading activity")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
-            } else {
-                ForEach(viewModel.recentlyReadItems.prefix(3)) { item in
-                    NavigationLink(
-                        destination: FullReadingView(
-                            itemID: item.itemID ?? item.title,
-                            collectionName: item.collectionName,
-                            itemTitle: item.title
-                        )
-                    ) {
-                        RecentlyReadRow(item: item)
-                    }
-                }
-            }
-        }
-    }
-    
     // MARK: - Daily Reading Duration Chart Only
     private var dailyReadingDurationSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -938,40 +961,96 @@ struct RecentlyReadRow: View {
     let item: RecentlyReadItem
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+            // Title and type icon
+            HStack(spacing: 6) {
+                Image(systemName: item.type.iconName)
+                    .foregroundColor(item.type.color)
+                    .font(.caption)
+                
                 Text(item.title)
-                    .font(.headline)
-                    .lineLimit(1)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                 
-                if let author = item.author {
-                    Text(author)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                
-                Text(item.lastReadDate, style: .relative)
+                Spacer()
+            }
+            
+            // Author (if available)
+            if let author = item.author {
+                Text(author)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
             
-            Spacer()
+            // Lecture-specific info (compact layout)
+            if item.type == .lecture {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        if let sectionCount = item.sectionCount {
+                            Text("\(sectionCount) sections")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        if let duration = item.duration {
+                            Text(formatTimeInterval(duration))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    if let level = item.level {
+                        Text(level)
+                            .font(.caption2)
+                            .foregroundColor(.purple)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.1))
+                            .cornerRadius(3)
+                    }
+                }
+            }
             
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("\(Int(item.progress * 100))%")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.green)
+            // Bottom row: date and status
+            HStack {
+                Text(item.lastReadDate, style: .relative)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 
-                ProgressView(value: item.progress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                    .frame(width: 60)
+                Spacer()
+                
+                if item.type == .lecture {
+                    // For lectures, show completion status
+                    HStack(spacing: 2) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.caption2)
+                        Text("Complete")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                            .fontWeight(.medium)
+                    }
+                } else {
+                    // For books/stories, show progress
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(Int(item.progress * 100))%")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
+                        
+                        ProgressView(value: item.progress)
+                            .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                            .frame(width: 40, height: 2)
+                    }
+                }
             }
         }
-        .padding()
+        .padding(8)
         .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .cornerRadius(10)
     }
 }
 
