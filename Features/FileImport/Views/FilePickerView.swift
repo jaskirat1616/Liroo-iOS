@@ -145,7 +145,7 @@ struct FilePickerView_Previews: PreviewProvider {
     static var previews: some View {
         // Basic preview of the picker itself is tricky without a presentation context.
         // Previewing the example usage is more illustrative.
-        NavigationView { // Wrap in NavigationView for title
+        NavigationStack {
              ImportAndOCRView()
         }
     }

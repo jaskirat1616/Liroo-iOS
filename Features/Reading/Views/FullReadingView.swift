@@ -22,6 +22,11 @@ struct FullReadingView: View {
     private var currentFontStyle: ReadingFontStyle { // Added
         ReadingFontStyle(rawValue: selectedFontStyleName) ?? .systemDefault
     }
+    
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
 
     init(itemID: String, collectionName: String, itemTitle: String) {
         _viewModel = StateObject(wrappedValue: FullReadingViewModel(itemID: itemID, collectionName: collectionName))
@@ -64,6 +69,7 @@ struct FullReadingView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity) // Allow VStack to expand
+            .padding(.horizontal, isIPad ? 20 : 0) // Add iPad-specific horizontal padding
         }
         .background(
             LinearGradient(
@@ -141,7 +147,7 @@ struct DialogueSheetView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        NavigationView { // Added NavigationView for title and close button
+        NavigationStack {
             VStack(spacing: 0) { // Changed to spacing 0 for tighter layout if needed
                 // Display the selected paragraph
                 if let selectedParagraph = viewModel.selectedParagraphForDialogue {
@@ -267,7 +273,7 @@ struct MessageView: View {
                 Text(message.text)
                     .padding(10)
                     .font(fontStyle.getFont(size: 16)) // Apply font style to user message
-                    .background(Color.blue) // User messages might keep a distinct color or adapt
+                    .background(Color.customPrimary) // User messages with custom teal color
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)

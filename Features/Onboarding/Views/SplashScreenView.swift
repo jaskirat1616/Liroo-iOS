@@ -77,7 +77,7 @@ struct SplashScreenView: View {
         }
         .fullScreenCover(isPresented: $isActive) {
             if authViewModel.isAuthenticated {
-                MainTabView()
+                AppView()
             } else {
                 WelcomeAuthEntryView()
             }

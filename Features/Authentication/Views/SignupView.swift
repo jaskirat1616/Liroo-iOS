@@ -16,7 +16,7 @@ struct SignupView: View {
     @State private var errorMessage = ""
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     gradient: Gradient(
@@ -150,7 +150,7 @@ struct SignupView: View {
                                 dismiss()
                             }
                             .fontWeight(.semibold)
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(.customPrimary)
                         }
                         .padding(.top, 16)
                         

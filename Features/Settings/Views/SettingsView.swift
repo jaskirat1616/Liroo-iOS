@@ -22,6 +22,8 @@ struct SettingsView: View {
         ReadingTheme(rawValue: selectedThemeName) ?? .light
     }
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Form {
             // User Account Section
@@ -105,7 +107,20 @@ struct SettingsView: View {
                 .foregroundColor(.red)
             }
         }
+        .background(
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ?
+                        [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .alert("Sign Out", isPresented: $showSignOutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Sign Out", role: .destructive) {

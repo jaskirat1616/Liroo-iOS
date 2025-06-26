@@ -251,7 +251,7 @@ struct ContentGenerationView: View {
                         OCRButton(
                             title: "Photo Library",
                             icon: "photo.on.rectangle",
-                            color: .blue
+                            color: .customPrimary
                         ) {
                             showingPhotosPicker = true
                         }
@@ -538,7 +538,7 @@ struct StoryView: View {
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 // Background gradient matching other screens
                 LinearGradient(
@@ -634,6 +634,11 @@ struct StoryView: View {
 struct ChapterView: View {
     let chapter: StoryChapter
     
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Chapter Header
@@ -670,14 +675,15 @@ struct ChapterView: View {
                                 .padding(.top, 8)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 200)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxHeight: 300)
+                            .frame(maxWidth: isIPad ? 600 : .infinity)
+                            .frame(maxHeight: isIPad ? 400 : 300)
                             .cornerRadius(12)
                     case .failure:
                         VStack(spacing: 8) {
@@ -689,7 +695,7 @@ struct ChapterView: View {
                                 .foregroundColor(.red)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 200)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     @unknown default:
@@ -716,6 +722,11 @@ struct ChapterView: View {
 struct ContentBlockView: View {
     let block: ContentBlock
     
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Display image if available for any block type
@@ -732,14 +743,15 @@ struct ContentBlockView: View {
                                 .padding(.top, 8)
                         }
                             .frame(maxWidth: .infinity)
-                            .frame(height: 200)
+                            .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxHeight: 300)
+                            .frame(maxWidth: isIPad ? 600 : .infinity)
+                            .frame(maxHeight: isIPad ? 400 : 300)
                             .cornerRadius(12)
                     case .failure:
                         VStack(spacing: 8) {
@@ -751,7 +763,7 @@ struct ContentBlockView: View {
                                 .foregroundColor(.red)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 200)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     @unknown default:

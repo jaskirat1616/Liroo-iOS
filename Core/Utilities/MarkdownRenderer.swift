@@ -133,7 +133,7 @@ struct MarkdownRenderer {
                 return AnyView(
                     Text(element.content)
                         .font(fontStyle.getFont(size: CGFloat(baseFontSize)))
-                        .foregroundColor(.blue)
+                        .foregroundColor(.customPrimary)
                         .underline()
                 )
             case .paragraph:

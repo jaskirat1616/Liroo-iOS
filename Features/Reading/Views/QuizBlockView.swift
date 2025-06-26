@@ -66,7 +66,7 @@ struct QuizBlockView: View {
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.customPrimary)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
@@ -123,7 +123,7 @@ struct QuizBlockView: View {
                 return .red
             }
         } else if optionId == selectedOptionID {
-            return .blue
+            return .customPrimary
         }
         return .gray
     }
@@ -138,7 +138,7 @@ struct QuizBlockView: View {
                 return .red.opacity(0.15)
             }
         } else if optionId == selectedOptionID {
-            return .blue.opacity(0.1)
+            return .customPrimary.opacity(0.1)
         }
         return Color(.systemGray6)
     }
@@ -155,7 +155,7 @@ struct QuizBlockView: View {
                 return Color(.systemGray4) // Non-selected, non-correct after submission
             }
         } else if optionId == selectedOptionID {
-            return .blue
+            return .customPrimary
         }
         return Color(.systemGray4)
     }

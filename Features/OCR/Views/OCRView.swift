@@ -6,7 +6,7 @@ struct OCRView: View {
     @State private var selectedPhoto: PhotosPickerItem? = nil
 
     var body: some View {
-        NavigationView { // Or NavigationStack for iOS 16+
+        NavigationStack {
             VStack(spacing: 20) {
                 Text("OCR - Text Recognition")
                     .font(.headline)
@@ -75,8 +75,7 @@ struct OCRView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Image OCR") // For NavigationView
-            // .navigationBarTitleDisplayMode(.inline) // Optional: For NavigationView
+            .navigationTitle("Image OCR")
         }
     }
 }

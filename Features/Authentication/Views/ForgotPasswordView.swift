@@ -51,7 +51,7 @@ struct ForgotPasswordView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.accentColor)
+                .background(Color.customPrimary)
                 .foregroundColor(.white)
                 .cornerRadius(10)
                 .padding(.horizontal)
@@ -61,7 +61,7 @@ struct ForgotPasswordView: View {
                 Button("Back to Sign In") {
                     dismiss()
                 }
-                .foregroundColor(.accentColor)
+                .foregroundColor(.customPrimary)
                 .padding(.top, 20)
             }
             .padding(.bottom, 50)
@@ -103,7 +103,7 @@ struct ForgotPasswordView: View {
 }
 
 #Preview {
-    NavigationView {
+    NavigationStack {
         ForgotPasswordView()
             .environmentObject(AuthViewModel())
     }

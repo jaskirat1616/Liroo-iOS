@@ -54,13 +54,13 @@ struct DashboardView: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 44, height: 44)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                            .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                     case .failure:
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
                             .frame(width: 44, height: 44)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                            .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                             .foregroundColor(.gray)
                     @unknown default:
                         EmptyView()
@@ -71,13 +71,20 @@ struct DashboardView: View {
                     .resizable()
                     .frame(width: 44, height: 44)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                    .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                     .foregroundColor(.gray)
             }
             Text("Hello, \(profileViewModel.profile?.name ?? "Jessica")")
                 .font(.headline)
                 .foregroundColor(.primary)
             Spacer()
+            NavigationLink(destination: SettingsView()) {
+                Image(systemName: "gearshape")
+                    .font(.title2)
+                    .foregroundColor(.accentColor)
+                    .padding(8)
+            }
+            .accessibilityLabel("Settings")
         }
         .padding(.bottom, 4)
     }
@@ -105,13 +112,13 @@ struct DashboardView: View {
                             .frame(width: 40, height: 40)
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(progress >= 1.0 ? Color.green : Color.blue, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .stroke(progress >= 1.0 ? Color.green : Color.customPrimary, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                             .frame(width: 40, height: 40)
                         Text("\(Int(totalDuration/60))")
                             .font(.caption)
                             .fontWeight(.bold)
-                            .foregroundColor(progress >= 1.0 ? .green : .blue)
+                            .foregroundColor(progress >= 1.0 ? .green : .customPrimary)
                     }
                 }
             }
@@ -131,7 +138,7 @@ struct DashboardView: View {
     private var dashboardGridSection: some View {
         let metrics: [(title: String, value: String, icon: String, color: Color)] = [
             ("Current Streak", "\(viewModel.overallStats?.currentStreakInDays ?? 0)", "flame.fill", .orange),
-            ("Active Days", "\(activeDaysThisMonth())", "calendar", .blue),
+            ("Active Days", "\(activeDaysThisMonth())", "calendar", .customPrimary),
             ("Books Read", viewModel.totalBooksReadDisplay, "books.vertical.fill", .indigo),
             ("Total Time", viewModel.totalReadingTimeDisplay, "timer", .green)
         ]
@@ -180,7 +187,7 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 8) {
                                 Image(systemName: challenge.isCompleted ? "checkmark.circle.fill" : (challenge.isLocked ? "lock.fill" : "play.circle.fill"))
-                                    .foregroundColor(challenge.isCompleted ? .green : (challenge.isLocked ? .gray : .blue))
+                                    .foregroundColor(challenge.isCompleted ? .green : (challenge.isLocked ? .gray : .customPrimary))
                                 Text(challenge.displayName)
                                     .font(.subheadline)
                                     .foregroundColor(.primary)
@@ -200,7 +207,7 @@ struct DashboardView: View {
                                 .lineLimit(2)
                             if challenge.isInProgress {
                                 ProgressView(value: challenge.progressPercentage)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: Color.blue))
+                                    .progressViewStyle(LinearProgressViewStyle(tint: Color.customPrimary))
                                     .frame(height: 4)
                                 Text("\(challenge.currentProgress)/\(challenge.targetProgress)")
                                     .font(.caption2)
@@ -420,7 +427,7 @@ struct DashboardView: View {
                     VStack {
                         Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.system(size: 32))
-                            .foregroundColor(.blue)
+                            .foregroundColor(.customPrimary)
                         Text("Progress")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -589,10 +596,10 @@ struct DashboardView: View {
                 if challenge.frequency != .oneTime {
                     Text(challenge.frequency.rawValue)
                         .font(.caption2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(.customPrimary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.1))
+                        .background(Color.customPrimary.opacity(0.1))
                         .cornerRadius(4)
                 }
             }
@@ -671,7 +678,7 @@ struct DashboardView: View {
                     let completionCountText = "Completed \(challenge.completionCount) times"
                     Text(completionCountText)
                         .font(.caption2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(.customPrimary)
                         .fontWeight(.semibold)
                 }
             }
@@ -771,7 +778,7 @@ struct DashboardView: View {
         case .bronze: return .brown
         case .silver: return .gray
         case .gold: return .yellow
-        case .platinum: return .blue
+        case .platinum: return .customPrimary
         case .diamond: return .purple
         }
     }
@@ -796,7 +803,7 @@ struct DashboardView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 16) {
-                StatCard(title: "Total Time", value: viewModel.totalReadingTimeDisplay, iconName: "timer", iconColor: .blue)
+                StatCard(title: "Total Time", value: viewModel.totalReadingTimeDisplay, iconName: "timer", iconColor: .customPrimary)
                 StatCard(title: "Words Read", value: viewModel.totalWordsReadDisplay, iconName: "text.book.closed.fill", iconColor: .green)
                 StatCard(title: "Books Read", value: viewModel.totalBooksReadDisplay, iconName: "books.vertical.fill", iconColor: .indigo)
                 StatCard(title: "Active Days This Month", value: "\(activeDaysThisMonth())", iconName: "calendar", iconColor: .orange)
@@ -859,7 +866,7 @@ struct DashboardView: View {
                             x: .value("Date", dataPoint.date, unit: .day),
                             y: .value("Duration", dataPoint.duration / 60)
                         )
-                        .foregroundStyle(Color.blue.gradient)
+                        .foregroundStyle(Color.customPrimary.gradient)
                     }
                 }
                 .frame(height: 200)

@@ -6,212 +6,63 @@ struct ProfileView: View {
     @State private var selectedImage: PhotosPickerItem? = nil
     @State private var selectedImageData: Data? = nil
     @State private var isShowingEditView = false
+    @Environment(\.colorScheme) private var colorScheme
     // State for showing an edit screen, if you choose to implement it
     // @State private var isShowingEditView = false
 
     var body: some View {
-        Form {
-            if let profile = viewModel.profile {
-                Section(header: Text("User Information")) {
-                    // Avatar Display and Picker
-                    HStack {
-                        Text("Avatar:")
-                        Spacer()
-                        if let avatarURL = profile.avatarURL, let url = URL(string: avatarURL) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .empty:
-                                    ProgressView()
-                                        .frame(width: 60, height: 60)
-                                case .success(let image):
-                                    image.resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                        .clipShape(Circle())
-                                case .failure:
-                                    Image(systemName: "photo.circle.fill") // Fallback icon on load failure
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 60, height: 60)
-                                        .foregroundColor(.gray)
-                                @unknown default:
-                                    EmptyView()
-                                }
-                            }
-                        } else {
-                            Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 60, height: 60)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    
-                    PhotosPicker(
-                        selection: $selectedImage,
-                        matching: .images, // Only allow images
-                        photoLibrary: .shared()
-                    ) {
-                        Text(viewModel.profile?.avatarURL == nil && selectedImageData == nil ? "Select Profile Picture" : "Change Profile Picture")
-                    }
-                    .onChange(of: selectedImage) { newItem in
-                        Task {
-                            // Load the data from the selected item
-                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                selectedImageData = data
-                            }
-                        }
-                    }
-
-                    // Show upload button only if new image data is present
-                    if selectedImageData != nil {
-                        Button("Upload New Picture") {
-                            if let data = selectedImageData {
-                                Task {
-                                    await viewModel.updateProfileImage(imageData: data)
-                                    // Clear selection after attempting upload
-                                    selectedImageData = nil
-                                    selectedImage = nil
-                                    // Profile should refresh if viewModel.profile is updated
-                                    // or call viewModel.loadProfile() if necessary
-                                }
-                            }
-                        }
-                        .foregroundColor(.accentColor) // Use app's accent color
-                    }
-                    
-                    HStack {
-                        Text("Name:")
-                        Spacer()
-                        Text(profile.name)
-                    }
-                    HStack {
-                        Text("Email:")
-                        Spacer()
-                        Text(profile.email)
-                    }
+        ScrollView {
+            VStack(spacing: 24) {
+                // Top Card: Avatar, Name, Email
+                topProfileCard
+                // Edit Profile Button
+                Button(action: { isShowingEditView = true }) {
+                    Text("Edit Profile")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
                 }
-
-                Section(header: Text("About You")) {
-                    if let interestedTopics = profile.interestedTopics, !interestedTopics.isEmpty {
-                        HStack(alignment: .top) {
-                            Text("Interested Topics:")
-                            Spacer()
-                            Text(interestedTopics.joined(separator: ", "))
-                                .multilineTextAlignment(.trailing)
-                        }
-                    } else {
-                        HStack {
-                            Text("Interested Topics:")
-                            Spacer()
-                            Text("Not set")
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    HStack {
-                        Text("Student Status:")
-                        Spacer()
-                        if let isStudent = profile.isStudent {
-                            Text(isStudent ? "Yes" : "No")
-                        } else {
-                            Text("Not set")
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    if let additionalInfo = profile.additionalInfo, !additionalInfo.isEmpty {
-                        HStack(alignment: .top) {
-                            Text("Additional Info:")
-                            Spacer()
-                            Text(additionalInfo)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    } else {
-                        HStack {
-                            Text("Additional Info:")
-                            Spacer()
-                            Text("Not set")
-                                .foregroundColor(.gray)
-                        }
-                    }
+                .buttonStyle(.borderedProminent)
+                .tint(.customPrimary)
+                .padding(.horizontal)
+                // Settings Button
+                NavigationLink(destination: SettingsView()) {
+                    Text("Settings")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
                 }
-
-                Section(header: Text("Font Preferences")) {
+                .buttonStyle(.bordered)
+                .tint(.customPrimary)
+                .padding(.horizontal)
+                // About Card
+                if let profile = viewModel.profile {
+                    aboutCard(profile: profile)
                     if let fontPrefs = profile.fontPreferences {
-                        HStack {
-                            Text("Font Family:")
-                            Spacer()
-                            Text(fontPrefs.fontFamily)
-                        }
-                        HStack {
-                            Text("Font Size:")
-                            Spacer()
-                            Text("\(fontPrefs.fontSize, specifier: "%.1f")")
-                        }
-                        HStack {
-                            Text("Bold:")
-                            Spacer()
-                            Text(fontPrefs.isBold ? "Yes" : "No")
-                        }
-                        HStack {
-                            Text("Italic:")
-                            Spacer()
-                            Text(fontPrefs.isItalic ? "Yes" : "No")
-                        }
-                    } else {
-                        Text("No font preferences set.")
-                            .foregroundColor(.gray)
+                        fontPreferencesCard(fontPrefs: fontPrefs)
                     }
-                }
-                
-                Section(header: Text("Account Details")) {
-                    HStack {
-                        Text("User ID:")
-                        Spacer()
-                        Text(profile.userId)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    HStack {
-                        Text("Created At:")
-                        Spacer()
-                        if let createdAt = profile.createdAt {
-                            Text(createdAt, style: .date)
-                        } else {
-                            Text("N/A")
-                        }
-                    }
-                    HStack {
-                        Text("Last Updated:")
-                        Spacer()
-                        if let updatedAt = profile.updatedAt {
-                            Text(updatedAt, style: .date)
-                        } else {
-                            Text("N/A")
-                        }
-                    }
-                }
-
-            } else if let errorMessage = viewModel.errorMessage {
-                Section { // Wrap error in a section for better layout in Form
-                    Text("Error: \(errorMessage)")
-                        .foregroundColor(.red)
-                }
-            } else {
-                Section { // Wrap ProgressView for consistency
-                    ProgressView("Loading Profile...")
+                    accountDetailsCard(profile: profile)
+                } else if let errorMessage = viewModel.errorMessage {
+                    errorCard(message: errorMessage)
+                } else {
+                    loadingCard
                 }
             }
+            .padding(.horizontal)
+            .padding(.top, 24)
         }
+        .background(
+                   LinearGradient(
+                       gradient: Gradient(
+                           colors: colorScheme == .dark ?
+                           [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                           [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                       ),
+                       startPoint: .top,
+                       endPoint: .bottom
+                   )
+                   .ignoresSafeArea()
+               )
         .navigationTitle("Profile")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Edit") {
-                    isShowingEditView = true
-                }
-            }
-        }
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingEditView) {
             EditProfileView(viewModel: viewModel)
         }
@@ -229,6 +80,214 @@ struct ProfileView: View {
         }, message: {
             Text(viewModel.errorMessage ?? "An unknown error occurred.")
         })
+    }
+    
+    // MARK: - Top Card
+    private var topProfileCard: some View {
+        Group {
+            if let profile = viewModel.profile {
+                VStack(spacing: 12) {
+                    ZStack(alignment: .bottomTrailing) {
+                        avatarView(urlString: profile.avatarURL)
+                        PhotosPicker(selection: $selectedImage, matching: .images, photoLibrary: .shared()) {
+                            Image(systemName: "camera.fill")
+                                .padding(8)
+                                .background(Color.customPrimary.opacity(0.8))
+                                .clipShape(Circle())
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                        }
+                        .offset(x: 8, y: 8)
+                        .onChange(of: selectedImage) { newItem in
+                            Task {
+                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                    selectedImageData = data
+                                }
+                            }
+                        }
+                    }
+                    if selectedImageData != nil {
+                        Button("Upload New Picture") {
+                            if let data = selectedImageData {
+                                Task {
+                                    await viewModel.updateProfileImage(imageData: data)
+                                    selectedImageData = nil
+                                    selectedImage = nil
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.customPrimary)
+                    }
+                    Text(profile.name)
+                        .font(.title2).fontWeight(.bold)
+                    Text(profile.email)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity)
+               
+            }
+        }
+    }
+    
+    private func avatarView(urlString: String?) -> some View {
+        Group {
+            if let urlString = urlString, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView().frame(width: 90, height: 90)
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                            .frame(width: 90, height: 90)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.customPrimary, lineWidth: 3))
+                    case .failure:
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable().frame(width: 90, height: 90)
+                            .foregroundColor(.gray)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable().frame(width: 90, height: 90)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+    
+    // MARK: - About Card
+    private func aboutCard(profile: ProfileViewModel.UserProfile) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("About You").font(.headline)
+            Divider()
+            if let topics = profile.interestedTopics, !topics.isEmpty {
+                HStack {
+                    Text("Topics:").fontWeight(.semibold)
+                    Spacer()
+                    Text(topics.joined(separator: ", ")).multilineTextAlignment(.trailing)
+                }
+            } else {
+                HStack {
+                    Text("Topics:").fontWeight(.semibold)
+                    Spacer()
+                    Text("Not set").foregroundColor(.gray)
+                }
+            }
+            HStack {
+                Text("Student:").fontWeight(.semibold)
+                Spacer()
+                Text(profile.isStudent == true ? "Yes" : "No")
+            }
+            if let info = profile.additionalInfo, !info.isEmpty {
+                HStack(alignment: .top) {
+                    Text("Info:").fontWeight(.semibold)
+                    Spacer()
+                    Text(info).multilineTextAlignment(.trailing)
+                }
+            } else {
+                HStack {
+                    Text("Info:").fontWeight(.semibold)
+                    Spacer()
+                    Text("Not set").foregroundColor(.gray)
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Font Preferences Card
+    private func fontPreferencesCard(fontPrefs: ProfileViewModel.UserProfile.FontPreferences) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Font Preferences").font(.headline)
+            Divider()
+            HStack {
+                Text("Font:").fontWeight(.semibold)
+                Spacer()
+                Text(fontPrefs.fontFamily)
+            }
+            HStack {
+                Text("Size:").fontWeight(.semibold)
+                Spacer()
+                Text("\(fontPrefs.fontSize, specifier: "%.1f")")
+            }
+            HStack {
+                Text("Bold:").fontWeight(.semibold)
+                Spacer()
+                Text(fontPrefs.isBold ? "Yes" : "No")
+            }
+            HStack {
+                Text("Italic:").fontWeight(.semibold)
+                Spacer()
+                Text(fontPrefs.isItalic ? "Yes" : "No")
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Account Details Card
+    private func accountDetailsCard(profile: ProfileViewModel.UserProfile) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Account Details").font(.headline)
+            Divider()
+            HStack {
+                Text("User ID:").fontWeight(.semibold)
+                Spacer()
+                Text(profile.userId).lineLimit(1).truncationMode(.tail)
+            }
+            if let createdAt = profile.createdAt {
+                HStack {
+                    Text("Created:").fontWeight(.semibold)
+                    Spacer()
+                    Text(createdAt, style: .date)
+                }
+            }
+            if let updatedAt = profile.updatedAt {
+                HStack {
+                    Text("Updated:").fontWeight(.semibold)
+                    Spacer()
+                    Text(updatedAt, style: .date)
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Error Card
+    private func errorCard(message: String) -> some View {
+        VStack {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
+            Text(message).foregroundColor(.red)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground).opacity(0.9))
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Loading Card
+    private var loadingCard: some View {
+        VStack {
+            ProgressView()
+            Text("Loading Profile...")
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground).opacity(0.9))
+        .cornerRadius(16)
     }
 }
 

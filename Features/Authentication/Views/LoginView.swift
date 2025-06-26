@@ -9,7 +9,7 @@ struct LoginView: View {
     @State private var isPasswordVisible = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     gradient: Gradient(
@@ -68,7 +68,7 @@ struct LoginView: View {
                                 Button(action: { isPasswordVisible.toggle() }) {
                                     Text(isPasswordVisible ? "Hide" : "Show")
                                         .font(.footnote)
-                                        .foregroundColor(.accentColor)
+                                        .foregroundColor(.customPrimary)
                                         .padding(.trailing, 12)
                                 }
                             }
@@ -87,7 +87,7 @@ struct LoginView: View {
                         .background(colorScheme == .dark ? .cyan : .black)
                         .foregroundColor(colorScheme == .dark ? .black : .white)
                         .cornerRadius(22)
-                        .shadow(color: Color.accentColor.opacity(0.15), radius: 8, x: 0, y: 4)
+                        .shadow(color: Color.customPrimary.opacity(0.15), radius: 8, x: 0, y: 4)
                         .disabled(authViewModel.isLoading)
                         
                         HStack {
@@ -95,7 +95,7 @@ struct LoginView: View {
                             NavigationLink(destination: ForgotPasswordView()) {
                                 Text("Forgot Password?")
                                     .font(.footnote)
-                                    .foregroundColor(.accentColor)
+                                    .foregroundColor(.customPrimary)
                             }
                         }
                     }
@@ -110,7 +110,7 @@ struct LoginView: View {
                         NavigationLink(destination: SignupView()) {
                             Text("Sign Up")
                                 .fontWeight(.semibold)
-                                .foregroundColor(.accentColor)
+                                .foregroundColor(.customPrimary)
                         }
                     }
                     .padding(.top, 24)

@@ -6,7 +6,7 @@ struct WelcomeAuthEntryView: View {
     @State private var showSignup = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 LinearGradient(
                     gradient: Gradient(

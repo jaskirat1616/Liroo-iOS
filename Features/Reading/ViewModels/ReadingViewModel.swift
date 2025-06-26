@@ -278,15 +278,47 @@ class FullReadingViewModel: ObservableObject {
                 return
             }
             
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let responseText = json["response"] as? String else {
+            // Debug: Print the raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("🔍 Raw backend response: \(responseString)")
+            }
+            
+            // Try to parse the response with multiple possible formats
+            var responseText: String?
+            
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Try different possible keys
+                responseText = json["dialogue_response"] as? String
+                if responseText == nil {
+                    responseText = json["response"] as? String
+                }
+                if responseText == nil {
+                    responseText = json["message"] as? String
+                }
+                if responseText == nil {
+                    responseText = json["content"] as? String
+                }
+                if responseText == nil {
+                    responseText = json["text"] as? String
+                }
+                if responseText == nil {
+                    responseText = json["answer"] as? String
+                }
+            }
+            
+            // If JSON parsing failed, try to treat the response as plain text
+            if responseText == nil {
+                responseText = String(data: data, encoding: .utf8)
+            }
+            
+            guard let finalResponseText = responseText, !finalResponseText.isEmpty else {
                 self.handleDialogueError("Invalid response format", loadingMessageId: loadingMessageId)
                 return
             }
             
             // Update the loading message with the actual response
             if let index = dialogueMessages.firstIndex(where: { $0.id == loadingMessageId }) {
-                dialogueMessages[index] = ChatMessage(id: loadingMessageId, sender: .ai, text: responseText, isLoading: false)
+                dialogueMessages[index] = ChatMessage(id: loadingMessageId, sender: .ai, text: finalResponseText, isLoading: false)
             }
             
             isSendingDialogueMessage = false

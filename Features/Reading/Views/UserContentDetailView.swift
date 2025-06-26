@@ -33,18 +33,23 @@ struct UserContentDetailView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Content Header
                 contentHeader
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, isIPad ? 40 : 16)
                     .padding(.top, 20)
                     .padding(.bottom, 24)
                 
                 // Content Blocks
                 if let blocks = userContent.blocks, !blocks.isEmpty {
                     contentBlocksSection(blocks)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, isIPad ? 40 : 16)
                         .padding(.bottom, 24)
                 }
             }
         }
+    }
+    
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
     }
     
     // MARK: - Content Header
@@ -109,6 +114,11 @@ struct UserContentBlockView: View {
     let fontStyle: ReadingFontStyle
     let onTapGesture: () -> Void
     
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Block Type Header
@@ -140,14 +150,16 @@ struct UserContentBlockView: View {
                                 .padding(.top, 8)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 200)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     case .success(let image):
                         image
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(maxHeight: 300)
+                            .aspectRatio(1, contentMode: .fill)
+                            .frame(maxWidth: isIPad ? 400 : .infinity)
+                            .frame(height: isIPad ? 400 : 300)
+                            .clipped()
                             .cornerRadius(12)
                     case .failure:
                         VStack(spacing: 8) {
@@ -159,7 +171,7 @@ struct UserContentBlockView: View {
                                 .foregroundColor(.red)
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(height: 200)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     @unknown default:

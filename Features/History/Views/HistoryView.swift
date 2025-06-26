@@ -4,53 +4,50 @@ struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
 
     var body: some View {
-        NavigationView {
-            Group {
-                if viewModel.isLoading {
-                    ProgressView("Loading History...")
-                } else if let errorMessage = viewModel.errorMessage {
-                    VStack {
-                        Text("Error")
-                            .font(.headline)
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                        Button("Retry") {
-                            viewModel.fetchHistory()
-                        }
-                        .padding(.top)
-                    }
-                } else if viewModel.historyItems.isEmpty {
-                    Text("No history found.")
-                        .foregroundColor(.secondary)
-                } else {
-                    List {
-                        ForEach(viewModel.historyItems) { item in
-                            NavigationLink(destination: FullReadingView(
-                                itemID: item.originalDocumentID,
-                                collectionName: item.originalCollectionName,
-                                itemTitle: item.title
-                            )) {
-                                HistoryRow(item: item)
-                            }
-                        }
-                    }
-                    .listStyle(PlainListStyle())
-                    .scrollContentBackground(.hidden)
-                }
-            }
-            .navigationTitle("History")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
+        Group {
+            if viewModel.isLoading {
+                ProgressView("Loading History...")
+            } else if let errorMessage = viewModel.errorMessage {
+                VStack {
+                    Text("Error")
+                        .font(.headline)
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                    Button("Retry") {
                         viewModel.fetchHistory()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
                     }
-                    .disabled(viewModel.isLoading)
+                    .padding(.top)
                 }
+            } else if viewModel.historyItems.isEmpty {
+                Text("No history found.")
+                    .foregroundColor(.secondary)
+            } else {
+                List {
+                    ForEach(viewModel.historyItems) { item in
+                        NavigationLink(destination: FullReadingView(
+                            itemID: item.originalDocumentID,
+                            collectionName: item.originalCollectionName,
+                            itemTitle: item.title
+                        )) {
+                            HistoryRow(item: item)
+                        }
+                    }
+                }
+                .listStyle(PlainListStyle())
+                .scrollContentBackground(.hidden)
             }
         }
-        .navigationViewStyle(.stack)
+        .navigationTitle("History")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    viewModel.fetchHistory()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(viewModel.isLoading)
+            }
+        }
     }
 
     // Placeholder for the row view
@@ -68,7 +65,7 @@ struct HistoryView: View {
                 }
                 Spacer()
                 Image(systemName: item.type == .story ? "book.closed.fill" : "doc.text.fill")
-                    .foregroundColor(item.type == .story ? .orange : .blue)
+                    .foregroundColor(item.type == .story ? .orange : .customPrimary)
             }
             .padding(.vertical, 4)
         }
