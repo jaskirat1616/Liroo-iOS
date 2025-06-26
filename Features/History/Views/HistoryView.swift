@@ -1,7 +1,35 @@
 import SwiftUI
+import FirebaseFirestore
+
+enum HistoryFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case story = "Stories"
+    case generatedContent = "Content"
+    case lecture = "Lectures"
+    var id: String { rawValue }
+}
 
 struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
+    @State private var isPresentingLecture = false
+    @State private var isLoadingLecture = false
+    @State private var selectedLecture: Lecture? = nil
+    @State private var selectedLectureAudioFiles: [AudioFile] = []
+    @State private var lectureLoadError: String? = nil
+    @State private var selectedFilter: HistoryFilter = .all
+
+    var filteredItems: [UserHistoryEntry] {
+        switch selectedFilter {
+        case .all:
+            return viewModel.historyItems
+        case .story:
+            return viewModel.historyItems.filter { $0.type == .story }
+        case .generatedContent:
+            return viewModel.historyItems.filter { $0.type == .generatedContent }
+        case .lecture:
+            return viewModel.historyItems.filter { $0.type == .lecture }
+        }
+    }
 
     var body: some View {
         Group {
@@ -22,19 +50,44 @@ struct HistoryView: View {
                 Text("No history found.")
                     .foregroundColor(.secondary)
             } else {
-                List {
-                    ForEach(viewModel.historyItems) { item in
-                        NavigationLink(destination: FullReadingView(
-                            itemID: item.originalDocumentID,
-                            collectionName: item.originalCollectionName,
-                            itemTitle: item.title
-                        )) {
-                            HistoryRow(item: item)
+                VStack(spacing: 0) {
+                    // Segmented control for filtering
+                    Picker("Filter", selection: $selectedFilter) {
+                        ForEach(HistoryFilter.allCases) { filter in
+                            Text(filter.rawValue).tag(filter)
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .padding([.horizontal, .top])
+
+                    if filteredItems.isEmpty {
+                        Text("No \(selectedFilter.rawValue.lowercased()) found.")
+                            .foregroundColor(.secondary)
+                            .padding()
+                    } else {
+                        List {
+                            ForEach(filteredItems) { item in
+                                if item.type == .lecture {
+                                    Button {
+                                        loadLectureAndPresent(id: item.originalDocumentID)
+                                    } label: {
+                                        LectureHistoryRow(item: item)
+                                    }
+                                } else {
+                                    NavigationLink(destination: FullReadingView(
+                                        itemID: item.originalDocumentID,
+                                        collectionName: item.originalCollectionName,
+                                        itemTitle: item.title
+                                    )) {
+                                        HistoryRow(item: item)
+                                    }
+                                }
+                            }
+                        }
+                        .listStyle(PlainListStyle())
+                        .scrollContentBackground(.hidden)
+                    }
                 }
-                .listStyle(PlainListStyle())
-                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("History")
@@ -48,12 +101,120 @@ struct HistoryView: View {
                 .disabled(viewModel.isLoading)
             }
         }
+        .sheet(isPresented: $isPresentingLecture) {
+            if let lecture = selectedLecture {
+                LectureView(lecture: lecture, audioFiles: selectedLectureAudioFiles)
+            } else if isLoadingLecture {
+                VStack(spacing: 20) {
+                    ProgressView()
+                    Text("Loading lecture...")
+                }
+                .padding()
+            } else if let error = lectureLoadError {
+                VStack(spacing: 20) {
+                    Text("Failed to load lecture")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button("Dismiss") { isPresentingLecture = false }
+                }
+                .padding()
+            }
+        }
     }
 
-    // Placeholder for the row view
+    private func loadLectureAndPresent(id: String) {
+        isLoadingLecture = true
+        isPresentingLecture = true
+        selectedLecture = nil
+        selectedLectureAudioFiles = []
+        lectureLoadError = nil
+
+        let db = Firestore.firestore()
+        db.collection("lectures").document(id).getDocument { snapshot, error in
+            DispatchQueue.main.async {
+                isLoadingLecture = false
+                if let error = error {
+                    lectureLoadError = error.localizedDescription
+                    return
+                }
+                do {
+                    guard let firebaseLecture = try snapshot?.data(as: FirebaseLecture.self) else {
+                        lectureLoadError = "Lecture not found or could not decode."
+                        return
+                    }
+                    // Convert to Lecture and AudioFile models
+                    let sections = (firebaseLecture.sections ?? []).enumerated().map { index, section in
+                        LectureSection(
+                            id: UUID(uuidString: section.sectionId) ?? UUID(),
+                            title: section.title ?? "Section \(index + 1)",
+                            script: section.script ?? "",
+                            imagePrompt: section.imagePrompt ?? "",
+                            imageUrl: section.imageUrl,
+                            order: section.order ?? (index + 1)
+                        )
+                    }
+                    let lecture = Lecture(
+                        id: UUID(uuidString: firebaseLecture.id ?? "") ?? UUID(),
+                        title: firebaseLecture.title,
+                        sections: sections,
+                        level: ReadingLevel(rawValue: firebaseLecture.level) ?? .standard,
+                        imageStyle: firebaseLecture.imageStyle
+                    )
+                    let audioFiles = (firebaseLecture.audioFiles ?? []).map { audio in
+                        AudioFile(
+                            id: UUID(),
+                            type: AudioFileType(rawValue: audio.type ?? "section_script") ?? .sectionScript,
+                            text: audio.text ?? "",
+                            url: audio.url ?? "",
+                            filename: audio.filename ?? "",
+                            section: audio.section
+                        )
+                    }
+                    selectedLecture = lecture
+                    selectedLectureAudioFiles = audioFiles
+                } catch {
+                    lectureLoadError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    // Polished lecture row
+    private struct LectureHistoryRow: View {
+        let item: UserHistoryEntry
+        var body: some View {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.purple.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "mic.fill")
+                        .font(.title2)
+                        .foregroundColor(.purple)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    Text("Lecture • \(item.date, style: .date)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    // Existing row for other types
     private struct HistoryRow: View {
         let item: UserHistoryEntry
-
         var body: some View {
             HStack {
                 VStack(alignment: .leading) {
@@ -64,10 +225,30 @@ struct HistoryView: View {
                         .foregroundColor(.gray)
                 }
                 Spacer()
-                Image(systemName: item.type == .story ? "book.closed.fill" : "doc.text.fill")
-                    .foregroundColor(item.type == .story ? .orange : .customPrimary)
+                Image(systemName: iconName(for: item.type))
+                    .foregroundColor(iconColor(for: item.type))
             }
             .padding(.vertical, 4)
+        }
+        private func iconName(for type: UserHistoryEntryType) -> String {
+            switch type {
+            case .story:
+                return "book.closed.fill"
+            case .generatedContent:
+                return "doc.text.fill"
+            case .lecture:
+                return "mic.fill"
+            }
+        }
+        private func iconColor(for type: UserHistoryEntryType) -> Color {
+            switch type {
+            case .story:
+                return .orange
+            case .generatedContent:
+                return .customPrimary
+            case .lecture:
+                return .purple
+            }
         }
     }
 }

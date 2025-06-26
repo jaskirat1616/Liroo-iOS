@@ -39,7 +39,6 @@ class HistoryViewModel: ObservableObject {
                     field: "userId",
                     isEqualTo: userId
                 )
-                // Filter stories to ensure they have an ID, then map
                 fetchedItems.append(contentsOf: stories.compactMap { story in
                     guard let docId = story.id, !docId.isEmpty else {
                         print("[HistoryViewModel] Warning: Skipping story with nil or empty ID.")
@@ -60,11 +59,7 @@ class HistoryViewModel: ObservableObject {
                 for (index, content) in userContents.enumerated() {
                     print("[HistoryViewModel] DEBUG: Raw content[\(index)] - ID: \(content.id ?? "NIL ID"), Topic: \(content.topic ?? "NIL Topic")")
                 }
-                
-                // Store the current count of fetchedItems before adding userContents
                 let storyItemCount = fetchedItems.count
-                
-                // Filter user contents to ensure they have an ID, then map
                 fetchedItems.append(contentsOf: userContents.compactMap { content in
                     guard let docId = content.id, !docId.isEmpty else {
                         print("[HistoryViewModel] Warning: Skipping user content with nil or empty ID. Original fetched ID was: '\(content.id ?? "nil")'. Topic: '\(content.topic ?? "NIL Topic")'")
@@ -74,6 +69,28 @@ class HistoryViewModel: ObservableObject {
                 })
                 let userContentItemCount = fetchedItems.count - storyItemCount
                 print("[HistoryViewModel] Fetched \(userContents.count) user contents for user \(userId), valid items: \(userContentItemCount)")
+
+                // Fetch lectures
+                let lectures: [FirebaseLecture] = try await firestoreService.query(
+                    FirebaseLecture.self,
+                    from: "lectures",
+                    field: "userId",
+                    isEqualTo: userId
+                )
+                print("[HistoryViewModel] DEBUG: Raw fetched lectures count: \(lectures.count)")
+                for (index, lecture) in lectures.enumerated() {
+                    print("[HistoryViewModel] DEBUG: Raw lecture[\(index)] - ID: \(lecture.id ?? "NIL ID"), Title: \(lecture.title)")
+                }
+                let beforeLectureCount = fetchedItems.count
+                fetchedItems.append(contentsOf: lectures.compactMap { lecture in
+                    guard let docId = lecture.id, !docId.isEmpty else {
+                        print("[HistoryViewModel] Warning: Skipping lecture with nil or empty ID.")
+                        return nil
+                    }
+                    return UserHistoryEntry(from: lecture)
+                })
+                let lectureItemCount = fetchedItems.count - beforeLectureCount
+                print("[HistoryViewModel] Fetched \(lectures.count) lectures for user \(userId), valid items: \(lectureItemCount)")
 
                 // Sort items by date, newest first
                 self.historyItems = fetchedItems.sorted { $0.date > $1.date }

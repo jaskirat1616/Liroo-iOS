@@ -5,6 +5,7 @@ import FirebaseFirestore // Required for Timestamp
 enum UserHistoryEntryType: String, Codable, CaseIterable { // Renamed from HistoryItemType
     case story = "Story"
     case generatedContent = "Content"
+    case lecture = "Lecture"
 }
 
 // Unified struct for display in the history list
@@ -14,7 +15,7 @@ struct UserHistoryEntry: Identifiable, Hashable { // Renamed from HistoryItem
     let date: Date
     let type: UserHistoryEntryType // Updated type
     let originalDocumentID: String // Firestore document ID of the original item
-    let originalCollectionName: String // "stories" or "userGeneratedContent"
+    let originalCollectionName: String // "stories", "userGeneratedContent", or "lectures"
 
     // Initializer for FirebaseStory
     init(from story: FirebaseStory) {
@@ -34,6 +35,16 @@ struct UserHistoryEntry: Identifiable, Hashable { // Renamed from HistoryItem
         self.type = .generatedContent
         self.originalDocumentID = content.id ?? ""
         self.originalCollectionName = "userGeneratedContent"
+    }
+
+    // Initializer for FirebaseLecture
+    init(from lecture: FirebaseLecture) {
+        self.id = lecture.id ?? UUID().uuidString
+        self.title = lecture.title
+        self.date = lecture.createdAt?.dateValue() ?? Date()
+        self.type = .lecture
+        self.originalDocumentID = lecture.id ?? ""
+        self.originalCollectionName = "lectures"
     }
 
     // Explicit Hashable conformance

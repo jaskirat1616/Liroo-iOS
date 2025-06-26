@@ -28,8 +28,8 @@ class ContentGenerationViewModel: ObservableObject {
     // Add custom URLSession configuration
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 120  // 2 minutes timeout for request
-        config.timeoutIntervalForResource = 600  // 10 minutes timeout for resource
+        config.timeoutIntervalForRequest = 600  // 10 minutes timeout for request
+        config.timeoutIntervalForResource = 1800  // 30 minutes timeout for resource
         return URLSession(configuration: config)
     }()
     
@@ -739,29 +739,60 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Lecture][Save] User ID: \(userId)")
         print("[Lecture][Save] Total sections to save: \(lecture.sections.count)")
         print("[Lecture][Save] Total audio files: \(audioFiles.count)")
-        
-        let firebaseSections = lecture.sections.map { section -> FirebaseLectureSection in
-            print("[Lecture][Save] Mapping section '\(section.title)' (ID: \(section.id.uuidString)) for Firestore.")
-            print("[Lecture][Save] - ImageUrl for section: \(section.imageUrl ?? "N/A - No image URL")")
-            
-            return FirebaseLectureSection(
+
+        let storage = Storage.storage()
+        var firebaseAudioFiles: [FirebaseAudioFile] = []
+        var firebaseSections: [FirebaseLectureSection] = []
+
+        // 1. Upload audio files to Firebase Storage
+        for audioFile in audioFiles {
+            guard let audioUrl = URL(string: audioFile.url) else { continue }
+            do {
+                let (audioData, _) = try await session.data(from: audioUrl)
+                let audioPath = "lectures/\(lecture.id.uuidString)/audio/\(audioFile.filename)"
+                let audioRef = storage.reference().child(audioPath)
+                let metadata = StorageMetadata()
+                metadata.contentType = "audio/mpeg"
+                _ = try await audioRef.putDataAsync(audioData, metadata: metadata)
+                let firebaseUrl = try await audioRef.downloadURL()
+                firebaseAudioFiles.append(FirebaseAudioFile(
+                    type: audioFile.type,
+                    text: audioFile.text,
+                    url: firebaseUrl.absoluteString,
+                    filename: audioFile.filename,
+                    section: audioFile.section
+                ))
+            } catch {
+                print("[Lecture][Save] ERROR uploading audio file \(audioFile.filename): \(error)")
+                // Optionally: handle error, skip, or add placeholder
+            }
+        }
+
+        // 2. Upload section images to Firebase Storage (if present)
+        for section in lecture.sections {
+            var firebaseImageUrl: String? = nil
+            if let imageUrl = section.imageUrl, let url = URL(string: imageUrl) {
+                do {
+                    let (imageData, _) = try await session.data(from: url)
+                    let imagePath = "lectures/\(lecture.id.uuidString)/images/section_\(section.order).jpg"
+                    let imageRef = storage.reference().child(imagePath)
+                    let metadata = StorageMetadata()
+                    metadata.contentType = "image/jpeg"
+                    _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
+                    let firebaseUrl = try await imageRef.downloadURL()
+                    firebaseImageUrl = firebaseUrl.absoluteString
+                } catch {
+                    print("[Lecture][Save] ERROR uploading image for section \(section.order): \(error)")
+                }
+            }
+            firebaseSections.append(FirebaseLectureSection(
                 sectionId: section.id.uuidString,
                 title: section.title,
                 script: section.script,
                 imagePrompt: section.imagePrompt,
-                imageUrl: section.imageUrl,
+                imageUrl: firebaseImageUrl, // Use Firebase Storage URL
                 order: section.order
-            )
-        }
-        
-        let firebaseAudioFiles = audioFiles.map { audioFile -> FirebaseAudioFile in
-            return FirebaseAudioFile(
-                type: audioFile.type,
-                text: audioFile.text,
-                url: audioFile.url,
-                filename: audioFile.filename,
-                section: audioFile.section
-            )
+            ))
         }
 
         let firebaseLecture = FirebaseLecture(
@@ -772,19 +803,16 @@ class ContentGenerationViewModel: ObservableObject {
             sections: firebaseSections,
             audioFiles: firebaseAudioFiles
         )
-        
+
         do {
             print("[Lecture][Save] Attempting to create lecture document in Firestore. Collection: 'lectures', DocumentID to be used by service: \(lecture.id.uuidString)")
             let documentId = try await firestoreService.create(firebaseLecture, in: "lectures", documentId: lecture.id.uuidString)
             print("[Lecture][Save] Successfully saved lecture to Firestore with document ID: \(documentId)")
-            
-            // Track lecture generation for dashboard engagement metrics
             await MainActor.run {
                 let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
                 UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
                 print("[Engagement] Lecture generation tracked. Total: \(currentCount + 1)")
             }
-            
         } catch {
             print("[Lecture][Save] ERROR: Failed to save lecture to Firestore for lecture ID \(lecture.id.uuidString).")
             print("[Lecture][Save] Error Type: \(type(of: error))")

@@ -1,9 +1,12 @@
 import SwiftUI
 import AVFoundation
+import UIKit
 
 struct LectureView: View {
     let lecture: Lecture
     let audioFiles: [AudioFile]
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isPlaying = false
     @State private var audioPlayer: AVAudioPlayer?
     @State private var currentAudioIndex = 0
@@ -12,159 +15,129 @@ struct LectureView: View {
     @State private var isLoadingAudio = false
     @State private var highlightedWords: [String] = []
     @State private var currentText = ""
-    
-    // Timer for word-by-word highlighting
     @State private var wordTimer: Timer?
-    
-    // Timer for monitoring audio playback
     @State private var audioMonitorTimer: Timer?
-    
+    @State private var audioError: String? = nil
+    @State private var showHaptics = false
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(lecture.title)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    HStack {
-                        Label(lecture.level.rawValue, systemImage: "person.2.fill")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        if let imageStyle = lecture.imageStyle {
-                            Label(imageStyle, systemImage: "paintbrush.fill")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+        NavigationStack {
+            ZStack {
+                // Background
+                LinearGradient(
+                    gradient: Gradient(colors: colorScheme == .dark ? [.purple.opacity(0.1), .black] : [.purple.opacity(0.08), .white]),
+                    startPoint: .top, endPoint: .bottom
+                ).ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Header
+                        headerSection
+                        // Progress
+                        progressSection
+                        // Current Speaking Content
+                        if isPlaying && !currentText.isEmpty {
+                            currentSpeakingView
+                        } else {
+                            sectionPreview
+                        }
+                        // Audio Controls
+                        audioControlsView
+                        // Error
+                        if let audioError = audioError {
+                            errorSection(audioError)
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 32)
                 }
-                .padding(.horizontal)
-                
-                // Audio Controls
-                audioControlsView
-                    .padding(.horizontal)
-                
-                // Current Speaking Content
-                if isPlaying && !currentText.isEmpty {
-                    currentSpeakingView
-                        .padding(.horizontal)
-                }
-                
-                // Progress indicator
-                if lecture.sections.count > 0 {
-                    VStack(spacing: 8) {
-                        Text("Section \(currentSectionIndex + 1) of \(lecture.sections.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        ProgressView(value: Double(currentSectionIndex), total: Double(lecture.sections.count - 1))
-                            .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                            .scaleEffect(y: 2)
+                // Close button for modal
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            stopLecture()
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                                .padding(8)
+                        }
                     }
-                    .padding(.horizontal)
+                    Spacer()
                 }
             }
-        }
-        .navigationTitle("Lecture")
-        .navigationBarTitleDisplayMode(.inline)
-        .onDisappear {
-            stopLecture()
+            .navigationTitle(lecture.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .onDisappear {
+                stopLecture()
+            }
         }
     }
-    
-    private var audioControlsView: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Button(action: {
-                    if isPlaying {
-                        stopLecture()
-                    } else {
-                        playFullLecture()
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                            .font(.title2)
-                        Text(isPlaying ? "Stop Lecture" : "Play Full Lecture")
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.blue)
-                    .cornerRadius(25)
-                }
-                
-                Spacer()
-                
-                if isLoadingAudio {
-                    ProgressView()
-                        .scaleEffect(0.8)
+
+    // MARK: - Header
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(lecture.title)
+                .font(.largeTitle.bold())
+                .foregroundColor(.primary)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 12) {
+                Label(lecture.level.rawValue, systemImage: "person.2.fill")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                if let imageStyle = lecture.imageStyle {
+                    Label(imageStyle, systemImage: "paintbrush.fill")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
             }
-            
-            // Progress indicator
-            if lecture.sections.count > 0 {
-                ProgressView(value: Double(currentSectionIndex), total: Double(lecture.sections.count - 1))
-                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                    .scaleEffect(y: 2)
-            }
+        }
+    }
+
+    // MARK: - Progress
+    private var progressSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Section \(currentSectionIndex + 1) of \(lecture.sections.count)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            ProgressView(value: Double(currentSectionIndex), total: Double(max(lecture.sections.count - 1, 1)))
+                .progressViewStyle(LinearProgressViewStyle(tint: .purple))
+                .scaleEffect(y: 2)
+        }
+    }
+
+    // MARK: - Section Preview (when not playing)
+    private var sectionPreview: some View {
+        let section = lecture.sections[currentSectionIndex]
+        return VStack(alignment: .leading, spacing: 16) {
+            sectionHeader(section)
+            sectionImage(section)
+            Text(section.script)
+                .font(.body)
+                .foregroundColor(.primary)
+                .lineSpacing(4)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemBackground).opacity(0.9)))
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
-    
+
+    // MARK: - Current Speaking Content
     private var currentSpeakingView: some View {
-        let currentSection = lecture.sections[currentSectionIndex]
-        
-        return VStack(alignment: .leading, spacing: 20) {
-            // Section Header
-            VStack(alignment: .leading, spacing: 8) {
-                Text(currentSection.title)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text("Section \(currentSection.order)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Section Image
-            if let imageUrl = currentSection.imageUrl {
-                AsyncImage(url: URL(string: imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 200)
-                        .cornerRadius(12)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color(.systemGray5))
-                        .frame(height: 200)
-                        .cornerRadius(12)
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(1.2)
-                        )
-                }
-            }
-            
-            // Speaking Text with Word-by-Word Highlighting
+        let section = lecture.sections[currentSectionIndex]
+        return VStack(alignment: .leading, spacing: 16) {
+            sectionHeader(section)
+            sectionImage(section)
             VStack(alignment: .leading, spacing: 12) {
                 Text("Speaking Now:")
                     .font(.headline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.blue)
-                
+                    .foregroundColor(.purple)
                 HighlightedTextView(
-                    fullText: currentSection.script,
+                    fullText: section.script,
                     highlightedWords: highlightedWords,
                     currentText: currentText
                 )
@@ -179,34 +152,104 @@ struct LectureView: View {
             }
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-        .animation(.easeInOut(duration: 0.3), value: currentSectionIndex)
-        .animation(.easeInOut(duration: 0.2), value: highlightedWords.count)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemBackground).opacity(0.95)))
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
-    
+
+    // MARK: - Section Header & Image
+    private func sectionHeader(_ section: LectureSection) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(section.title)
+                .font(.title2.bold())
+                .foregroundColor(.primary)
+                .lineLimit(2)
+            Text("Section \(section.order)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    private func sectionImage(_ section: LectureSection) -> some View {
+        Group {
+            if let imageUrl = section.imageUrl, let url = URL(string: imageUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ZStack {
+                            Rectangle().fill(Color(.systemGray5)).frame(height: 180).cornerRadius(12)
+                            ProgressView().scaleEffect(1.2)
+                        }
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 180).cornerRadius(12)
+                    case .failure:
+                        ZStack {
+                            Rectangle().fill(Color(.systemGray5)).frame(height: 180).cornerRadius(12)
+                            Image(systemName: "photo")
+                                .font(.largeTitle)
+                                .foregroundColor(.gray)
+                        }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Audio Controls
+    private var audioControlsView: some View {
+        HStack(spacing: 16) {
+            Button(action: {
+                if isPlaying {
+                    stopLecture()
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                } else {
+                    playFullLecture()
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                        .font(.title2)
+                    Text(isPlaying ? "Stop" : "Play Lecture")
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(isPlaying ? Color.red : Color.purple)
+                .cornerRadius(25)
+                .shadow(color: (isPlaying ? Color.red : Color.purple).opacity(0.18), radius: 8, x: 0, y: 2)
+            }
+            .accessibilityLabel(isPlaying ? "Stop Lecture" : "Play Lecture")
+            .accessibilityAddTraits(.isButton)
+            if isLoadingAudio {
+                ProgressView().scaleEffect(0.8)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Error Section
+    private func errorSection(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red)
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.red)
+        }
+        .padding(16)
+        .background(Color.red.opacity(0.1))
+        .cornerRadius(12)
+    }
+
+    // MARK: - Audio Logic (same as before, but with better error handling and cleanup)
     private func playFullLecture() {
         guard !audioFiles.isEmpty else {
-            print("[Lecture][Play] ERROR: No audio files available")
+            audioError = "No audio files available."
             return
         }
-        
-        // Sort audio files in the correct order: title first, then sections in order
-        let sortedAudioFiles = sortAudioFiles(audioFiles)
-        
-        print("[Lecture][Play] ===== STARTING FULL LECTURE PLAYBACK =====")
-        print("[Lecture][Play] Total audio files: \(sortedAudioFiles.count)")
-        print("[Lecture][Play] Lecture title: \(lecture.title)")
-        print("[Lecture][Play] Lecture sections: \(lecture.sections.count)")
-        
-        for (index, audio) in sortedAudioFiles.enumerated() {
-            print("[Lecture][Play] Audio \(index + 1): type=\(audio.type.rawValue), section=\(audio.section ?? -1), filename=\(audio.filename)")
-            print("[Lecture][Play] Audio \(index + 1) text: \(audio.text.prefix(100))...")
-        }
-        
         stopLecture()
         currentAudioIndex = 0
         currentSectionIndex = 0
@@ -214,185 +257,85 @@ struct LectureView: View {
         highlightedWords = []
         currentText = ""
         isPlaying = true
-        
-        print("[Lecture][Play] State initialized - starting playback")
-        
-        // Use the sorted audio files
-        playNextAudio(sortedAudioFiles: sortedAudioFiles)
+        audioError = nil
+        playNextAudio(sortedAudioFiles: sortAudioFiles(audioFiles))
     }
-    
     private func sortAudioFiles(_ audioFiles: [AudioFile]) -> [AudioFile] {
-        print("[Lecture][Sort] Sorting \(audioFiles.count) audio files")
-        
-        let sorted = audioFiles.sorted { first, second in
-            // Title comes first
-            if first.type == .title && second.type != .title {
-                return true
-            }
-            if first.type != .title && second.type == .title {
-                return false
-            }
-            
-            // Then sort by section number
+        audioFiles.sorted { first, second in
+            if first.type == .title && second.type != .title { return true }
+            if first.type != .title && second.type == .title { return false }
             let firstSection = first.section ?? 0
             let secondSection = second.section ?? 0
-            
-            if firstSection != secondSection {
-                return firstSection < secondSection
-            }
-            
-            // Within the same section, section_title comes before section_script
-            if first.type == .sectionTitle && second.type == .sectionScript {
-                return true
-            }
-            if first.type == .sectionScript && second.type == .sectionTitle {
-                return false
-            }
-            
+            if firstSection != secondSection { return firstSection < secondSection }
+            if first.type == .sectionTitle && second.type == .sectionScript { return true }
+            if first.type == .sectionScript && second.type == .sectionTitle { return false }
             return false
         }
-        
-        print("[Lecture][Sort] Sorted order:")
-        for (index, audio) in sorted.enumerated() {
-            print("[Lecture][Sort] \(index + 1). \(audio.type.rawValue) - Section \(audio.section ?? -1)")
-        }
-        
-        return sorted
     }
-    
     private func playNextAudio(sortedAudioFiles: [AudioFile]) {
-        print("[Lecture][Next] ===== PLAY NEXT AUDIO =====")
-        print("[Lecture][Next] Current audio index: \(currentAudioIndex)")
-        print("[Lecture][Next] Total audio files: \(sortedAudioFiles.count)")
-        print("[Lecture][Next] Is playing: \(isPlaying)")
-        
         guard currentAudioIndex < sortedAudioFiles.count else {
-            print("[Lecture][Next] All audio files completed - stopping lecture")
             stopLecture()
             return
         }
-        
-        // Check if we're still supposed to be playing
-        guard isPlaying else {
-            print("[Lecture][Next] Playback was stopped, not continuing")
-            return
-        }
-        
+        guard isPlaying else { return }
         let audioFile = sortedAudioFiles[currentAudioIndex]
-        print("[Lecture][Next] Playing audio \(currentAudioIndex + 1)/\(sortedAudioFiles.count): \(audioFile.type.rawValue)")
-        print("[Lecture][Next] Audio file: \(audioFile.filename)")
-        print("[Lecture][Next] Audio URL: \(audioFile.url)")
-        
         playAudioFile(audioFile) {
-            print("[Lecture][Next] ===== AUDIO COMPLETED =====")
-            print("[Lecture][Next] Audio \(self.currentAudioIndex + 1) completed, moving to next")
-            // Move to next audio file
             self.currentAudioIndex += 1
-            
-            // Add a small delay to ensure smooth transition
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                print("[Lecture][Next] Transition delay completed, playing next audio")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 self.playNextAudio(sortedAudioFiles: sortedAudioFiles)
             }
         }
     }
-    
     private func playAudioFile(_ audioFile: AudioFile, completion: @escaping () -> Void) {
-        print("[Lecture][Audio] ===== PLAYING AUDIO FILE =====")
-        print("[Lecture][Audio] File: \(audioFile.filename)")
-        print("[Lecture][Audio] Type: \(audioFile.type.rawValue)")
-        print("[Lecture][Audio] Section: \(audioFile.section ?? -1)")
-        print("[Lecture][Audio] Text: \(audioFile.text.prefix(100))...")
-        
         guard let url = URL(string: audioFile.url) else {
-            print("[Lecture][Audio] ERROR: Invalid audio URL: \(audioFile.url)")
+            audioError = "Invalid audio URL."
             completion()
             return
         }
-        
-        print("[Lecture][Audio] Valid URL: \(audioFile.url)")
-        print("[Lecture][Audio] Setting loading state...")
-        
         isLoadingAudio = true
-        
-        // Configure audio session
+        audioError = nil
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
-            print("[Lecture][Audio] Audio session configured successfully")
         } catch {
-            print("[Lecture][Audio] ERROR configuring audio session: \(error)")
+            audioError = "Audio session error: \(error.localizedDescription)"
         }
-        
-        // Update current section based on audio file
         if let section = audioFile.section {
-            currentSectionIndex = section - 1 // Convert to 0-based index
-            print("[Lecture][Audio] Setting current section to: \(currentSectionIndex)")
+            currentSectionIndex = section - 1
         } else if audioFile.type == .title {
             currentSectionIndex = 0
-            print("[Lecture][Audio] Setting current section to 0 (title)")
         }
-        
-        // Get the text to highlight
         let textToHighlight = audioFile.text
         currentText = textToHighlight
-        print("[Lecture][Audio] Setting current text for highlighting")
-        
-        // Start word-by-word highlighting
         startWordHighlighting(for: textToHighlight)
-        
-        print("[Lecture][Audio] Starting download from URL...")
-        
-        // Download and play audio
         URLSession.shared.dataTask(with: url) { data, response, error in
             DispatchQueue.main.async {
-                print("[Lecture][Audio] ===== DOWNLOAD COMPLETED =====")
                 self.isLoadingAudio = false
-                
                 if let error = error {
-                    print("[Lecture][Audio] ERROR downloading audio: \(error)")
+                    self.audioError = "Audio download error: \(error.localizedDescription)"
                     completion()
                     return
                 }
-                
                 guard let data = data else {
-                    print("[Lecture][Audio] ERROR: No audio data received")
+                    self.audioError = "No audio data received."
                     completion()
                     return
                 }
-                
-                print("[Lecture][Audio] Audio data received: \(data.count) bytes")
-                
                 do {
-                    print("[Lecture][Audio] Creating AVAudioPlayer...")
                     self.audioPlayer = try AVAudioPlayer(data: data)
-                    
-                    let duration = self.audioPlayer?.duration ?? 0
-                    print("[Lecture][Audio] Audio duration: \(duration) seconds")
-                    
-                    // Set up delegate
-                    print("[Lecture][Audio] Setting up audio player delegate...")
-                    let delegate = AudioPlayerDelegate { 
+                    let delegate = AudioPlayerDelegate {
                         DispatchQueue.main.async {
-                            print("[Lecture][Audio] ===== DELEGATE CALLED =====")
-                            print("[Lecture][Audio] Audio finished playing: \(audioFile.filename)")
                             self.stopWordHighlighting()
                             self.stopAudioMonitoring()
                             completion()
                         }
                     }
                     self.audioPlayer?.delegate = delegate
-                    
-                    // Set up fallback timer in case delegate doesn't work
                     let estimatedDuration = self.audioPlayer?.duration ?? 5.0
-                    print("[Lecture][Audio] Setting up fallback timer for \(estimatedDuration + 1.0) seconds")
-                    
                     var completionCalled = false
                     let fallbackTimer = Timer.scheduledTimer(withTimeInterval: estimatedDuration + 1.0, repeats: false) { _ in
                         DispatchQueue.main.async {
                             if !completionCalled && self.isPlaying {
-                                print("[Lecture][Audio] ===== FALLBACK TIMER TRIGGERED =====")
-                                print("[Lecture][Audio] Fallback timer triggered - audio should have finished")
                                 completionCalled = true
                                 self.stopWordHighlighting()
                                 self.stopAudioMonitoring()
@@ -400,155 +343,88 @@ struct LectureView: View {
                             }
                         }
                     }
-                    
-                    // Start audio monitoring
-                    print("[Lecture][Audio] Starting audio monitoring...")
                     self.startAudioMonitoring(estimatedDuration: estimatedDuration) {
                         if !completionCalled {
-                            print("[Lecture][Audio] ===== AUDIO MONITORING DETECTED STUCK =====")
-                            print("[Lecture][Audio] Audio monitoring detected stuck playback")
                             completionCalled = true
                             fallbackTimer.invalidate()
                             self.stopWordHighlighting()
                             completion()
                         }
                     }
-                    
-                    // Override the delegate completion to prevent double calls
                     let originalCompletion = delegate.completion
                     delegate.completion = {
                         if !completionCalled {
-                            print("[Lecture][Audio] ===== DELEGATE COMPLETION CALLED =====")
                             completionCalled = true
                             fallbackTimer.invalidate()
                             self.stopAudioMonitoring()
                             originalCompletion()
-                        } else {
-                            print("[Lecture][Audio] WARNING: Delegate completion called but already completed")
                         }
                     }
-                    
-                    print("[Lecture][Audio] Starting audio playback...")
                     let success = self.audioPlayer?.play() ?? false
-                    if success {
-                        print("[Lecture][Audio] Audio started playing successfully")
-                        print("[Lecture][Audio] Audio player isPlaying: \(self.audioPlayer?.isPlaying == true)")
-                        print("[Lecture][Audio] Audio player currentTime: \(self.audioPlayer?.currentTime ?? 0)")
-                    } else {
-                        print("[Lecture][Audio] ERROR: Failed to start audio playback")
+                    if !success {
+                        self.audioError = "Failed to start audio playback."
                         fallbackTimer.invalidate()
                         self.stopAudioMonitoring()
                         completion()
                     }
                 } catch {
-                    print("[Lecture][Audio] ERROR creating audio player: \(error)")
+                    self.audioError = "Audio player error: \(error.localizedDescription)"
                     completion()
                 }
             }
         }.resume()
     }
-    
     private func startAudioMonitoring(estimatedDuration: TimeInterval, onStuck: @escaping () -> Void) {
-        print("[Lecture][Monitor] ===== STARTING AUDIO MONITORING =====")
-        print("[Lecture][Monitor] Estimated duration: \(estimatedDuration) seconds")
-        print("[Lecture][Monitor] Max stuck time: \(estimatedDuration + 2.0) seconds")
-        
         stopAudioMonitoring()
-        
-        let checkInterval = 1.0 // Check every second
-        let maxStuckTime = estimatedDuration + 2.0 // Allow 2 seconds extra
-        
+        let checkInterval = 1.0
+        let maxStuckTime = estimatedDuration + 2.0
         var lastPlaybackTime: TimeInterval = 0
         var stuckTime: TimeInterval = 0
-        var checkCount = 0
-        
         audioMonitorTimer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { _ in
-            checkCount += 1
             guard let player = self.audioPlayer else {
-                print("[Lecture][Monitor] Check \(checkCount): No audio player available")
                 onStuck()
                 return
             }
-            
             let currentTime = player.currentTime
             let isPlaying = player.isPlaying
-            
-            print("[Lecture][Monitor] Check \(checkCount): currentTime=\(currentTime), isPlaying=\(isPlaying), lastTime=\(lastPlaybackTime), stuckTime=\(stuckTime)")
-            
             if isPlaying && currentTime > lastPlaybackTime {
-                // Audio is progressing normally
                 lastPlaybackTime = currentTime
                 stuckTime = 0
-                print("[Lecture][Monitor] Check \(checkCount): Audio progressing normally")
             } else if isPlaying {
-                // Audio is playing but not progressing
                 stuckTime += checkInterval
-                print("[Lecture][Monitor] Check \(checkCount): Audio stuck for \(stuckTime) seconds")
                 if stuckTime >= maxStuckTime {
-                    print("[Lecture][Monitor] ===== STUCK DETECTED =====")
-                    print("[Lecture][Monitor] Audio appears to be stuck, triggering completion")
                     onStuck()
                 }
             } else {
-                // Audio is not playing
-                print("[Lecture][Monitor] Check \(checkCount): Audio not playing")
                 onStuck()
             }
         }
     }
-    
     private func stopAudioMonitoring() {
-        if audioMonitorTimer != nil {
-            print("[Lecture][Monitor] Stopping audio monitoring")
-            audioMonitorTimer?.invalidate()
-            audioMonitorTimer = nil
-        }
+        audioMonitorTimer?.invalidate()
+        audioMonitorTimer = nil
     }
-    
     private func startWordHighlighting(for text: String) {
-        print("[Lecture][Highlight] ===== STARTING WORD HIGHLIGHTING =====")
-        print("[Lecture][Highlight] Text: \(text.prefix(100))...")
-        
         let words = text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         currentWordIndex = 0
         highlightedWords = []
-        
-        print("[Lecture][Highlight] Total words: \(words.count)")
-        
-        // Calculate word duration based on audio length (estimate 150 words per minute)
-        let estimatedDuration = Double(words.count) / 2.5 // 2.5 words per second
+        let estimatedDuration = Double(words.count) / 2.5
         let wordInterval = estimatedDuration / Double(words.count)
-        
-        print("[Lecture][Highlight] Estimated duration: \(estimatedDuration) seconds")
-        print("[Lecture][Highlight] Word interval: \(wordInterval) seconds")
-        
         wordTimer = Timer.scheduledTimer(withTimeInterval: wordInterval, repeats: true) { _ in
             if self.currentWordIndex < words.count {
                 let word = words[self.currentWordIndex]
                 self.highlightedWords.append(word)
-                print("[Lecture][Highlight] Highlighted word \(self.currentWordIndex + 1)/\(words.count): '\(word)'")
                 self.currentWordIndex += 1
             } else {
-                print("[Lecture][Highlight] All words highlighted")
                 self.stopWordHighlighting()
             }
         }
     }
-    
     private func stopWordHighlighting() {
-        if wordTimer != nil {
-            print("[Lecture][Highlight] Stopping word highlighting")
-            wordTimer?.invalidate()
-            wordTimer = nil
-        }
+        wordTimer?.invalidate()
+        wordTimer = nil
     }
-    
     private func stopLecture() {
-        print("[Lecture][Stop] ===== STOPPING LECTURE =====")
-        print("[Lecture][Stop] Audio player isPlaying: \(audioPlayer?.isPlaying == true)")
-        print("[Lecture][Stop] Current audio index: \(currentAudioIndex)")
-        print("[Lecture][Stop] Is playing: \(isPlaying)")
-        
         audioPlayer?.stop()
         audioPlayer = nil
         stopWordHighlighting()
@@ -560,65 +436,49 @@ struct LectureView: View {
         currentWordIndex = 0
         highlightedWords = []
         currentText = ""
-        
-        print("[Lecture][Stop] Lecture stopped successfully")
+        audioError = nil
     }
 }
 
+// MARK: - HighlightedTextView (unchanged, but ensure accessibility)
 struct HighlightedTextView: View {
     let fullText: String
     let highlightedWords: [String]
     let currentText: String
-    
     var body: some View {
         let words = fullText.components(separatedBy: .whitespacesAndNewlines)
-        
         LazyVStack(alignment: .leading, spacing: 4) {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 let isHighlighted = highlightedWords.contains(word)
-                let isCurrent = currentText.contains(word)
-                
                 Text(word)
-                    .foregroundColor(isHighlighted ? .white : (isCurrent ? .primary : .secondary))
+                    .foregroundColor(isHighlighted ? .white : .primary)
                     .fontWeight(isHighlighted ? .bold : .regular)
                     .font(.system(size: isHighlighted ? 18 : 16))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(isHighlighted ? Color.blue : Color.clear)
+                            .fill(isHighlighted ? Color.purple : Color.clear)
                     )
                     .scaleEffect(isHighlighted ? 1.05 : 1.0)
                     .animation(.easeInOut(duration: 0.2), value: isHighlighted)
+                    .accessibilityLabel(isHighlighted ? "Speaking: \(word)" : word)
             }
         }
     }
 }
 
-// Audio Player Delegate
+// MARK: - AudioPlayerDelegate
 class AudioPlayerDelegate: NSObject, AVAudioPlayerDelegate {
     var completion: () -> Void
-    
     init(completion: @escaping () -> Void) {
         self.completion = completion
-        print("[Lecture][Delegate] AudioPlayerDelegate initialized")
     }
-    
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        print("[Lecture][Delegate] ===== DELEGATE METHOD CALLED =====")
-        print("[Lecture][Delegate] audioPlayerDidFinishPlaying called")
-        print("[Lecture][Delegate] Successfully: \(flag)")
-        print("[Lecture][Delegate] Player duration: \(player.duration)")
-        print("[Lecture][Delegate] Player current time: \(player.currentTime)")
         completion()
     }
-    
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        print("[Lecture][Delegate] ===== DECODE ERROR =====")
-        print("[Lecture][Delegate] audioPlayerDecodeErrorDidOccur called")
-        if let error = error {
-            print("[Lecture][Delegate] Error: \(error)")
-        }
+        completion()
     }
 }
 
