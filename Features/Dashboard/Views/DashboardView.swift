@@ -96,8 +96,8 @@ struct DashboardView: View {
         let calendar = Calendar.current
         return VStack(alignment: .leading, spacing: 8) {
             Text("Weekly reading progress")
-                .font(.custom("OpenDyslexic-Regular", size: 20))
-                .fontWeight(.bold)
+                .font(.system(size: 26, weight: .regular, design: .default))
+
                 .padding(.bottom, 2)
             HStack(spacing: 12) {
                 ForEach(0..<7) { offset in

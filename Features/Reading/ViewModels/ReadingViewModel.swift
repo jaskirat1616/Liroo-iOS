@@ -288,10 +288,7 @@ class FullReadingViewModel: ObservableObject {
             
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 // Try different possible keys
-                responseText = json["dialogue_response"] as? String
-                if responseText == nil {
-                    responseText = json["response"] as? String
-                }
+                responseText = json["response"] as? String
                 if responseText == nil {
                     responseText = json["message"] as? String
                 }

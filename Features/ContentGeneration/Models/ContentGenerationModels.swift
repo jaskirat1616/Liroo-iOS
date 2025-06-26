@@ -15,4 +15,65 @@ struct Chapter: Identifiable {
         self.order = order
         self.firebaseImageUrl = firebaseImageUrl
     }
+}
+
+// MARK: - Lecture Models
+struct Lecture: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let sections: [LectureSection]
+    let level: ReadingLevel
+    let imageStyle: String?
+    let createdAt: Date
+    
+    init(id: UUID = UUID(), title: String, sections: [LectureSection], level: ReadingLevel, imageStyle: String? = nil) {
+        self.id = id
+        self.title = title
+        self.sections = sections
+        self.level = level
+        self.imageStyle = imageStyle
+        self.createdAt = Date()
+    }
+}
+
+struct LectureSection: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let script: String
+    let imagePrompt: String
+    let imageUrl: String?
+    let order: Int
+    
+    init(id: UUID = UUID(), title: String, script: String, imagePrompt: String, imageUrl: String? = nil, order: Int) {
+        self.id = id
+        self.title = title
+        self.script = script
+        self.imagePrompt = imagePrompt
+        self.imageUrl = imageUrl
+        self.order = order
+    }
+}
+
+struct AudioFile: Identifiable, Codable {
+    let id: UUID
+    let type: AudioFileType
+    let text: String
+    let url: String
+    let filename: String
+    let section: Int?
+    
+    init(id: UUID = UUID(), type: AudioFileType, text: String, url: String, filename: String, section: Int? = nil) {
+        self.id = id
+        self.type = type
+        self.text = text
+        self.url = url
+        self.filename = filename
+        self.section = section
+    }
+}
+
+enum AudioFileType: String, Codable {
+    case title = "title"
+    case sectionTitle = "section_title"
+    case sectionScript = "section_script"
 } 

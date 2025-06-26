@@ -177,6 +177,11 @@ struct ContentGenerationView: View {
                 StoryView(story: story)
             }
         }
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenLecture) {
+            if let lecture = viewModel.currentLecture {
+                LectureView(lecture: lecture, audioFiles: viewModel.currentLectureAudioFiles)
+            }
+        }
         .task {
             await viewModel.refreshTodayGenerationCount()
         }
@@ -439,6 +444,50 @@ struct ContentGenerationView: View {
                             .pickerStyle(.menu)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    }
+                }
+                
+                // Lecture-specific options
+                if viewModel.selectedSummarizationTier == .lecture {
+                    VStack(spacing: 20) {
+                        Divider()
+                            .padding(.vertical, 4)
+                        
+                        // Image Style Selection for Lecture
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Image Style")
+                                .font(.system(size: 16, weight: .medium))
+                            
+                            Picker("Image Style", selection: $viewModel.selectedImageStyle) {
+                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                    Text(style.displayName).tag(style)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        
+                        // Lecture Info
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("Lecture Features")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("• Audio narration with high-quality voices")
+                                Text("• Visual illustrations for each section")
+                                Text("• Structured content breakdown")
+                                Text("• Automatic progression through sections")
+                            }
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
                     }
                 }
             }

@@ -15,8 +15,11 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var currentStory: Story?
+    @Published var currentLecture: Lecture?
+    @Published var currentLectureAudioFiles: [AudioFile] = []
     @Published var blocks: [ContentBlock] = []
     @Published var isShowingFullScreenStory = false
+    @Published var isShowingFullScreenLecture = false
     @Published var todayGenerationCount: Int = 0
     
     private let firestoreService = FirestoreService.shared
@@ -59,6 +62,8 @@ class ContentGenerationViewModel: ObservableObject {
         do {
             if selectedSummarizationTier == .story {
                 try await generateStory()
+            } else if selectedSummarizationTier == .lecture {
+                try await generateLecture()
             } else {
                 try await generateRegularContent()
             }
@@ -240,6 +245,142 @@ class ContentGenerationViewModel: ObservableObject {
             await MainActor.run { self.errorMessage = finalErrorMessage }
             // Do not re-throw here if you want generateContent to handle isLoading = false
             // throw error // Or handle completion of isLoading within this catch
+        }
+    }
+    
+    private func generateLecture() async throws {
+        print("[Lecture] Starting lecture generation process")
+        print("[Lecture] Input text length: \(inputText.count)")
+        print("[Lecture] Selected level: \(selectedLevel.rawValue)")
+        print("[Lecture] Selected image style: \(selectedImageStyle.displayName)")
+        
+        let requestBody: [String: Any] = [
+            "text": inputText,
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.displayName
+        ]
+        
+        let url = URL(string: "\(backendURL)/generate_lecture")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        print("[Lecture] Sending request to backend (/generate_lecture)")
+        
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("[Lecture] ERROR: Invalid server response (not HTTPURLResponse)")
+                throw NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+            }
+            
+            print("[Lecture] Received response with status code: \(httpResponse.statusCode)")
+            
+            guard httpResponse.statusCode == 200 else {
+                print("[Lecture] ERROR: Server returned status code \(httpResponse.statusCode)")
+                if let errorResponse = String(data: data, encoding: .utf8) {
+                    print("[Lecture] Error response from server: \(errorResponse)")
+                }
+                throw NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+            }
+            
+            print("[Lecture] Attempting to decode response")
+            do {
+                let apiResponse = try JSONDecoder().decode(LectureResponse.self, from: data)
+                print("[Lecture] Successfully decoded LectureResponse")
+            
+                if let lectureData = apiResponse.lecture, let audioFiles = apiResponse.audio_files {
+                    print("[Lecture] Successfully received lecture data from backend.")
+                    print("[Lecture] Lecture title: \(lectureData.title)")
+                    print("[Lecture] Number of sections: \(lectureData.sections.count)")
+                    print("[Lecture] Number of audio files: \(audioFiles.count)")
+                    
+                    // Convert backend lecture data to our Lecture model
+                    let sections = lectureData.sections.enumerated().map { index, section in
+                        LectureSection(
+                            id: UUID(),
+                            title: section.title,
+                            script: section.script,
+                            imagePrompt: section.image_prompt,
+                            imageUrl: section.image_url,
+                            order: index + 1
+                        )
+                    }
+                    
+                    // Convert backend audio files to our AudioFile model
+                    let convertedAudioFiles = audioFiles.map { backendAudio in
+                        AudioFile(
+                            id: UUID(),
+                            type: AudioFileType(rawValue: backendAudio.type) ?? .sectionScript,
+                            text: backendAudio.text,
+                            url: backendAudio.url,
+                            filename: backendAudio.filename,
+                            section: backendAudio.section
+                        )
+                    }
+                    
+                    let newLecture = Lecture(
+                        id: UUID(uuidString: apiResponse.lecture_id) ?? UUID(),
+                        title: lectureData.title,
+                        sections: sections,
+                        level: selectedLevel,
+                        imageStyle: selectedImageStyle.displayName
+                    )
+                    
+                    await MainActor.run {
+                        self.currentLecture = newLecture
+                        self.currentLectureAudioFiles = convertedAudioFiles
+                        self.blocks = [] // Clear regular content blocks
+                        self.isShowingFullScreenLecture = true
+                        print("[Lecture] UI updated: currentLecture set, isShowingFullScreenLecture = true")
+                    }
+                    
+                    if let currentUser = Auth.auth().currentUser {
+                        print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with Firebase save for lecture ID \(newLecture.id.uuidString)")
+                        await saveLectureToFirebase(newLecture, audioFiles: audioFiles, userId: currentUser.uid)
+                        print("[Lecture] Lecture content and audio processing completed.")
+                    } else {
+                        print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save.")
+                        throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                    }
+                } else if let errorMsg = apiResponse.error {
+                    print("[Lecture] ERROR: Backend returned error in JSON response: \(errorMsg)")
+                    throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+                } else {
+                    print("[Lecture] ERROR: No lecture or error field in decoded JSON response.")
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("[Lecture] Raw JSON that led to this (first 500 chars): \(jsonString.prefix(500))")
+                    }
+                    throw NSError(domain: "DataError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response structure from server (no lecture or error)."])
+                }
+
+            } catch let decodingError as DecodingError {
+                print("[Lecture] DECODING ERROR: Failed to decode lecture response from backend.")
+                print("[Lecture] DecodingError: \(decodingError.localizedDescription)")
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    print("[Lecture] Raw JSON response string that failed to decode (first 1000 chars): \(jsonString.prefix(1000))")
+                }
+                throw decodingError
+            }
+            
+        } catch let urlError as URLError {
+            print("[Lecture] Network URLError occurred: \(urlError.localizedDescription)")
+            print("[Lecture] Error code: \(urlError.code.rawValue)")
+            let specificMessage: String
+            switch urlError.code {
+            case .timedOut: specificMessage = "Request timed out. Please try again."
+            case .notConnectedToInternet: specificMessage = "No internet connection. Please check your connection and try again."
+            case .cannotConnectToHost, .networkConnectionLost: specificMessage = "Could not connect to the server. Please try again later."
+            default: specificMessage = "Network error: \(urlError.localizedDescription)"
+            }
+            throw NSError(domain: "NetworkError.URL", code: urlError.code.rawValue, userInfo: [NSLocalizedDescriptionKey: specificMessage])
+        } catch {
+            print("[Lecture] ERROR: Unexpected error during lecture generation process: \(error.localizedDescription)")
+            print("[Lecture] Error type: \(type(of: error))")
+            let finalErrorMessage = error.localizedDescription
+            await MainActor.run { self.errorMessage = finalErrorMessage }
         }
     }
     
@@ -593,6 +734,68 @@ class ContentGenerationViewModel: ObservableObject {
         }
     }
     
+    private func saveLectureToFirebase(_ lecture: Lecture, audioFiles: [BackendAudioFile], userId: String) async {
+        print("[Lecture][Save] Starting Firebase save process for lecture: '\(lecture.title)' (ID: \(lecture.id.uuidString))")
+        print("[Lecture][Save] User ID: \(userId)")
+        print("[Lecture][Save] Total sections to save: \(lecture.sections.count)")
+        print("[Lecture][Save] Total audio files: \(audioFiles.count)")
+        
+        let firebaseSections = lecture.sections.map { section -> FirebaseLectureSection in
+            print("[Lecture][Save] Mapping section '\(section.title)' (ID: \(section.id.uuidString)) for Firestore.")
+            print("[Lecture][Save] - ImageUrl for section: \(section.imageUrl ?? "N/A - No image URL")")
+            
+            return FirebaseLectureSection(
+                sectionId: section.id.uuidString,
+                title: section.title,
+                script: section.script,
+                imagePrompt: section.imagePrompt,
+                imageUrl: section.imageUrl,
+                order: section.order
+            )
+        }
+        
+        let firebaseAudioFiles = audioFiles.map { audioFile -> FirebaseAudioFile in
+            return FirebaseAudioFile(
+                type: audioFile.type,
+                text: audioFile.text,
+                url: audioFile.url,
+                filename: audioFile.filename,
+                section: audioFile.section
+            )
+        }
+
+        let firebaseLecture = FirebaseLecture(
+            userId: userId,
+            title: lecture.title,
+            level: lecture.level.rawValue,
+            imageStyle: lecture.imageStyle,
+            sections: firebaseSections,
+            audioFiles: firebaseAudioFiles
+        )
+        
+        do {
+            print("[Lecture][Save] Attempting to create lecture document in Firestore. Collection: 'lectures', DocumentID to be used by service: \(lecture.id.uuidString)")
+            let documentId = try await firestoreService.create(firebaseLecture, in: "lectures", documentId: lecture.id.uuidString)
+            print("[Lecture][Save] Successfully saved lecture to Firestore with document ID: \(documentId)")
+            
+            // Track lecture generation for dashboard engagement metrics
+            await MainActor.run {
+                let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
+                UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
+                print("[Engagement] Lecture generation tracked. Total: \(currentCount + 1)")
+            }
+            
+        } catch {
+            print("[Lecture][Save] ERROR: Failed to save lecture to Firestore for lecture ID \(lecture.id.uuidString).")
+            print("[Lecture][Save] Error Type: \(type(of: error))")
+            print("[Lecture][Save] Error Description: \(error.localizedDescription)")
+            print("[Lecture][Save] Full Error: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to save lecture to cloud: \(error.localizedDescription)"
+            }
+        }
+    }
+    
     private func saveContentBlocksToFirebase(topic: String, blocks: [ContentBlock], level: ReadingLevel, summarizationTier: SummarizationTier, userId: String) async {
         print("[Content][Save] Starting Firebase save process for content")
         print("[Content][Save] Topic: \(topic)")
@@ -864,7 +1067,7 @@ class ContentGenerationViewModel: ObservableObject {
         return String(firstLine.prefix(50))
     }
     
-    /// Fetches the number of content generations (stories + userGeneratedContent) for the user today.
+    /// Fetches the number of content generations (stories + userGeneratedContent + lectures) for the user today.
     private func fetchTodayGenerationCount(userId: String) async -> Int {
         let db = Firestore.firestore()
         let calendar = Calendar.current
@@ -881,6 +1084,7 @@ class ContentGenerationViewModel: ObservableObject {
                 .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
                 .getDocuments()
             total += userContentSnapshot.documents.count
+            
             // Query stories
             let storiesSnapshot = try await db.collection("stories")
                 .whereField("userId", isEqualTo: userId)
@@ -888,6 +1092,14 @@ class ContentGenerationViewModel: ObservableObject {
                 .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
                 .getDocuments()
             total += storiesSnapshot.documents.count
+            
+            // Query lectures
+            let lecturesSnapshot = try await db.collection("lectures")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
+                .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
+                .getDocuments()
+            total += lecturesSnapshot.documents.count
         } catch {
             print("[DailyLimit] Error fetching today's generation count: \(error)")
         }
@@ -919,6 +1131,7 @@ enum SummarizationTier: String, Codable, CaseIterable {
     case quickSummary = "Quick Summary"
     case detailedExplanation = "Detailed Explanation"
     case story = "Story"
+    case lecture = "Lecture"
 }
 
 enum StoryGenre: String, Codable, CaseIterable {
@@ -958,6 +1171,34 @@ struct Response: Codable {
     let story: Story?
     let blocks: [ContentBlock]?
     let error: String?
+}
+
+// MARK: - Lecture Response Models
+struct LectureResponse: Codable {
+    let lecture: BackendLecture?
+    let audio_files: [BackendAudioFile]?
+    let lecture_id: String
+    let error: String?
+}
+
+struct BackendLecture: Codable {
+    let title: String
+    let sections: [BackendLectureSection]
+}
+
+struct BackendLectureSection: Codable {
+    let title: String
+    let script: String
+    let image_prompt: String
+    let image_url: String?
+}
+
+struct BackendAudioFile: Codable {
+    let type: String
+    let text: String
+    let url: String
+    let filename: String
+    let section: Int?
 }
 
 struct Story: Identifiable, Codable {
