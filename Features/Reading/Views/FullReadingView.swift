@@ -75,7 +75,7 @@ struct FullReadingView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ?
-                    [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                    [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
                     [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
@@ -89,7 +89,7 @@ struct FullReadingView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ?
-                        [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
                         [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
@@ -293,17 +293,13 @@ struct MessageView: View {
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
 
                 } else {
-                    MarkdownRenderer.MarkdownTextView(
-                        markdownText: message.text,
-                        baseFontSize: 16,
-                        primaryTextColor: theme.primaryTextColor,
-                        secondaryTextColor: theme.secondaryTextColor,
-                        fontStyle: fontStyle
-                    )
-                    .padding(10)
-                    .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
-                    .cornerRadius(10)
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+                    Text(message.text)
+                        .font(fontStyle.getFont(size: 16))
+                        .foregroundColor(theme.primaryTextColor)
+                        .padding(10)
+                        .background(theme.backgroundColor == ReadingTheme.dark.backgroundColor ? Color(UIColor.systemGray4) : Color(UIColor.systemGray5))
+                        .cornerRadius(10)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
                 }
                 Spacer()
             }

@@ -75,7 +75,7 @@ struct StoryDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(.systemBackground).opacity(0.8))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -100,7 +100,7 @@ struct StoryDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(.systemBackground).opacity(0.8))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -138,6 +138,7 @@ struct ReadingChapterView: View {
     let secondaryTextColor: Color
     let fontStyle: ReadingFontStyle
     let onTapGesture: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     
     // MARK: - iPad Detection
     private var isIPad: Bool {
@@ -224,7 +225,7 @@ struct ReadingChapterView: View {
             }
         }
         .padding(12)
-        .background(Color(.systemBackground).opacity(0.8))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }

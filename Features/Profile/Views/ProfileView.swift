@@ -16,22 +16,52 @@ struct ProfileView: View {
                 // Top Card: Avatar, Name, Email
                 topProfileCard
                 // Edit Profile Button
-                Button(action: { isShowingEditView = true }) {
-                    Text("Edit Profile")
-                        .fontWeight(.semibold)
+                HStack(spacing: 12) {
+                    Button(action: { isShowingEditView = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.purple)
+                            Text("Edit Profile")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.purple)
+                        }
                         .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.customPrimary)
-                .padding(.horizontal)
-                // Settings Button
-                NavigationLink(destination: SettingsView()) {
-                    Text("Settings")
-                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.purple.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                    }
+                    
+                    // Settings Button
+                    NavigationLink(destination: SettingsView()) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.purple)
+                            Text("Settings")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.purple)
+                        }
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.purple.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                    }
                 }
-                .buttonStyle(.bordered)
-                .tint(.customPrimary)
                 .padding(.horizontal)
                 // About Card
                 if let profile = viewModel.profile {
@@ -53,7 +83,7 @@ struct ProfileView: View {
                    LinearGradient(
                        gradient: Gradient(
                            colors: colorScheme == .dark ?
-                           [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                           [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
                            [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                        ),
                        startPoint: .top,
@@ -92,7 +122,7 @@ struct ProfileView: View {
                         PhotosPicker(selection: $selectedImage, matching: .images, photoLibrary: .shared()) {
                             Image(systemName: "camera.fill")
                                 .padding(8)
-                                .background(Color.customPrimary.opacity(0.8))
+                                .background(Color.purple.opacity(0.8))
                                 .clipShape(Circle())
                                 .foregroundColor(.white)
                                 .shadow(radius: 2)
@@ -116,8 +146,19 @@ struct ProfileView: View {
                                 }
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.customPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.purple.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                        .foregroundColor(.purple)
+                        .font(.system(size: 16, weight: .semibold))
                     }
                     Text(profile.name)
                         .font(.title2).fontWeight(.bold)
@@ -143,7 +184,7 @@ struct ProfileView: View {
                         image.resizable().aspectRatio(contentMode: .fill)
                             .frame(width: 90, height: 90)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.customPrimary, lineWidth: 3))
+                            .overlay(Circle().stroke(Color.purple, lineWidth: 3))
                     case .failure:
                         Image(systemName: "person.crop.circle.fill")
                             .resizable().frame(width: 90, height: 90)
@@ -199,7 +240,7 @@ struct ProfileView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
     }
     
@@ -231,39 +272,37 @@ struct ProfileView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
     }
     
     // MARK: - Account Details Card
     private func accountDetailsCard(profile: ProfileViewModel.UserProfile) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("Account Details").font(.headline)
             Divider()
             HStack {
                 Text("User ID:").fontWeight(.semibold)
                 Spacer()
                 Text(profile.userId).lineLimit(1).truncationMode(.tail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             if let createdAt = profile.createdAt {
                 HStack {
                     Text("Created:").fontWeight(.semibold)
                     Spacer()
                     Text(createdAt, style: .date)
-                }
-            }
-            if let updatedAt = profile.updatedAt {
-                HStack {
-                    Text("Updated:").fontWeight(.semibold)
-                    Spacer()
-                    Text(updatedAt, style: .date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         }
-        .padding()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(12)
     }
     
     // MARK: - Error Card

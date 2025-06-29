@@ -25,8 +25,8 @@ struct ContentGenerationView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ? 
-                        [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
-                        [.cyan.opacity(0.2), .white, .white]
+                        [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
                 endPoint: .bottom
@@ -216,7 +216,7 @@ struct ContentGenerationView: View {
                     ))
                     .frame(minHeight: 160)
                     .padding(12)
-                    .background(Color.clear)
+                    .background(Color(.systemGray6))
                     .cornerRadius(12)
                     .overlay(
                         Group {
@@ -244,7 +244,7 @@ struct ContentGenerationView: View {
                         .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemBackground))
+                                .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
                         )
                         .padding(.trailing, 12)
                         .padding(.bottom, 12)
@@ -320,7 +320,7 @@ struct ContentGenerationView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -363,7 +363,7 @@ struct ContentGenerationView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -471,7 +471,7 @@ struct ContentGenerationView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Image(systemName: "info.circle.fill")
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(.purple)
                                 Text("Lecture Features")
                                     .font(.system(size: 14, weight: .medium))
                             }
@@ -486,14 +486,14 @@ struct ContentGenerationView: View {
                             .foregroundColor(.secondary)
                         }
                         .padding()
-                        .background(Color.blue.opacity(0.1))
+                        .background(Color.purple.opacity(0.1))
                         .cornerRadius(8)
                     }
                 }
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -505,23 +505,38 @@ struct ContentGenerationView: View {
                 await viewModel.generateContent()
             }
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
                 if viewModel.isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
                         .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.purple)
                 }
+                
                 Text(viewModel.isLoading ? "Generating..." : "Generate Content")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.purple)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.accentColor)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.purple.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                    )
+            )
         }
         .disabled(viewModel.isLoading || viewModel.todayGenerationCount >= 8)
-        .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.6 : 1.0)
+        .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.5 : 1.0)
+        .scaleEffect(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.98 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.todayGenerationCount)
     }
     
     // MARK: - Error Section
@@ -550,7 +565,7 @@ struct ContentGenerationView: View {
             }
         }
         .padding(20)
-        .background(Color(.systemBackground))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -593,8 +608,8 @@ struct StoryView: View {
                 LinearGradient(
                     gradient: Gradient(
                         colors: colorScheme == .dark ? 
-                            [.cyan.opacity(0.1), Color(.systemBackground), Color(.systemBackground)] :
-                            [.cyan.opacity(0.2), .white, .white]
+                            [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
+                            [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                     ),
                     startPoint: .top,
                     endPoint: .bottom

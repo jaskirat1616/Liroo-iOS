@@ -27,7 +27,7 @@ struct SplashScreenView: View {
     @State private var player: AVPlayer?
     @EnvironmentObject private var authViewModel: AuthViewModel
     
-    private let splashDuration: Double = 10.0
+    private let splashDuration: Double = 5.0
     private let fadeOutDuration: Double = 0.75
     
     @State private var videoOpacity: Double = 1.0

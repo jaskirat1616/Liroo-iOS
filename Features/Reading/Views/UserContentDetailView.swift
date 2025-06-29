@@ -3,6 +3,7 @@ import SwiftUI
 // Sub-view to display FirebaseUserContent details
 struct UserContentDetailView: View {
     @EnvironmentObject var viewModel: FullReadingViewModel
+    @Environment(\.colorScheme) private var colorScheme
     let userContent: FirebaseUserContent
     let baseFontSize: Double
     let primaryTextColor: Color
@@ -75,7 +76,7 @@ struct UserContentDetailView: View {
             }
         }
         .padding(12)
-        .background(Color(.systemBackground).opacity(0.8))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
@@ -113,6 +114,7 @@ struct UserContentBlockView: View {
     let secondaryTextColor: Color
     let fontStyle: ReadingFontStyle
     let onTapGesture: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     
     // MARK: - iPad Detection
     private var isIPad: Bool {
@@ -209,7 +211,7 @@ struct UserContentBlockView: View {
             }
         }
         .padding(8)
-        .background(Color(.systemBackground).opacity(0.8))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }

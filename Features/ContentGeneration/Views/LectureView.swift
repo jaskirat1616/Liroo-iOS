@@ -77,6 +77,14 @@ struct LectureView: View {
             }
 
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.purple)
+                }
+            }
             .onDisappear {
                 stopLecture()
             }
@@ -278,8 +286,8 @@ struct LectureView: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.1))
-                            .foregroundColor(.blue)
+                            .background(Color.purple.opacity(0.1))
+                            .foregroundColor(.purple)
                             .cornerRadius(8)
                     }
                 }
@@ -399,12 +407,12 @@ struct LectureView: View {
                         Text(isExploringMode ? "Audio Mode" : "Explore Mode")
                     }
                     .font(.subheadline.weight(.medium))
-                    .foregroundColor(isExploringMode ? .purple : .blue)
+                    .foregroundColor(isExploringMode ? .purple : .purple)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill((isExploringMode ? Color.purple : Color.blue).opacity(0.1))
+                            .fill((isExploringMode ? Color.purple : Color.purple).opacity(0.1))
                     )
                 }
                 

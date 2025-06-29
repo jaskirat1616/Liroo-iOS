@@ -30,7 +30,7 @@ struct DashboardView: View {
             LinearGradient(
                 gradient: Gradient(
                     colors: colorScheme == .dark ?
-                    [.cyan.opacity(0.1), .cyan.opacity(0.05), Color(.systemBackground), Color(.systemBackground)] :
+                    [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
                     [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
                 ),
                 startPoint: .top,
@@ -81,7 +81,7 @@ struct DashboardView: View {
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape")
                     .font(.title2)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.purple)
                     .padding(8)
             }
             .accessibilityLabel("Settings")
@@ -95,7 +95,7 @@ struct DashboardView: View {
         let weekStart = startOfCurrentWeek()
         let calendar = Calendar.current
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Weekly reading progress")
+            Text("Progress")
                 .font(.system(size: 26, weight: .regular, design: .default))
 
                 .padding(.bottom, 2)
@@ -112,13 +112,13 @@ struct DashboardView: View {
                             .frame(width: 40, height: 40)
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(progress >= 1.0 ? Color.green : Color.customPrimary, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .stroke(progress >= 1.0 ? Color.purple : Color.customPrimary, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                             .frame(width: 40, height: 40)
                         Text("\(Int(totalDuration/60))")
                             .font(.caption)
                             .fontWeight(.bold)
-                            .foregroundColor(progress >= 1.0 ? .green : .customPrimary)
+                            .foregroundColor(progress >= 1.0 ? .purple : .customPrimary)
                     }
                 }
             }
@@ -134,7 +134,7 @@ struct DashboardView: View {
         return calendar.date(from: components) ?? today
     }
     
-    // MARK: - Dashboard Grid Section (Compact 2x2, high-value metrics)
+    // MARK: - Dashboard Grid Section (Modern Minimalistic)
     private var dashboardGridSection: some View {
         let metrics: [(title: String, value: String, icon: String, color: Color)] = [
             ("Current Streak", "\(viewModel.overallStats?.currentStreakInDays ?? 0)", "flame.fill", .orange),
@@ -142,79 +142,48 @@ struct DashboardView: View {
             ("Lectures", viewModel.totalLecturesDisplay, "mic.fill", .purple),
             ("Total Content", viewModel.totalContentDisplay, "books.vertical.fill", .indigo)
         ]
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
-        return LazyVGrid(columns: columns, spacing: 8) {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+        return LazyVGrid(columns: columns, spacing: 16) {
             ForEach(0..<metrics.count, id: \.self) { i in
-                VStack(spacing: 6) {
+                VStack(spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray5))
-                            .frame(height: 60)
+                        Circle()
+                            .fill(metrics[i].color.opacity(0.12))
+                            .frame(width: 44, height: 44)
                         Image(systemName: metrics[i].icon)
-                            .font(.system(size: 28))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(metrics[i].color)
                     }
                     Text(metrics[i].value)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.primary)
                     Text(metrics[i].title)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(6)
-                .background(Color(.systemGray6))
-                .cornerRadius(14)
+                .padding(.vertical, 20)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+                        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                )
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 8)
     }
     
-    // MARK: - Challenges Section (Detailed List)
+    // MARK: - Challenges Section (Modern Minimalistic)
     private var streaksSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading) {
             Text("Challenges")
                 .font(.title2)
-                .fontWeight(.regular)
+                .fontWeight(.semibold)
                 .padding(.top, 8)
             if let stats = viewModel.challengeStats {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading) {
                     ForEach(sortedChallenges(stats.challenges)) { challenge in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Image(systemName: challenge.isCompleted ? "checkmark.circle.fill" : (challenge.isLocked ? "lock.fill" : "play.circle.fill"))
-                                    .foregroundColor(challenge.isCompleted ? .green : (challenge.isLocked ? .gray : .customPrimary))
-                                Text(challenge.displayName)
-                                    .font(.subheadline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                if challenge.isCompleted, challenge.points > 0 {
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "star.fill").foregroundColor(.yellow).font(.caption)
-                                        Text("+\(challenge.points)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                            Text(challenge.description)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
-                            if challenge.isInProgress {
-                                ProgressView(value: challenge.progressPercentage)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: Color.customPrimary))
-                                    .frame(height: 4)
-                                Text("\(challenge.currentProgress)/\(challenge.targetProgress)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
+                        ChallengeRow(challenge: challenge)
                     }
                     if stats.challenges.isEmpty {
                         Text("No challenges available")
@@ -223,13 +192,13 @@ struct DashboardView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(.systemGray5))
-                .cornerRadius(16)
+                .padding(0)
+                .background(Color.clear)
             } else {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemGray5))
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
                     .frame(height: 120)
+                    .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
             }
         }
         .padding(.bottom, 4)
@@ -593,75 +562,48 @@ struct DashboardView: View {
         .cornerRadius(14)
     }
     
-    // MARK: - Enhanced Challenge Row Component
+    // MARK: - Enhanced Challenge Row Component (Modern Minimalistic)
     private func ChallengeRow(challenge: Challenge) -> some View {
-        HStack(spacing: 12) {
-            // Icon with Level Badge
+        HStack() {
             ZStack {
+                Circle()
+                    .fill(Color(challenge.iconColor).opacity(0.12))
+                    .frame(width: 38, height: 38)
                 Image(systemName: challenge.iconName)
-                    .font(.title2)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(Color(challenge.iconColor))
-                    .frame(width: 32, height: 32)
-                
-                if challenge.level != .bronze {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Text(challenge.level.name.prefix(1))
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(width: 12, height: 12)
-                                .background(levelColor(for: challenge.level))
-                                .clipShape(Circle())
-                        }
-                    }
-                    .frame(width: 32, height: 32)
-                }
             }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(challenge.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
                 Text(challenge.description)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
-                
-                // Progress Bar
                 if challenge.isInProgress {
                     ProgressView(value: challenge.progressPercentage)
                         .progressViewStyle(LinearProgressViewStyle(tint: Color(challenge.iconColor)))
                         .frame(height: 4)
-                    
                     Text("\(challenge.currentProgress)/\(challenge.targetProgress)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
-                // Frequency Badge
                 if challenge.frequency != .oneTime {
                     Text(challenge.frequency.rawValue)
                         .font(.caption2)
                         .foregroundColor(.customPrimary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.customPrimary.opacity(0.1))
+                        .background(Color.customPrimary.opacity(0.08))
                         .cornerRadius(4)
                 }
             }
-            
             Spacer()
-            
-            // Status Badge with Points
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 if challenge.isCompleted {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(.purple)
                         .font(.title3)
                 } else if challenge.isInProgress {
                     Image(systemName: "play.circle.fill")
@@ -672,27 +614,25 @@ struct DashboardView: View {
                         .foregroundColor(.gray)
                         .font(.title3)
                 }
-                
                 if let reward = challenge.reward {
                     Text(reward)
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
                 if challenge.points > 0 {
                     Text("+\(challenge.points)")
                         .font(.caption2)
                         .fontWeight(.semibold)
-                        .foregroundColor(.green)
+                        .foregroundColor(.purple)
                 }
             }
         }
-        .padding(12)
-        .background(Color(.systemBackground))
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(.systemGray4), lineWidth: 1)
+        .padding(.vertical, 18)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+                .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
         )
     }
     
@@ -716,7 +656,7 @@ struct DashboardView: View {
                 Text(challenge.displayName)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundColor(.green)
+                    .foregroundColor(.purple)
                 
                 let timeInterval = challenge.completedDate?.timeIntervalSinceNow ?? 0
                 let daysAgo = Int(abs(timeInterval / 86400)) // Convert to days
@@ -738,13 +678,13 @@ struct DashboardView: View {
             
             VStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(.purple)
                     .font(.title3)
                 
                 Text("+\(challenge.points)")
                     .font(.caption2)
                     .fontWeight(.bold)
-                    .foregroundColor(.green)
+                    .foregroundColor(.purple)
                 
                 if let reward = challenge.reward {
                     Text(reward)
@@ -754,11 +694,11 @@ struct DashboardView: View {
             }
         }
         .padding(12)
-        .background(Color.green.opacity(0.05))
+        .background(Color.purple.opacity(0.05))
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                .stroke(Color.purple.opacity(0.3), lineWidth: 1)
         )
     }
     
@@ -855,7 +795,7 @@ struct DashboardView: View {
                 GridItem(.flexible())
             ], spacing: 16) {
                 StatCard(title: "Total Time", value: viewModel.totalReadingTimeDisplay, iconName: "timer", iconColor: .customPrimary)
-                StatCard(title: "Words Read", value: viewModel.totalWordsReadDisplay, iconName: "text.book.closed.fill", iconColor: .green)
+                StatCard(title: "Words Read", value: viewModel.totalWordsReadDisplay, iconName: "text.book.closed.fill", iconColor: .purple)
                 StatCard(title: "Books Read", value: viewModel.totalBooksReadDisplay, iconName: "books.vertical.fill", iconColor: .indigo)
                 StatCard(title: "Active Days This Month", value: "\(activeDaysThisMonth())", iconName: "calendar", iconColor: .orange)
             }
@@ -1039,10 +979,10 @@ struct RecentlyReadRow: View {
                         Text("\(Int(item.progress * 100))%")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundColor(.green)
+                            .foregroundColor(.purple)
                         
                         ProgressView(value: item.progress)
-                            .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                            .progressViewStyle(LinearProgressViewStyle(tint: .purple))
                             .frame(width: 40, height: 2)
                     }
                 }

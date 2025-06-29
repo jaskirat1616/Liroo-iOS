@@ -12,6 +12,7 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
 struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
     @State private var selectedFilter: HistoryFilter = .all
+    @Environment(\.colorScheme) private var colorScheme
 
     var filteredItems: [UserHistoryEntry] {
         switch selectedFilter {
@@ -27,61 +28,78 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                ProgressView("Loading History...")
-            } else if let errorMessage = viewModel.errorMessage {
-                VStack {
-                    Text("Error")
-                        .font(.headline)
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                    Button("Retry") {
-                        viewModel.fetchHistory()
-                    }
-                    .padding(.top)
-                }
-            } else if viewModel.historyItems.isEmpty {
-                Text("No history found.")
-                    .foregroundColor(.secondary)
-            } else {
-                VStack(spacing: 0) {
-                    // Segmented control for filtering
-                    Picker("Filter", selection: $selectedFilter) {
-                        ForEach(HistoryFilter.allCases) { filter in
-                            Text(filter.rawValue).tag(filter)
+        ZStack {
+            // Background gradient matching other screens
+            LinearGradient(
+                gradient: Gradient(
+                    colors: colorScheme == .dark ?
+                    [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
+                    [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            
+            Group {
+                if viewModel.isLoading {
+                    ProgressView("Loading History...")
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack {
+                        Text("Error")
+                            .font(.headline)
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                        Button("Retry") {
+                            viewModel.fetchHistory()
                         }
+                        .padding(.top)
                     }
-                    .pickerStyle(.segmented)
-                    .padding([.horizontal, .top])
-
-                    if filteredItems.isEmpty {
-                        Text("No \(selectedFilter.rawValue.lowercased()) found.")
-                            .foregroundColor(.secondary)
-                            .padding()
-                    } else {
-                        List {
-                            ForEach(filteredItems) { item in
-                                if item.type == .lecture {
-                                    NavigationLink(destination: LectureDestinationView(
-                                        lectureID: item.originalDocumentID,
-                                        lectureTitle: item.title
-                                    )) {
-                                        LectureHistoryRow(item: item)
-                                    }
-                                } else {
-                                    NavigationLink(destination: FullReadingView(
-                                        itemID: item.originalDocumentID,
-                                        collectionName: item.originalCollectionName,
-                                        itemTitle: item.title
-                                    )) {
-                                        HistoryRow(item: item)
-                                    }
-                                }
+                } else if viewModel.historyItems.isEmpty {
+                    Text("No history found.")
+                        .foregroundColor(.secondary)
+                } else {
+                    VStack(spacing: 0) {
+                        // Segmented control for filtering
+                        Picker("Filter", selection: $selectedFilter) {
+                            ForEach(HistoryFilter.allCases) { filter in
+                                Text(filter.rawValue).tag(filter)
                             }
                         }
-                        .listStyle(PlainListStyle())
-                        .scrollContentBackground(.hidden)
+                        .pickerStyle(.segmented)
+                        .padding([.horizontal, .top])
+                        .environment(\.layoutDirection, .leftToRight)
+
+                        if filteredItems.isEmpty {
+                            Text("No \(selectedFilter.rawValue.lowercased()) found.")
+                                .foregroundColor(.secondary)
+                                .padding()
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(filteredItems) { item in
+                                        if item.type == .lecture {
+                                            NavigationLink(destination: LectureDestinationView(
+                                                lectureID: item.originalDocumentID,
+                                                lectureTitle: item.title
+                                            )) {
+                                                LectureHistoryRow(item: item)
+                                            }
+                                        } else {
+                                            NavigationLink(destination: FullReadingView(
+                                                itemID: item.originalDocumentID,
+                                                collectionName: item.originalCollectionName,
+                                                itemTitle: item.title
+                                            )) {
+                                                HistoryRow(item: item)
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+                            }
+                        }
                     }
                 }
             }
@@ -102,50 +120,90 @@ struct HistoryView: View {
     // Polished lecture row
     private struct LectureHistoryRow: View {
         let item: UserHistoryEntry
+        @Environment(\.colorScheme) private var colorScheme
+        
         var body: some View {
-            HStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(Color.purple.opacity(0.15))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "mic.fill")
-                        .font(.title2)
-                        .foregroundColor(.purple)
-                }
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
                     Text(item.title)
                         .font(.headline)
                         .foregroundColor(.primary)
                         .lineLimit(2)
-                    Text("Lecture • \(item.date, style: .date)")
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Text(item.date, style: .date)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.gray.opacity(0.5))
+                
+                HStack {
+                    Text("Lecture")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(4)
+                        .multilineTextAlignment(.leading)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.gray.opacity(0.5))
+                        .font(.caption)
+                }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
         }
     }
 
     // Existing row for other types
     private struct HistoryRow: View {
         let item: UserHistoryEntry
+        @Environment(\.colorScheme) private var colorScheme
+        
         var body: some View {
-            HStack {
-                VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
                     Text(item.title)
                         .font(.headline)
-                    Text("\(item.type.rawValue) - \(item.date, style: .date)")
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Text(item.date, style: .date)
                         .font(.caption)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
-                Spacer()
-                Image(systemName: iconName(for: item.type))
-                    .foregroundColor(iconColor(for: item.type))
+                
+                HStack {
+                    Text(item.type.rawValue)
+                        .font(.caption)
+                        .foregroundColor(iconColor(for: item.type))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(iconColor(for: item.type).opacity(0.1))
+                        .cornerRadius(4)
+                        .multilineTextAlignment(.leading)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.gray.opacity(0.5))
+                        .font(.caption)
+                }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
         }
         private func iconName(for type: UserHistoryEntryType) -> String {
             switch type {
@@ -162,7 +220,7 @@ struct HistoryView: View {
             case .story:
                 return .orange
             case .generatedContent:
-                return .customPrimary
+                return .purple
             case .lecture:
                 return .purple
             }
