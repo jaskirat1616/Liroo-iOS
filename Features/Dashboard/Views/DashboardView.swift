@@ -999,93 +999,49 @@ struct RecentlyReadRow: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Title and type icon
-            HStack(spacing: 6) {
-                Image(systemName: item.type.iconName)
-                    .foregroundColor(item.type.color)
-                    .font(.caption)
-                
-                Text(item.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                
-                Spacer()
-            }
-            
-            // Author (if available)
+            Text(item.title)
+                .font(.body)
+                .fontWeight(.semibold)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            // Chip for type
+            Text(item.type.rawValue)
+                .font(.caption2)
+                .foregroundColor(.customPrimary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.customPrimary.opacity(0.08))
+                .cornerRadius(4)
             if let author = item.author {
                 Text(author)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
-            
-            // Lecture-specific info (compact layout)
-            if item.type == .lecture {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        if let sectionCount = item.sectionCount {
-                            Text("\(sectionCount) sections")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        if let duration = item.duration {
-                            Text(formatTimeInterval(duration))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    if let level = item.level {
-                        Text(level)
-                            .font(.caption2)
-                            .foregroundColor(.purple)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.purple.opacity(0.1))
-                            .cornerRadius(3)
-                    }
+            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                if item.type == .lecture {
+                    Text("Complete")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                        .fontWeight(.medium)
+                } else {
+                    Text("\(Int(item.progress * 100))%")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.purple)
+                    ProgressView(value: item.progress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: .purple))
+                        .frame(width: 50, height: 2)
                 }
-            }
-            
-            // Bottom row: date and status
-            HStack {
+                Spacer()
                 Text(item.lastReadDate, style: .relative)
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                if item.type == .lecture {
-                    // For lectures, show completion status
-                    HStack(spacing: 2) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .font(.caption2)
-                        Text("Complete")
-                            .font(.caption2)
-                            .foregroundColor(.green)
-                            .fontWeight(.medium)
-                    }
-                } else {
-                    // For books/stories, show progress
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(item.progress * 100))%")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.purple)
-                        
-                        ProgressView(value: item.progress)
-                            .progressViewStyle(LinearProgressViewStyle(tint: .purple))
-                            .frame(width: 40, height: 2)
-                    }
-                }
             }
         }
-        .padding(8)
+        .padding(10)
+        .frame(width: 180, height: 90, alignment: .leading)
         .background(Color(.systemGray6))
         .cornerRadius(10)
     }
