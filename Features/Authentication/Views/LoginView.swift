@@ -101,8 +101,11 @@ struct LoginView: View {
                             }
                         }
                         .padding(12)
-                        .background(Color(.systemBackground).opacity(0.95))
-                        .cornerRadius(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+                                .shadow(color: Color.black.opacity(0.06), radius: 5, x: 0, y: 2)
+                        )
                         .padding(.horizontal)
                         
                         HStack {
