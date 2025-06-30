@@ -9,11 +9,16 @@ struct SignupView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var interestedTopicsString = ""
     @State private var isStudent = false
-    @State private var additionalInfo = ""
+    @State private var selectedTopics: Set<String> = []
     @State private var showError = false
     @State private var errorMessage = ""
+    
+    // Streamlined topics - focused on most popular/accessible
+    private let availableTopics = [
+        "Science", "History", "Technology", "Art", "Literature",
+        "Health", "Business", "Education", "Travel", "Music"
+    ]
     
     var body: some View {
         NavigationStack {
@@ -30,10 +35,10 @@ struct SignupView: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
-                        Spacer(minLength: 40)
+                    VStack(spacing: 20) {
+                        Spacer(minLength: 30)
                         
-                        VStack(spacing: 16) {
+                        VStack(spacing: 12) {
                             Text("Sign up")
                                 .font(.title)
                                 .fontWeight(.bold)
@@ -41,10 +46,11 @@ struct SignupView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.bottom, 24)
+                        .padding(.bottom, 20)
                         
-                        VStack(spacing: 18) {
-                            VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 16) {
+                            // Name Field
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text("Full Name")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
@@ -56,7 +62,8 @@ struct SignupView: View {
                                     .cornerRadius(12)
                             }
                             
-                            VStack(alignment: .leading, spacing: 8) {
+                            // Email Field
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text("Email")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
@@ -69,7 +76,8 @@ struct SignupView: View {
                                     .cornerRadius(12)
                             }
                             
-                            VStack(alignment: .leading, spacing: 8) {
+                            // Password Fields
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text("Password")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
@@ -80,7 +88,7 @@ struct SignupView: View {
                                     .cornerRadius(12)
                             }
                             
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text("Confirm Password")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
@@ -91,41 +99,56 @@ struct SignupView: View {
                                     .cornerRadius(12)
                             }
                             
+                            // Streamlined Topics Section
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Topics you're interested in (comma-separated)")
+                                Text("What interests you? (Optional)")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
-                                TextField("e.g., history, science, art", text: $interestedTopicsString)
-                                    .autocapitalization(.none)
-                                    .padding()
-                                    .background(Color(.secondarySystemBackground))
-                                    .cornerRadius(12)
+                                
+                                // Flexible flowing layout instead of rigid grid
+                                FlowLayout(spacing: 8) {
+                                    ForEach(availableTopics, id: \.self) { topic in
+                                        TopicChip(
+                                            title: topic,
+                                            isSelected: selectedTopics.contains(topic),
+                                            onTap: {
+                                                if selectedTopics.contains(topic) {
+                                                    selectedTopics.remove(topic)
+                                                } else {
+                                                    selectedTopics.insert(topic)
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                
+                                if !selectedTopics.isEmpty {
+                                    HStack {
+                                        Text("\(selectedTopics.count) selected")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        Button("Clear") {
+                                            selectedTopics.removeAll()
+                                        }
+                                        .font(.caption)
+                                        .foregroundColor(.customPrimary)
+                                    }
+                                    .padding(.top, 2)
+                                }
                             }
                             
-                            Toggle("Are you a student?", isOn: $isStudent)
+                            // Student Toggle
+                            Toggle("I'm a student", isOn: $isStudent)
                                 .padding(.horizontal, 4)
-                                .padding(.vertical, 8)
-                            
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("A little about yourself (Optional)")
-                                    .font(.footnote)
-                                    .foregroundColor(.secondary)
-                                TextEditor(text: $additionalInfo)
-                                    .frame(height: 80)
-                                    .padding(4)
-                                    .background(Color(.secondarySystemBackground))
-                                    .cornerRadius(12)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(Color.gray.opacity(0.15), lineWidth: 1)
-                                    )
-                            }
+                                .padding(.vertical, 6)
                         }
                         .padding(12)
                         .background(Color(.systemBackground).opacity(0.95))
                         .cornerRadius(20)
                         .padding(.horizontal)
                         
+                        // Sign Up Button
                         Button(action: signUp) {
                             if authViewModel.isLoading {
                                 ProgressView()
@@ -143,6 +166,7 @@ struct SignupView: View {
                         .padding(.horizontal)
                         .disabled(authViewModel.isLoading)
                         
+                        // Sign In Link
                         HStack {
                             Text("Already have an account?")
                                 .foregroundColor(.secondary)
@@ -152,9 +176,9 @@ struct SignupView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.customPrimary)
                         }
-                        .padding(.top, 16)
+                        .padding(.top, 12)
                         
-                        Spacer(minLength: 40)
+                        Spacer(minLength: 30)
                     }
                 }
             }
@@ -197,9 +221,7 @@ struct SignupView: View {
         
         Task {
             do {
-                let topicsArray = interestedTopicsString.split(separator: ",")
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                let topicsArray = Array(selectedTopics)
 
                 try await authViewModel.signUp(
                     email: email,
@@ -207,7 +229,7 @@ struct SignupView: View {
                     name: name,
                     interestedTopics: topicsArray.isEmpty ? nil : topicsArray,
                     isStudent: isStudent,
-                    additionalInfo: additionalInfo.isEmpty ? nil : additionalInfo
+                    additionalInfo: nil
                 )
                 dismiss()
             } catch {
@@ -218,7 +240,139 @@ struct SignupView: View {
     }
 }
 
+// MARK: - Streamlined Topic Chip Component
+struct TopicChip: View {
+    let title: String
+    let isSelected: Bool
+    let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    
+    // Very light, subtle color palette for selected chips
+    private var chipColor: Color {
+        let colors: [Color] = [
+            Color(red: 0.95, green: 0.85, blue: 0.9), // Very light pink
+            Color(red: 0.85, green: 0.9, blue: 0.95), // Very light blue
+            Color(red: 0.9, green: 0.95, blue: 0.85), // Very light green
+            Color(red: 0.95, green: 0.9, blue: 0.85), // Very light orange
+            Color(red: 0.9, green: 0.85, blue: 0.95), // Very light purple
+            Color(red: 0.95, green: 0.85, blue: 0.85), // Very light coral
+            Color(red: 0.85, green: 0.95, blue: 0.9), // Very light mint
+            Color(red: 0.95, green: 0.95, blue: 0.85), // Very light yellow
+            Color(red: 0.9, green: 0.9, blue: 0.95), // Very light lavender
+            Color(red: 0.95, green: 0.85, blue: 0.95)  // Very light magenta
+        ]
+        
+        // Use the topic name to consistently assign colors
+        let hash = abs(title.hashValue)
+        return colors[hash % colors.count]
+    }
+    
+    private var textColor: Color {
+        if isSelected {
+            // Slightly darker text for better contrast on very light backgrounds
+            return Color(red: 0.3, green: 0.3, blue: 0.4)
+        } else {
+            return .primary
+        }
+    }
+    
+    var body: some View {
+        Button(action: onTap) {
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(minWidth: 80, minHeight: 32) // Fixed minimum size
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(isSelected ? chipColor : Color(.secondarySystemBackground))
+                )
+                .foregroundColor(textColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            isSelected ? chipColor.opacity(0.4) : Color.gray.opacity(0.2),
+                            lineWidth: isSelected ? 1.5 : 0.5
+                        )
+                )
+                .scaleEffect(isSelected ? 1.02 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isSelected)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 #Preview {
     SignupView()
         .environmentObject(AuthViewModel())
+}
+
+// MARK: - FlowLayout Component
+struct FlowLayout: Layout {
+    let spacing: CGFloat
+    
+    init(spacing: CGFloat = 8) {
+        self.spacing = spacing
+    }
+    
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = FlowResult(
+            in: proposal.replacingUnspecifiedDimensions().width,
+            subviews: subviews,
+            spacing: spacing
+        )
+        return result.size
+    }
+    
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = FlowResult(
+            in: bounds.width,
+            subviews: subviews,
+            spacing: spacing
+        )
+        
+        for (index, subview) in subviews.enumerated() {
+            let point = result.positions[index]
+            subview.place(at: CGPoint(x: point.x + bounds.minX, y: point.y + bounds.minY), proposal: .unspecified)
+        }
+    }
+}
+
+// MARK: - FlowResult Helper
+struct FlowResult {
+    let positions: [CGPoint]
+    let size: CGSize
+    
+    init(in maxWidth: CGFloat, subviews: LayoutSubviews, spacing: CGFloat) {
+        var positions: [CGPoint] = []
+        var currentPosition = CGPoint.zero
+        var lineHeight: CGFloat = 0
+        var maxWidthUsed: CGFloat = 0
+        
+        for subview in subviews {
+            let subviewSize = subview.sizeThatFits(.unspecified)
+            
+            // Check if this subview would exceed the max width
+            if currentPosition.x + subviewSize.width > maxWidth && currentPosition.x > 0 {
+                // Move to next line
+                currentPosition.x = 0
+                currentPosition.y += lineHeight + spacing
+                lineHeight = 0
+            }
+            
+            positions.append(currentPosition)
+            
+            // Update position for next subview
+            currentPosition.x += subviewSize.width + spacing
+            lineHeight = max(lineHeight, subviewSize.height)
+            maxWidthUsed = max(maxWidthUsed, currentPosition.x - spacing)
+        }
+        
+        self.positions = positions
+        self.size = CGSize(
+            width: maxWidthUsed,
+            height: currentPosition.y + lineHeight
+        )
+    }
 }
