@@ -64,6 +64,7 @@ struct ContentGenerationView: View {
                 .padding(.vertical, 20)
             }
         }
+        .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
         // MARK: - OCR and File Import Sheet Modifiers
         .photosPicker(
             isPresented: $showingPhotosPicker,
@@ -316,6 +317,12 @@ struct ContentGenerationView: View {
                     .padding(.vertical, 8)
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(8)
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { UIApplication.shared.endEditing() }
                 }
             }
         }
@@ -942,4 +949,11 @@ struct ContentBlockView: View {
 
 #Preview {
     ContentGenerationView()
+}
+
+// Add this extension at the bottom of the file if not already present in the project
+extension UIApplication {
+    func endEditing() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 } 

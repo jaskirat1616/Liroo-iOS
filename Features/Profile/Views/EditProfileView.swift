@@ -72,6 +72,7 @@ struct EditProfileView: View {
             .padding()
             .navigationTitle("Edit Profile")
         }
+        .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
         .onAppear {
             // Load existing data when the view appears
             if let profile = viewModel.profile {

@@ -79,6 +79,7 @@ struct ForgotPasswordView: View {
         } message: {
             Text("Password reset link has been sent to your email")
         }
+        .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
     }
     
     private func resetPassword() {

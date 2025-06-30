@@ -22,99 +22,101 @@ struct LoginView: View {
                 )
                 .ignoresSafeArea()
                 
-                VStack {
-                    Spacer(minLength: 60)
-                    
-                    VStack( spacing: 16) {
-                        Text("Sign in")
-                            .font(.title)
-                            .fontWeight(.bold)
-                        Text("Sign in to your Liroo account")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.bottom, 24)
-                    
-                    VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Email")
-                                .font(.footnote)
+                ScrollView {
+                    VStack {
+                        Spacer(minLength: 60)
+                        
+                        VStack( spacing: 16) {
+                            Text("Sign in")
+                                .font(.title)
+                                .fontWeight(.bold)
+                            Text("Sign in to your Liroo account")
+                                .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            TextField("Enter your email", text: $email)
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .padding()
-                                .background(Color(.secondarySystemBackground))
-                                .cornerRadius(12)
                         }
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Password")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                            ZStack(alignment: .trailing) {
-                                Group {
-                                    if isPasswordVisible {
-                                        TextField("Enter your password", text: $password)
-                                            .textContentType(.password)
-                                    } else {
-                                        SecureField("Enter your password", text: $password)
-                                            .textContentType(.password)
+                        .padding(.bottom, 24)
+                        
+                        VStack(spacing: 20) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Email")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                TextField("Enter your email", text: $email)
+                                    .textContentType(.emailAddress)
+                                    .keyboardType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Password")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                ZStack(alignment: .trailing) {
+                                    Group {
+                                        if isPasswordVisible {
+                                            TextField("Enter your password", text: $password)
+                                                .textContentType(.password)
+                                        } else {
+                                            SecureField("Enter your password", text: $password)
+                                                .textContentType(.password)
+                                        }
+                                    }
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(12)
+                                    Button(action: { isPasswordVisible.toggle() }) {
+                                        Text(isPasswordVisible ? "Hide" : "Show")
+                                            .font(.footnote)
+                                            .foregroundColor(.customPrimary)
+                                            .padding(.trailing, 12)
                                     }
                                 }
-                                .padding()
-                                .background(Color(.secondarySystemBackground))
-                                .cornerRadius(12)
-                                Button(action: { isPasswordVisible.toggle() }) {
-                                    Text(isPasswordVisible ? "Hide" : "Show")
+                            }
+                            Button(action: signIn) {
+                                if authViewModel.isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    Text("Sign In")
+                                        .fontWeight(.semibold)
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .padding()
+                            .background(colorScheme == .dark ? .cyan : .black)
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                            .cornerRadius(22)
+                            .shadow(color: Color.customPrimary.opacity(0.15), radius: 8, x: 0, y: 4)
+                            .disabled(authViewModel.isLoading)
+                            
+                            HStack {
+                                Spacer()
+                                NavigationLink(destination: ForgotPasswordView()) {
+                                    Text("Forgot Password?")
                                         .font(.footnote)
                                         .foregroundColor(.customPrimary)
-                                        .padding(.trailing, 12)
                                 }
                             }
                         }
-                        Button(action: signIn) {
-                            if authViewModel.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Text("Sign In")
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .padding()
-                        .background(colorScheme == .dark ? .cyan : .black)
-                        .foregroundColor(colorScheme == .dark ? .black : .white)
-                        .cornerRadius(22)
-                        .shadow(color: Color.customPrimary.opacity(0.15), radius: 8, x: 0, y: 4)
-                        .disabled(authViewModel.isLoading)
+                        .padding(12)
+                        .background(Color(.systemBackground).opacity(0.95))
+                        .cornerRadius(20)
+                        .padding(.horizontal)
                         
                         HStack {
-                            Spacer()
-                            NavigationLink(destination: ForgotPasswordView()) {
-                                Text("Forgot Password?")
-                                    .font(.footnote)
+                            Text("Don't have an account?")
+                                .foregroundColor(.secondary)
+                            NavigationLink(destination: SignupView()) {
+                                Text("Sign Up")
+                                    .fontWeight(.semibold)
                                     .foregroundColor(.customPrimary)
                             }
                         }
+                        .padding(.top, 24)
+                        Spacer()
                     }
-                    .padding(12)
-                    .background(Color(.systemBackground).opacity(0.95))
-                    .cornerRadius(20)
-                    .padding(.horizontal)
-                    
-                    HStack {
-                        Text("Don't have an account?")
-                            .foregroundColor(.secondary)
-                        NavigationLink(destination: SignupView()) {
-                            Text("Sign Up")
-                                .fontWeight(.semibold)
-                                .foregroundColor(.customPrimary)
-                        }
-                    }
-                    .padding(.top, 24)
-                    Spacer()
                 }
             }
             .navigationBarHidden(true)
@@ -124,6 +126,7 @@ struct LoginView: View {
                 Text(authViewModel.errorMessage ?? "An error occurred")
             }
         }
+        .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
     }
     
     private func signIn() {

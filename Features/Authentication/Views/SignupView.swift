@@ -188,6 +188,7 @@ struct SignupView: View {
             } message: {
                 Text(errorMessage)
             }
+            .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
         }
     }
     

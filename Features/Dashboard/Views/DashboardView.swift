@@ -16,6 +16,7 @@ struct DashboardView: View {
                 dashboardGridSection
                 streaksSection
                 recentReadingsSection
+                Spacer(minLength: 120)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -367,8 +368,10 @@ struct DashboardView: View {
                     }
                 }
             }
+            
+            Spacer()
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, 12)
     }
     
     // MARK: - Recently Read Section (limit 3)

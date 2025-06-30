@@ -78,6 +78,8 @@ struct ProfileView: View {
             }
             .padding(.horizontal)
             .padding(.top, 24)
+            
+            Spacer(minLength: 100)
         }
         .background(
                    LinearGradient(
@@ -91,6 +93,7 @@ struct ProfileView: View {
                    )
                    .ignoresSafeArea()
                )
+        .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingEditView) {
@@ -122,7 +125,7 @@ struct ProfileView: View {
                         PhotosPicker(selection: $selectedImage, matching: .images, photoLibrary: .shared()) {
                             Image(systemName: "camera.fill")
                                 .padding(8)
-                                .background(Color.purple.opacity(0.8))
+                                
                                 .clipShape(Circle())
                                 .foregroundColor(.white)
                                 .shadow(radius: 2)
@@ -184,7 +187,7 @@ struct ProfileView: View {
                         image.resizable().aspectRatio(contentMode: .fill)
                             .frame(width: 90, height: 90)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.purple, lineWidth: 3))
+                            
                     case .failure:
                         Image(systemName: "person.crop.circle.fill")
                             .resizable().frame(width: 90, height: 90)
@@ -282,15 +285,21 @@ struct ProfileView: View {
             Text("Account Details").font(.headline)
             Divider()
             HStack {
-                Text("User ID:").fontWeight(.semibold)
+                Text("User ID:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Spacer()
-                Text(profile.userId).lineLimit(1).truncationMode(.tail)
+                Text(profile.userId)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            if let createdAt = profile.createdAt {
+            if let createdAt = profile.createdAt { 
                 HStack {
-                    Text("Created:").fontWeight(.semibold)
+                    Text("Created:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     Spacer()
                     Text(createdAt, style: .date)
                         .font(.caption)
