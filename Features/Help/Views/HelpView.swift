@@ -70,9 +70,6 @@ struct HelpView: View {
             .sheet(isPresented: $viewModel.showingContactForm) {
                 ContactFormView(viewModel: viewModel)
             }
-            .sheet(isPresented: $viewModel.showingVideoTutorials) {
-                VideoTutorialsView()
-            }
             .onAppear {
                 viewModel.incrementHelpViewed()
             }
@@ -111,22 +108,10 @@ struct QuickActionsSection: View {
     
     private let quickActions = [
         QuickAction(
-            title: "How to Use",
-            description: "Step-by-step guide",
-            icon: "book.fill",
-            color: .blue
-        ),
-        QuickAction(
             title: "Contact Support",
             description: "Get help from our team",
             icon: "envelope.fill",
             color: .orange
-        ),
-        QuickAction(
-            title: "Video Guides",
-            description: "Watch tutorials",
-            icon: "video.fill",
-            color: .purple
         )
     ]
     
@@ -148,13 +133,8 @@ struct QuickActionsSection: View {
     
     private func handleQuickAction(_ action: QuickAction) {
         switch action.title {
-        case "How to Use":
-            // Navigate to How to Use
-            break
         case "Contact Support":
             viewModel.showingContactForm = true
-        case "Video Guides":
-            viewModel.showingVideoTutorials = true
         default:
             break
         }
@@ -237,15 +217,6 @@ struct SupportOptionsSection: View {
                     color: .blue
                 ) {
                     viewModel.showingContactForm = true
-                }
-                
-                SupportOptionCard(
-                    title: "Video Tutorials",
-                    description: "Watch step-by-step video guides",
-                    icon: "play.circle.fill",
-                    color: .green
-                ) {
-                    viewModel.showingVideoTutorials = true
                 }
                 
                 SupportOptionCard(
@@ -557,134 +528,6 @@ struct ContactFormView: View {
                     showError = true
                 }
             }
-        }
-    }
-}
-
-// MARK: - Video Tutorials View
-struct VideoTutorialsView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    private let tutorials = [
-        VideoTutorial(
-            title: "Getting Started",
-            description: "Learn the basics of using Liroo",
-            duration: "3:45",
-            thumbnail: "play.circle.fill"
-        ),
-        VideoTutorial(
-            title: "Importing Documents",
-            description: "How to import and process your files",
-            duration: "2:30",
-            thumbnail: "doc.text.fill"
-        ),
-        VideoTutorial(
-            title: "AI Features",
-            description: "Using AI-powered reading assistance",
-            duration: "4:15",
-            thumbnail: "brain.head.profile"
-        ),
-        VideoTutorial(
-            title: "Accessibility Settings",
-            description: "Customize your reading experience",
-            duration: "3:20",
-            thumbnail: "accessibility"
-        )
-    ]
-    
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 16) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.cyan)
-                        
-                        Text("Video Tutorials")
-                            .font(.title)
-                            .fontWeight(.bold)
-                        
-                        Text("Watch step-by-step guides to master Liroo's features")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    
-                    LazyVStack(spacing: 16) {
-                        ForEach(tutorials, id: \.title) { tutorial in
-                            VideoTutorialCard(tutorial: tutorial)
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    Spacer(minLength: 50)
-                }
-                .padding(.vertical)
-            }
-            .navigationTitle("Video Tutorials")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct VideoTutorial: Identifiable {
-    let id = UUID()
-    let title: String
-    let description: String
-    let duration: String
-    let thumbnail: String
-}
-
-struct VideoTutorialCard: View {
-    let tutorial: VideoTutorial
-    
-    var body: some View {
-        Button(action: {
-            // Play video
-        }) {
-            HStack(spacing: 16) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.cyan.opacity(0.1))
-                        .frame(width: 80, height: 60)
-                    
-                    Image(systemName: tutorial.thumbnail)
-                        .font(.title2)
-                        .foregroundColor(.cyan)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(tutorial.title)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text(tutorial.description)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text(tutorial.duration)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "play.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.cyan)
-            }
-            .padding()
-            .background(Color(.tertiarySystemBackground))
-            .cornerRadius(12)
         }
     }
 }
