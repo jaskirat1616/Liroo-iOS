@@ -7,6 +7,15 @@ struct ContentGenerationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
+    private var isIPadLandscape: Bool {
+        isIPad && UIDevice.current.orientation.isLandscape
+    }
+    
     // MARK: - OCR and File Import Additions
     @StateObject private var ocrViewModel = OCRViewModel()
     @State private var showingPhotosPicker = false
@@ -34,7 +43,7 @@ struct ContentGenerationView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: isIPad ? 32 : 24) {
                     // Header Section
                     headerSection
                     
@@ -60,8 +69,8 @@ struct ContentGenerationView: View {
                         generatedContentSection
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.horizontal, isIPad ? 24 : 16)
+                .padding(.vertical, isIPad ? 32 : 20)
             }
         }
         .simultaneousGesture(TapGesture().onEnded { UIApplication.shared.endEditing() })
@@ -190,33 +199,33 @@ struct ContentGenerationView: View {
     
     // MARK: - Header Section
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
             Text("Content Generation")
-                .font(.system(size: 28, weight: .bold, design: .default))
+                .font(.system(size: isIPad ? 36 : 28, weight: .bold, design: .default))
             
             Text("Transform your text into engaging content with AI-powered generation")
-                .font(.system(size: 16, weight: .regular))
+                .font(.system(size: isIPad ? 18 : 16, weight: .regular))
                 .foregroundColor(.secondary)
                 .lineLimit(2)
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, isIPad ? 8 : 4)
     }
     
     // MARK: - Input Section
     private var inputSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: isIPad ? 20 : 16) {
             Text("Input Text")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
             
             // Text Editor
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
                 ZStack(alignment: .bottomTrailing) {
                     TextEditor(text: Binding(
                         get: { String(viewModel.inputText.prefix(5000)) },
                         set: { viewModel.inputText = String($0.prefix(5000)) }
                     ))
-                    .frame(minHeight: 160)
-                    .padding(12)
+                    .frame(minHeight: isIPad ? 200 : 160)
+                    .padding(isIPad ? 16 : 12)
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
                     .overlay(
@@ -226,9 +235,9 @@ struct ContentGenerationView: View {
                                     HStack {
                                         Text("Enter your text here or use OCR to scan from images...")
                                             .foregroundColor(.secondary)
-                                            .font(.system(size: 16, weight: .regular))
-                                            .padding(.leading, 16)
-                                            .padding(.top, 20)
+                                            .font(.system(size: isIPad ? 17 : 16, weight: .regular))
+                                            .padding(.leading, isIPad ? 20 : 16)
+                                            .padding(.top, isIPad ? 24 : 20)
                                         Spacer()
                                     }
                                     Spacer()
@@ -239,21 +248,21 @@ struct ContentGenerationView: View {
                     
                     // Character count
                     Text("\(viewModel.inputText.count)/5000")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: isIPad ? 12 : 11, weight: .medium))
                         .foregroundColor(viewModel.inputText.count > 4500 ? .red : .secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, isIPad ? 10 : 8)
+                        .padding(.vertical, isIPad ? 6 : 4)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
                                 .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
                         )
-                        .padding(.trailing, 12)
-                        .padding(.bottom, 12)
+                        .padding(.trailing, isIPad ? 16 : 12)
+                        .padding(.bottom, isIPad ? 16 : 12)
                 }
                 
                 // OCR Buttons
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
+                VStack(spacing: isIPad ? 12 : 8) {
+                    HStack(spacing: isIPad ? 12 : 8) {
                         OCRButton(
                             title: "Photo Library",
                             icon: "photo.on.rectangle",
@@ -291,30 +300,30 @@ struct ContentGenerationView: View {
                 
                 // OCR Status
                 if ocrViewModel.isProcessing {
-                    HStack(spacing: 8) {
+                    HStack(spacing: isIPad ? 10 : 8) {
                         ProgressView()
-                            .scaleEffect(0.7)
+                            .scaleEffect(isIPad ? 0.8 : 0.7)
                         Text(ocrViewModel.totalPages > 1 ? 
                              "Processing page \(ocrViewModel.currentPage) of \(ocrViewModel.totalPages)..." :
                              "Scanning image...")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, isIPad ? 16 : 12)
+                    .padding(.vertical, isIPad ? 12 : 8)
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
                 } else if let ocrError = ocrViewModel.errorMessage {
-                    HStack(spacing: 8) {
+                    HStack(spacing: isIPad ? 10 : 8) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: isIPad ? 13 : 12, weight: .medium))
                             .foregroundColor(.red)
                         Text("OCR Error: \(ocrError)")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                             .foregroundColor(.red)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, isIPad ? 16 : 12)
+                    .padding(.vertical, isIPad ? 12 : 8)
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(8)
                 }
@@ -326,7 +335,7 @@ struct ContentGenerationView: View {
                 }
             }
         }
-        .padding(20)
+        .padding(isIPad ? 28 : 20)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -339,37 +348,37 @@ struct ContentGenerationView: View {
         let atLimit = used >= limit
         let progress = Double(used) / Double(limit)
         
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
             HStack {
                 Text("Daily Generation Limit")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
                 Spacer()
                 Text("\(used)/\(limit)")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: isIPad ? 20 : 18, weight: .bold))
                     .foregroundColor(atLimit ? .red : .primary)
             }
             
             // Progress Bar
             ProgressView(value: progress)
                 .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
-                .frame(height: 4)
+                .frame(height: isIPad ? 6 : 4)
             
             if atLimit {
-                HStack(spacing: 6) {
+                HStack(spacing: isIPad ? 8 : 6) {
                     Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: isIPad ? 13 : 12, weight: .medium))
                         .foregroundColor(.red)
                     Text("Daily limit reached. Try again tomorrow!")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                         .foregroundColor(.red)
                 }
             } else {
                 Text("\(limit - used) generations remaining today")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
         }
-        .padding(20)
+        .padding(isIPad ? 24 : 20)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)

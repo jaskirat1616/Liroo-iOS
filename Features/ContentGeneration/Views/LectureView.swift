@@ -26,6 +26,15 @@ struct LectureView: View {
     @State private var sortedAudioFiles: [AudioFile] = []
     @State private var isTransitioningAudio = false
     @State private var showFullTextWhenPaused = false
+    @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
+    @AppStorage("readingFontSize") private var selectedFontSize: Double = 17.0
+    @AppStorage("readingFontStyleName") private var selectedFontStyleName: String = ReadingFontStyle.systemDefault.rawValue
+    private var currentTheme: ReadingTheme {
+        ReadingTheme(rawValue: selectedThemeName) ?? .light
+    }
+    private var currentFontStyle: ReadingFontStyle {
+        ReadingFontStyle(rawValue: selectedFontStyleName) ?? .systemDefault
+    }
 
     var body: some View {
         NavigationStack {
@@ -121,17 +130,17 @@ struct LectureView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(lecture.title)
-                .font(.largeTitle.bold())
-                .foregroundColor(.primary)
+                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize), weight: .bold))
+                .foregroundColor(currentTheme.primaryTextColor)
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: 12) {
                 Label(lecture.level.rawValue, systemImage: "person.2.fill")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 2), weight: .medium))
+                    .foregroundColor(currentTheme.secondaryTextColor)
                 if let imageStyle = lecture.imageStyle {
                     Label(imageStyle, systemImage: "paintbrush.fill")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 2), weight: .medium))
+                        .foregroundColor(currentTheme.secondaryTextColor)
                 }
             }
         }
@@ -218,18 +227,17 @@ struct LectureView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Speaking Now:")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.purple)
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 1), weight: .semibold))
+                        .foregroundColor(currentTheme.primaryTextColor)
                     Spacer()
                     if isTypewriterActive && !fullText.isEmpty {
                         Text("\(Int((Double(currentCharIndex) / Double(fullText.count)) * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 5), weight: .regular))
+                            .foregroundColor(currentTheme.secondaryTextColor)
                     }
                     if isTransitioningAudio {
                         Text("Transitioning...")
-                            .font(.caption)
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 5), weight: .regular))
                             .foregroundColor(.orange)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
@@ -238,27 +246,27 @@ struct LectureView: View {
                     }
                     if !isPlaying && isTypewriterActive && !typewriterText.isEmpty {
                         Text("Tap 'Full Text' to see complete content")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 5), weight: .regular))
+                            .foregroundColor(currentTheme.secondaryTextColor)
                             .italic()
                     }
                 }
                 
                 Text(typewriterText)
-                    .font(.title3)
+                    .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize + 2), weight: .regular))
                     .lineSpacing(6)
-                    .foregroundColor(.primary)
+                    .foregroundColor(currentTheme.primaryTextColor)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray6))
+                            .fill(currentTheme.backgroundColor.opacity(0.7))
                     )
                     .animation(.easeInOut(duration: 0.1), value: typewriterText)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemBackground).opacity(0.95)))
+        .background(RoundedRectangle(cornerRadius: 16).fill(currentTheme.backgroundColor.opacity(0.95)))
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
         .animation(.easeInOut(duration: 0.3), value: currentSectionIndex)
         .animation(.easeInOut(duration: 0.3), value: typewriterText)
@@ -277,13 +285,12 @@ struct LectureView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Section Content:")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 1), weight: .semibold))
+                        .foregroundColor(currentTheme.primaryTextColor)
                     Spacer()
                     if isExploringMode {
                         Text("Explore Mode")
-                            .font(.caption)
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 5), weight: .regular))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(Color.purple.opacity(0.1))
@@ -293,19 +300,19 @@ struct LectureView: View {
                 }
                 
                 Text(section.script)
-                    .font(.body)
+                    .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize), weight: .regular))
                     .lineSpacing(4)
-                    .foregroundColor(.primary)
+                    .foregroundColor(currentTheme.primaryTextColor)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray6))
+                            .fill(currentTheme.backgroundColor.opacity(0.7))
                     )
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemBackground).opacity(0.9)))
+        .background(RoundedRectangle(cornerRadius: 16).fill(currentTheme.backgroundColor.opacity(0.9)))
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
         .animation(.easeInOut(duration: 0.3), value: currentSectionIndex)
     }
@@ -314,13 +321,13 @@ struct LectureView: View {
     private func sectionHeader(_ section: LectureSection) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(section.title)
-                .font(.title2.bold())
-                .foregroundColor(.primary)
+                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize + 2), weight: .bold))
+                .foregroundColor(currentTheme.primaryTextColor)
                 .lineLimit(2)
                 .animation(.easeInOut(duration: 0.2), value: section.title)
             Text("Section \(section.order)")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 6), weight: .regular))
+                .foregroundColor(currentTheme.secondaryTextColor)
                 .animation(.easeInOut(duration: 0.2), value: section.order)
         }
         .animation(.easeInOut(duration: 0.3), value: section.id)

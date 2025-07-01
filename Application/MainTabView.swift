@@ -4,6 +4,7 @@ struct MainTabView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
     @EnvironmentObject private var authViewModel: AuthViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     private let tabBarItems: [AppCoordinator.Tab] = [
         .dashboard, .generation, .history, .profile
@@ -15,22 +16,58 @@ struct MainTabView: View {
     
     var body: some View {
         if isPad {
-            // Default TabView for iPad
+            // Optimized TabView for iPad - no sidebar, clean layout
             TabView(selection: $coordinator.currentTab) {
-                NavigationStack { DashboardView() }
-                    .tabItem { Label("Dashboard", systemImage: "square.grid.2x2.fill") }
-                    .tag(AppCoordinator.Tab.dashboard)
-                NavigationStack { ContentGenerationView() }
-                    .tabItem { Label("Generate", systemImage: "wand.and.stars") }
-                    .tag(AppCoordinator.Tab.generation)
-                NavigationStack { HistoryView() }
-                    .tabItem { Label("History", systemImage: "list.bullet.rectangle.portrait") }
-                    .tag(AppCoordinator.Tab.history)
-                NavigationStack { ProfileView() }
-                    .tabItem { Label("Profile", systemImage: "person.fill") }
-                    .tag(AppCoordinator.Tab.profile)
+                NavigationStack { 
+                    DashboardView()
+                        .navigationTitle("Dashboard")
+                        .navigationBarTitleDisplayMode(.large)
+                }
+                .tabItem { 
+                    Label("Dashboard", systemImage: "square.grid.2x2.fill") 
+                }
+                .tag(AppCoordinator.Tab.dashboard)
+                
+                NavigationStack { 
+                    ContentGenerationView()
+                        .navigationTitle("Generate")
+                        .navigationBarTitleDisplayMode(.large)
+                }
+                .tabItem { 
+                    Label("Generate", systemImage: "wand.and.stars") 
+                }
+                .tag(AppCoordinator.Tab.generation)
+                
+                NavigationStack { 
+                    HistoryView()
+                        .navigationTitle("History")
+                        .navigationBarTitleDisplayMode(.large)
+                }
+                .tabItem { 
+                    Label("History", systemImage: "list.bullet.rectangle.portrait") 
+                }
+                .tag(AppCoordinator.Tab.history)
+                
+                NavigationStack { 
+                    ProfileView()
+                        .navigationTitle("Profile")
+                        .navigationBarTitleDisplayMode(.large)
+                }
+                .tabItem { 
+                    Label("Profile", systemImage: "person.fill") 
+                }
+                .tag(AppCoordinator.Tab.profile)
             }
             .environmentObject(coordinator)
+            .onAppear {
+                // Configure tab bar appearance for iPad
+                let appearance = UITabBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor.systemBackground
+                
+                UITabBar.appearance().standardAppearance = appearance
+                UITabBar.appearance().scrollEdgeAppearance = appearance
+            }
         } else {
             // Custom floating tab bar for iPhone
             ZStack(alignment: .bottom) {
@@ -53,7 +90,7 @@ struct MainTabView: View {
                 
                 // Custom Tab Bar
                 HStack {
-                    ForEach(tabBarItems, id: \ .self) { tab in
+                    ForEach(tabBarItems, id: \.self) { tab in
                         Button(action: {
                             withAnimation(.spring()) {
                                 coordinator.switchToTab(tab)

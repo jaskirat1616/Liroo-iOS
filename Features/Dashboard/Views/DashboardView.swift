@@ -8,18 +8,27 @@ struct DashboardView: View {
     @StateObject private var profileViewModel = ProfileViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
+    private var isIPadLandscape: Bool {
+        isIPad && UIDevice.current.orientation.isLandscape
+    }
+    
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: isIPad ? 20 : 12) {
                 dashboardHeader
                 weeklyReadingProgressSection
                 dashboardGridSection
                 streaksSection
                 recentReadingsSection
-                Spacer(minLength: 120)
+                Spacer(minLength: isIPad ? 80 : 120)
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.horizontal, isIPad ? 24 : 16)
+            .padding(.top, isIPad ? 16 : 8)
         }
         .refreshable {
             viewModel.refreshData()
@@ -43,23 +52,23 @@ struct DashboardView: View {
     
     // MARK: - Dashboard Header
     private var dashboardHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: isIPad ? 16 : 12) {
             if let urlString = profileViewModel.profile?.avatarURL, let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         ProgressView()
-                            .frame(width: 44, height: 44)
+                            .frame(width: isIPad ? 56 : 44, height: isIPad ? 56 : 44)
                     case .success(let image):
                         image.resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 44, height: 44)
+                            .frame(width: isIPad ? 56 : 44, height: isIPad ? 56 : 44)
                             .clipShape(Circle())
                             .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                     case .failure:
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
-                            .frame(width: 44, height: 44)
+                            .frame(width: isIPad ? 56 : 44, height: isIPad ? 56 : 44)
                             .clipShape(Circle())
                             .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                             .foregroundColor(.gray)
@@ -70,31 +79,31 @@ struct DashboardView: View {
             } else {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()
-                    .frame(width: 44, height: 44)
+                    .frame(width: isIPad ? 56 : 44, height: isIPad ? 56 : 44)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Color.customPrimary, lineWidth: 2))
                     .foregroundColor(.gray)
             }
             Text("Hello, \(profileViewModel.profile?.name ?? "Jessica")")
-                .font(.headline)
+                .font(isIPad ? .title2 : .headline)
                 .foregroundColor(.primary)
             Spacer()
             NavigationLink(destination: HelpView()) {
                 Image(systemName: "questionmark.circle")
-                    .font(.title2)
+                    .font(isIPad ? .title : .title2)
                     .foregroundColor(.cyan)
-                    .padding(8)
+                    .padding(isIPad ? 12 : 8)
             }
             .accessibilityLabel("Help")
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape")
-                    .font(.title2)
+                    .font(isIPad ? .title : .title2)
                     .foregroundColor(.purple)
-                    .padding(8)
+                    .padding(isIPad ? 12 : 8)
             }
             .accessibilityLabel("Settings")
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, isIPad ? 8 : 4)
     }
     
     // MARK: - Weekly Reading Progress Section
@@ -102,12 +111,11 @@ struct DashboardView: View {
         let dailyGoal: TimeInterval = 20 * 60 // 20 minutes in seconds
         let weekStart = startOfCurrentWeek()
         let calendar = Calendar.current
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: isIPad ? 12 : 8) {
             Text("Progress")
-                .font(.system(size: 26, weight: .regular, design: .default))
-
-                .padding(.bottom, 2)
-            HStack(spacing: 12) {
+                .font(.system(size: isIPad ? 32 : 26, weight: .regular, design: .default))
+                .padding(.bottom, isIPad ? 4 : 2)
+            HStack(spacing: isIPad ? 16 : 12) {
                 ForEach(0..<7) { offset in
                     let dayDate = calendar.date(byAdding: .day, value: offset, to: weekStart) ?? weekStart
                     let totalDuration = viewModel.dailyReadingActivity
@@ -116,22 +124,22 @@ struct DashboardView: View {
                     let progress = min(totalDuration / dailyGoal, 1.0)
                     ZStack {
                         Circle()
-                            .stroke(Color(.systemGray5), lineWidth: 6)
-                            .frame(width: 40, height: 40)
+                            .stroke(Color(.systemGray5), lineWidth: isIPad ? 8 : 6)
+                            .frame(width: isIPad ? 48 : 40, height: isIPad ? 48 : 40)
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(progress >= 1.0 ? Color.purple : Color.customPrimary, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .stroke(progress >= 1.0 ? Color.purple : Color.customPrimary, style: StrokeStyle(lineWidth: isIPad ? 8 : 6, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                            .frame(width: 40, height: 40)
+                            .frame(width: isIPad ? 48 : 40, height: isIPad ? 48 : 40)
                         Text("\(Int(totalDuration/60))")
-                            .font(.caption)
+                            .font(isIPad ? .subheadline : .caption)
                             .fontWeight(.bold)
                             .foregroundColor(progress >= 1.0 ? .purple : .customPrimary)
                     }
                 }
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, isIPad ? 12 : 8)
     }
     
     // Helper: Start of current week (Sunday)
@@ -144,8 +152,8 @@ struct DashboardView: View {
     
     // MARK: - Dashboard Grid Section (Modern Minimalistic with Line Charts)
     private var dashboardGridSection: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
-        return LazyVGrid(columns: columns, spacing: 8) {
+        let columns = adaptiveGridColumns()
+        return LazyVGrid(columns: columns, spacing: isIPad ? 16 : 8) {
             // Current Streak with Trend Chart
             MetricCardWithChart(
                 title: "Current Streak",
@@ -210,8 +218,21 @@ struct DashboardView: View {
                 )
             )
         }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 4)
+        .padding(.horizontal, isIPad ? 4 : 2)
+        .padding(.vertical, isIPad ? 8 : 4)
+    }
+    
+    // MARK: - Adaptive Grid Columns
+    private func adaptiveGridColumns() -> [GridItem] {
+        if isIPad {
+            if isIPadLandscape {
+                return Array(repeating: GridItem(.flexible(), spacing: 16), count: 4)
+            } else {
+                return Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+            }
+        } else {
+            return Array(repeating: GridItem(.flexible(), spacing: 8), count: 2)
+        }
     }
     
     // MARK: - Chart Data Generators
@@ -292,18 +313,19 @@ struct DashboardView: View {
     private var streaksSection: some View {
         VStack(alignment: .leading) {
             Text("Challenges")
-                .font(.title2)
+                .font(isIPad ? .title : .title2)
                 .fontWeight(.semibold)
-                .padding(.top, 8)
+                .padding(.top, isIPad ? 12 : 8)
             if let stats = viewModel.challengeStats {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: isIPad ? 12 : 8) {
                     ForEach(sortedChallenges(stats.challenges)) { challenge in
                         ChallengeRow(challenge: challenge)
                     }
                     if stats.challenges.isEmpty {
                         Text("No challenges available")
-                            .font(.caption)
+                            .font(isIPad ? .body : .caption)
                             .foregroundColor(.secondary)
+                            .padding(isIPad ? 16 : 8)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -312,11 +334,11 @@ struct DashboardView: View {
             } else {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-                    .frame(height: 120)
+                    .frame(height: isIPad ? 140 : 120)
                     .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
             }
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, isIPad ? 8 : 4)
     }
     
     // Helper: Sort challenges by status
@@ -334,21 +356,21 @@ struct DashboardView: View {
     
     // MARK: - Recent Readings Section
     private var recentReadingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: isIPad ? 12 : 8) {
             Text("Recent readings")
-                .font(.title2)
+                .font(isIPad ? .title : .title2)
                 .fontWeight(.regular)
-                .padding(.top, 8)
+                .padding(.top, isIPad ? 12 : 8)
             if viewModel.recentlyReadItems.isEmpty {
                 Text("No recent reading activity")
-                    .font(.subheadline)
+                    .font(isIPad ? .body : .subheadline)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
+                    .padding(isIPad ? 24 : 16)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(viewModel.recentlyReadItems.prefix(5)) { item in
+                    HStack(spacing: isIPad ? 16 : 12) {
+                        ForEach(viewModel.recentlyReadItems.prefix(isIPad ? 6 : 5)) { item in
                             if item.type == .lecture {
                                 NavigationLink(
                                     destination: LectureDestinationView(
@@ -357,7 +379,7 @@ struct DashboardView: View {
                                     )
                                 ) {
                                     RecentlyReadRow(item: item)
-                                        .frame(width: 180)
+                                        .frame(width: adaptiveCardWidth())
                                 }
                             } else {
                                 NavigationLink(
@@ -368,17 +390,27 @@ struct DashboardView: View {
                                     )
                                 ) {
                                     RecentlyReadRow(item: item)
-                                        .frame(width: 180)
+                                        .frame(width: adaptiveCardWidth())
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal, isIPad ? 4 : 0)
                 }
             }
             
             Spacer()
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, isIPad ? 16 : 12)
+    }
+    
+    // MARK: - Adaptive Card Width
+    private func adaptiveCardWidth() -> CGFloat {
+        if isIPad {
+            return isIPadLandscape ? 220 : 200
+        } else {
+            return 180
+        }
     }
     
     // MARK: - Recently Read Section (limit 3)

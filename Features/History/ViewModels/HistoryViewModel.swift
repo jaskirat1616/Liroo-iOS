@@ -103,4 +103,32 @@ class HistoryViewModel: ObservableObject {
             }
         }
     }
+
+    func deleteHistoryItems(withIDs ids: Set<String>) async {
+        let itemsToDelete = historyItems.filter { ids.contains($0.id) }
+        print("[deleteHistoryItems] Attempting to delete \(itemsToDelete.count) items: \(itemsToDelete.map { "\($0.originalCollectionName)/\($0.originalDocumentID)" })")
+        var failedDeletions: [(id: String, error: Error)] = []
+        var succeededIDs: Set<String> = []
+        for item in itemsToDelete {
+            do {
+                print("[deleteHistoryItems] Deleting from \(item.originalCollectionName), id: \(item.originalDocumentID)")
+                try await firestoreService.delete(from: item.originalCollectionName, documentId: item.originalDocumentID)
+                print("[deleteHistoryItems] Successfully deleted \(item.id)")
+                succeededIDs.insert(item.id)
+            } catch {
+                print("[deleteHistoryItems] Failed to delete item \(item.id) from Firebase: \(error)")
+                failedDeletions.append((item.id, error))
+            }
+        }
+        // Remove only successfully deleted items from local list
+        DispatchQueue.main.async {
+            self.historyItems.removeAll { succeededIDs.contains($0.id) }
+            if !failedDeletions.isEmpty {
+                let errorList = failedDeletions.map { "\($0.id): \($0.error.localizedDescription)" }.joined(separator: "\n")
+                self.errorMessage = "Failed to delete some items:\n\(errorList)"
+            } else {
+                self.errorMessage = nil
+            }
+        }
+    }
 }

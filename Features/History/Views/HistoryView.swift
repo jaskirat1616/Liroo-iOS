@@ -13,6 +13,19 @@ struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
     @State private var selectedFilter: HistoryFilter = .all
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isSelectionMode: Bool = false
+    @State private var selectedItems: Set<String> = []
+    @State private var showDeleteConfirmation = false
+    @State private var showDeleteError = false
+    
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
+    private var isIPadLandscape: Bool {
+        isIPad && UIDevice.current.orientation.isLandscape
+    }
 
     var filteredItems: [UserHistoryEntry] {
         switch selectedFilter {
@@ -44,19 +57,22 @@ struct HistoryView: View {
             Group {
                 if viewModel.isLoading {
                     ProgressView("Loading History...")
+                        .font(isIPad ? .title2 : .body)
                 } else if let errorMessage = viewModel.errorMessage {
-                    VStack {
+                    VStack(spacing: isIPad ? 16 : 12) {
                         Text("Error")
-                            .font(.headline)
+                            .font(isIPad ? .title : .headline)
                         Text(errorMessage)
+                            .font(isIPad ? .body : .subheadline)
                             .foregroundColor(.red)
                         Button("Retry") {
                             viewModel.fetchHistory()
                         }
-                        .padding(.top)
+                        .padding(.top, isIPad ? 16 : 8)
                     }
                 } else if viewModel.historyItems.isEmpty {
                     Text("No history found.")
+                        .font(isIPad ? .title2 : .body)
                         .foregroundColor(.secondary)
                 } else {
                     VStack(spacing: 0) {
@@ -67,37 +83,57 @@ struct HistoryView: View {
                             }
                         }
                         .pickerStyle(.segmented)
-                        .padding([.horizontal, .top])
+                        .padding(.horizontal, isIPad ? 24 : 16)
+                        .padding(.top, isIPad ? 16 : 8)
                         .environment(\.layoutDirection, .leftToRight)
 
                         if filteredItems.isEmpty {
                             Text("No \(selectedFilter.rawValue.lowercased()) found.")
+                                .font(isIPad ? .title2 : .body)
                                 .foregroundColor(.secondary)
-                                .padding()
+                                .padding(isIPad ? 32 : 16)
                         } else {
                             ScrollView {
-                                LazyVStack(spacing: 12) {
+                                LazyVStack(spacing: isIPad ? 16 : 12) {
                                     ForEach(filteredItems) { item in
-                                        if item.type == .lecture {
-                                            NavigationLink(destination: LectureDestinationView(
-                                                lectureID: item.originalDocumentID,
-                                                lectureTitle: item.title
-                                            )) {
-                                                LectureHistoryRow(item: item)
+                                        let isSelected = selectedItems.contains(item.id)
+                                        HStack {
+                                            if isSelectionMode {
+                                                Button(action: {
+                                                    if isSelected {
+                                                        selectedItems.remove(item.id)
+                                                    } else {
+                                                        selectedItems.insert(item.id)
+                                                    }
+                                                }) {
+                                                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                                        .foregroundColor(isSelected ? .blue : .gray)
+                                                }
                                             }
-                                        } else {
-                                            NavigationLink(destination: FullReadingView(
-                                                itemID: item.originalDocumentID,
-                                                collectionName: item.originalCollectionName,
-                                                itemTitle: item.title
-                                            )) {
-                                                HistoryRow(item: item)
+                                            Group {
+                                                if item.type == .lecture {
+                                                    NavigationLink(destination: LectureDestinationView(
+                                                        lectureID: item.originalDocumentID,
+                                                        lectureTitle: item.title
+                                                    )) {
+                                                        LectureHistoryRow(item: item)
+                                                    }
+                                                } else {
+                                                    NavigationLink(destination: FullReadingView(
+                                                        itemID: item.originalDocumentID,
+                                                        collectionName: item.originalCollectionName,
+                                                        itemTitle: item.title
+                                                    )) {
+                                                        HistoryRow(item: item)
+                                                    }
+                                                }
                                             }
+                                            .disabled(isSelectionMode)
                                         }
                                     }
                                 }
-                                .padding(.horizontal)
-                                .padding(.top, 8)
+                                .padding(.horizontal, isIPad ? 24 : 16)
+                                .padding(.top, isIPad ? 16 : 8)
                             }
                         }
                     }
@@ -107,13 +143,50 @@ struct HistoryView: View {
         .navigationTitle("History")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    viewModel.fetchHistory()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                HStack {
+                    if isSelectionMode {
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(selectedItems.isEmpty)
+                    }
+                    Button(action: {
+                        isSelectionMode.toggle()
+                        if !isSelectionMode { selectedItems.removeAll() }
+                    }) {
+                        Image(systemName: isSelectionMode ? "xmark.circle" : "checkmark.circle")
+                    }
+                    Button {
+                        viewModel.fetchHistory()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(isIPad ? .title2 : .body)
+                    }
+                    .disabled(viewModel.isLoading)
                 }
-                .disabled(viewModel.isLoading)
             }
+        }
+        .alert("Delete Selected Items?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    await viewModel.deleteHistoryItems(withIDs: selectedItems)
+                    if viewModel.errorMessage != nil {
+                        showDeleteError = true
+                    }
+                    selectedItems.removeAll()
+                    isSelectionMode = false
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
+        .alert("Failed to delete some items.", isPresented: $showDeleteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "Unknown error.")
         }
     }
 
@@ -122,27 +195,32 @@ struct HistoryView: View {
         let item: UserHistoryEntry
         @Environment(\.colorScheme) private var colorScheme
         
+        // MARK: - iPad Detection
+        private var isIPad: Bool {
+            UIDevice.current.userInterfaceIdiom == .pad
+        }
+        
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: isIPad ? 12 : 8) {
                 HStack(alignment: .top) {
                     Text(item.title)
-                        .font(.headline)
+                        .font(isIPad ? .title3 : .headline)
                         .foregroundColor(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Spacer()
                     Text(item.date, style: .date)
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.trailing)
                 }
                 
                 HStack {
                     Text("Lecture")
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                         .foregroundColor(.purple)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, isIPad ? 12 : 8)
+                        .padding(.vertical, isIPad ? 4 : 2)
                         .background(Color.purple.opacity(0.1))
                         .cornerRadius(4)
                         .multilineTextAlignment(.leading)
@@ -151,11 +229,11 @@ struct HistoryView: View {
                     
                     Image(systemName: "chevron.right")
                         .foregroundColor(.gray.opacity(0.5))
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                 }
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 16)
+            .padding(.vertical, isIPad ? 16 : 12)
+            .padding(.horizontal, isIPad ? 20 : 16)
             .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
             .cornerRadius(12)
             .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)
@@ -167,27 +245,32 @@ struct HistoryView: View {
         let item: UserHistoryEntry
         @Environment(\.colorScheme) private var colorScheme
         
+        // MARK: - iPad Detection
+        private var isIPad: Bool {
+            UIDevice.current.userInterfaceIdiom == .pad
+        }
+        
         var body: some View {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: isIPad ? 12 : 8) {
                 HStack(alignment: .top) {
                     Text(item.title)
-                        .font(.headline)
+                        .font(isIPad ? .title3 : .headline)
                         .foregroundColor(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Spacer()
                     Text(item.date, style: .date)
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.trailing)
                 }
                 
                 HStack {
                     Text(item.type.rawValue)
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                         .foregroundColor(iconColor(for: item.type))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, isIPad ? 12 : 8)
+                        .padding(.vertical, isIPad ? 4 : 2)
                         .background(iconColor(for: item.type).opacity(0.1))
                         .cornerRadius(4)
                         .multilineTextAlignment(.leading)
@@ -196,11 +279,11 @@ struct HistoryView: View {
                     
                     Image(systemName: "chevron.right")
                         .foregroundColor(.gray.opacity(0.5))
-                        .font(.caption)
+                        .font(isIPad ? .subheadline : .caption)
                 }
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 16)
+            .padding(.vertical, isIPad ? 16 : 12)
+            .padding(.horizontal, isIPad ? 20 : 16)
             .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
             .cornerRadius(12)
             .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 2)

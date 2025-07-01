@@ -7,28 +7,38 @@ struct ProfileView: View {
     @State private var selectedImageData: Data? = nil
     @State private var isShowingEditView = false
     @Environment(\.colorScheme) private var colorScheme
+    
+    // MARK: - iPad Detection
+    private var isIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+    
+    private var isIPadLandscape: Bool {
+        isIPad && UIDevice.current.orientation.isLandscape
+    }
+    
     // State for showing an edit screen, if you choose to implement it
     // @State private var isShowingEditView = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: isIPad ? 32 : 24) {
                 // Top Card: Avatar, Name, Email
                 topProfileCard
                 // Edit Profile Button
-                HStack(spacing: 12) {
+                HStack(spacing: isIPad ? 16 : 12) {
                     Button(action: { isShowingEditView = true }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: isIPad ? 10 : 8) {
                             Image(systemName: "person.crop.circle")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
                                 .foregroundColor(.purple)
                             Text("Edit Profile")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.purple)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 16)
+                        .padding(.vertical, isIPad ? 14 : 10)
+                        .padding(.horizontal, isIPad ? 20 : 16)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.purple.opacity(0.08))
@@ -41,17 +51,17 @@ struct ProfileView: View {
                     
                     // Help Button
                     NavigationLink(destination: HelpView()) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: isIPad ? 10 : 8) {
                             Image(systemName: "questionmark.circle")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
                                 .foregroundColor(.cyan)
                             Text("Help")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.cyan)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 16)
+                        .padding(.vertical, isIPad ? 14 : 10)
+                        .padding(.horizontal, isIPad ? 20 : 16)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.cyan.opacity(0.08))
@@ -64,17 +74,17 @@ struct ProfileView: View {
                     
                     // Settings Button
                     NavigationLink(destination: SettingsView()) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: isIPad ? 10 : 8) {
                             Image(systemName: "gearshape")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
                                 .foregroundColor(.purple)
                             Text("Settings")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.purple)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 16)
+                        .padding(.vertical, isIPad ? 14 : 10)
+                        .padding(.horizontal, isIPad ? 20 : 16)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.purple.opacity(0.08))
@@ -85,7 +95,7 @@ struct ProfileView: View {
                         )
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, isIPad ? 24 : 16)
                 // About Card
                 if let profile = viewModel.profile {
                     aboutCard(profile: profile)
@@ -99,10 +109,10 @@ struct ProfileView: View {
                     loadingCard
                 }
             }
-            .padding(.horizontal)
-            .padding(.top, 24)
+            .padding(.horizontal, isIPad ? 24 : 16)
+            .padding(.top, isIPad ? 32 : 24)
             
-            Spacer(minLength: 100)
+            Spacer(minLength: isIPad ? 80 : 100)
         }
         .background(
                    LinearGradient(
@@ -142,18 +152,17 @@ struct ProfileView: View {
     private var topProfileCard: some View {
         Group {
             if let profile = viewModel.profile {
-                VStack(spacing: 12) {
+                VStack(spacing: isIPad ? 16 : 12) {
                     ZStack(alignment: .bottomTrailing) {
                         avatarView(urlString: profile.avatarURL)
                         PhotosPicker(selection: $selectedImage, matching: .images, photoLibrary: .shared()) {
                             Image(systemName: "camera.fill")
-                                .padding(8)
-                                
+                                .padding(isIPad ? 10 : 8)
                                 .clipShape(Circle())
                                 .foregroundColor(.white)
                                 .shadow(radius: 2)
                         }
-                        .offset(x: 8, y: 8)
+                        .offset(x: isIPad ? 10 : 8, y: isIPad ? 10 : 8)
                         .onChange(of: selectedImage) { newItem in
                             Task {
                                 if let data = try? await newItem?.loadTransferable(type: Data.self) {
@@ -173,8 +182,8 @@ struct ProfileView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 20)
+                        .padding(.vertical, isIPad ? 16 : 14)
+                        .padding(.horizontal, isIPad ? 24 : 20)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.purple.opacity(0.08))
@@ -184,15 +193,15 @@ struct ProfileView: View {
                                 )
                         )
                         .foregroundColor(.purple)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: isIPad ? 18 : 16, weight: .semibold))
                     }
                     Text(profile.name)
-                        .font(.title2).fontWeight(.bold)
+                        .font(isIPad ? .title : .title2).fontWeight(.bold)
                     Text(profile.email)
-                        .font(.subheadline)
+                        .font(isIPad ? .body : .subheadline)
                         .foregroundColor(.secondary)
                 }
-                .padding()
+                .padding(isIPad ? 24 : 16)
                 .frame(maxWidth: .infinity)
                
             }
@@ -205,15 +214,15 @@ struct ProfileView: View {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
-                        ProgressView().frame(width: 90, height: 90)
+                        ProgressView().frame(width: isIPad ? 120 : 90, height: isIPad ? 120 : 90)
                     case .success(let image):
                         image.resizable().aspectRatio(contentMode: .fill)
-                            .frame(width: 90, height: 90)
+                            .frame(width: isIPad ? 120 : 90, height: isIPad ? 120 : 90)
                             .clipShape(Circle())
                             
                     case .failure:
                         Image(systemName: "person.crop.circle.fill")
-                            .resizable().frame(width: 90, height: 90)
+                            .resizable().frame(width: isIPad ? 120 : 90, height: isIPad ? 120 : 90)
                             .foregroundColor(.gray)
                     @unknown default:
                         EmptyView()
@@ -221,7 +230,7 @@ struct ProfileView: View {
                 }
             } else {
                 Image(systemName: "person.crop.circle.fill")
-                    .resizable().frame(width: 90, height: 90)
+                    .resizable().frame(width: isIPad ? 120 : 90, height: isIPad ? 120 : 90)
                     .foregroundColor(.gray)
             }
         }
