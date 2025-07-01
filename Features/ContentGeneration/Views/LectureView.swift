@@ -29,6 +29,7 @@ struct LectureView: View {
     @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
     @AppStorage("readingFontSize") private var selectedFontSize: Double = 17.0
     @AppStorage("readingFontStyleName") private var selectedFontStyleName: String = ReadingFontStyle.systemDefault.rawValue
+    @State private var audioDataCache: [String: Data] = [:] // Audio URL string to Data
     private var currentTheme: ReadingTheme {
         ReadingTheme(rawValue: selectedThemeName) ?? .light
     }
@@ -57,18 +58,20 @@ struct LectureView: View {
                         progressSection
                         
                         // Current Content
-                        if isPlaying || (isTypewriterActive && !typewriterText.isEmpty && !showFullTextWhenPaused) {
-                            typewriterView
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                    removal: .opacity.combined(with: .move(edge: .leading))
-                                ))
-                        } else {
-                            exploreView
-                                .transition(.asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .trailing)),
-                                    removal: .opacity.combined(with: .move(edge: .leading))
-                                ))
+                        if currentSectionIndex < lecture.sections.count {
+                            if isPlaying || (isTypewriterActive && !typewriterText.isEmpty && !showFullTextWhenPaused) {
+                                typewriterView
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                        removal: .opacity.combined(with: .move(edge: .leading))
+                                    ))
+                            } else {
+                                exploreView
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                                        removal: .opacity.combined(with: .move(edge: .leading))
+                                    ))
+                            }
                         }
                         
                         // Audio Controls
@@ -77,9 +80,12 @@ struct LectureView: View {
                         // Error
                         if let audioError = audioError {
                             errorSection(audioError)
+                            Button("Retry") { playFullLecture() }
+                                .buttonStyle(.bordered)
+                                .tint(.purple)
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 40 : 8)
                     .padding(.top, 24)
                     .padding(.bottom, 32)
                 }
@@ -96,6 +102,8 @@ struct LectureView: View {
             }
             .onDisappear {
                 stopLecture()
+                stopTypewriter()
+                stopAudioMonitoring()
             }
             .onAppear {
                 // Sort audio files once when view appears
@@ -256,18 +264,15 @@ struct LectureView: View {
                     .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize + 2), weight: .regular))
                     .lineSpacing(6)
                     .foregroundColor(currentTheme.primaryTextColor)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(currentTheme.backgroundColor.opacity(0.7))
-                    )
                     .animation(.easeInOut(duration: 0.1), value: typewriterText)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(currentTheme.backgroundColor.opacity(0.95)))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(UIDevice.current.userInterfaceIdiom == .pad ? 24 : 8)
         .animation(.easeInOut(duration: 0.3), value: currentSectionIndex)
         .animation(.easeInOut(duration: 0.3), value: typewriterText)
     }
@@ -303,17 +308,14 @@ struct LectureView: View {
                     .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize), weight: .regular))
                     .lineSpacing(4)
                     .foregroundColor(currentTheme.primaryTextColor)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(currentTheme.backgroundColor.opacity(0.7))
-                    )
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
         .padding()
-        .background(RoundedRectangle(cornerRadius: 16).fill(currentTheme.backgroundColor.opacity(0.9)))
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(UIDevice.current.userInterfaceIdiom == .pad ? 24 : 8)
         .animation(.easeInOut(duration: 0.3), value: currentSectionIndex)
     }
 
@@ -334,35 +336,54 @@ struct LectureView: View {
     }
     
     private func sectionImage(_ section: LectureSection) -> some View {
-        Group {
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        return Group {
             if let imageUrl = section.imageUrl, let url = URL(string: imageUrl) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
-                        ZStack {
-                            Rectangle().fill(Color(.systemGray5)).frame(height: 180).cornerRadius(12)
-                            ProgressView().scaleEffect(1.2)
+                        VStack {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text("Loading section image...")
+                                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 4), weight: .medium))
+                                .foregroundColor(currentTheme.secondaryTextColor)
+                                .padding(.top, 8)
                         }
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: isIPad ? 400 : 300)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
                     case .success(let image):
-                        image.resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 180).cornerRadius(12)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        image
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fill)
+                            .frame(maxWidth: isIPad ? 400 : .infinity)
+                            .frame(height: isIPad ? 400 : 300)
+                            .clipped()
+                            .cornerRadius(12)
                     case .failure:
-                        ZStack {
-                            Rectangle().fill(Color(.systemGray5)).frame(height: 180).cornerRadius(12)
+                        VStack(spacing: 8) {
                             Image(systemName: "photo")
-                                .font(.largeTitle)
+                                .font(.system(size: 24, weight: .medium))
                                 .foregroundColor(.gray)
+                            Text("Failed to load section image")
+                                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 4), weight: .medium))
+                                .foregroundColor(.red)
                         }
-                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: isIPad ? 400 : 300)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
                     @unknown default:
                         EmptyView()
                     }
                 }
-                .animation(.easeInOut(duration: 0.3), value: imageUrl)
+                .frame(maxWidth: .infinity)
+            } else {
+                EmptyView()
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: section.imageUrl)
     }
 
     // MARK: - Audio Controls
@@ -385,15 +406,10 @@ struct LectureView: View {
                         Text(isPlaying ? "Stop" : "Play Lecture")
                             .fontWeight(.medium)
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
-                    .background(isPlaying ? Color.red : Color.purple)
-                    .cornerRadius(25)
-                    .shadow(color: (isPlaying ? Color.red : Color.purple).opacity(0.18), radius: 8, x: 0, y: 2)
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(isPlaying ? .red : .purple)
                 .accessibilityLabel(isPlaying ? "Stop Lecture" : "Play Lecture")
-                .accessibilityAddTraits(.isButton)
                 
                 if isLoadingAudio {
                     ProgressView().scaleEffect(0.8)
@@ -553,6 +569,21 @@ struct LectureView: View {
         // Set transition state
         isTransitioningAudio = true
         
+        // Preload the next audio file (if any)
+        let nextIndex = currentAudioIndex + 1
+        if nextIndex < sortedAudioFiles.count {
+            let nextAudioFile = sortedAudioFiles[nextIndex]
+            if audioDataCache[nextAudioFile.url] == nil, let url = URL(string: nextAudioFile.url) {
+                URLSession.shared.dataTask(with: url) { data, _, _ in
+                    if let data = data {
+                        DispatchQueue.main.async {
+                            audioDataCache[nextAudioFile.url] = data
+                        }
+                    }
+                }.resume()
+            }
+        }
+        
         playAudioFile(audioFile) {
             self.currentAudioIndex += 1
             self.lastPlayedAudioIndex = self.currentAudioIndex
@@ -612,6 +643,14 @@ struct LectureView: View {
             }
         }
         
+        // Use cached audio data if available
+        if let cachedData = audioDataCache[audioFile.url] {
+            print("[LectureView] Using cached audio data for URL: \(audioFile.url)")
+            self.handleAudioDataPlayback(cachedData, completion: completion)
+            self.isLoadingAudio = false
+            return
+        }
+        
         URLSession.shared.dataTask(with: url) { data, response, error in
             DispatchQueue.main.async {
                 self.isLoadingAudio = false
@@ -627,82 +666,85 @@ struct LectureView: View {
                     completion()
                     return
                 }
-                
-                print("[LectureView] Audio data received - Size: \(data.count) bytes")
-                
-                do {
-                    self.audioPlayer = try AVAudioPlayer(data: data)
-                    let delegate = AudioPlayerDelegate {
-                        DispatchQueue.main.async {
-                            print("[LectureView] Audio playback completed")
-                            // Complete the typewriter text when audio finishes
-                            self.completeTypewriterText()
-                            // Don't immediately stop typewriter, let it complete naturally
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                self.stopTypewriter()
-                                self.stopAudioMonitoring()
-                                completion()
-                            }
-                        }
-                    }
-                    self.audioPlayer?.delegate = delegate
-                    let estimatedDuration = self.audioPlayer?.duration ?? 5.0
-                    print("[LectureView] Audio duration: \(estimatedDuration) seconds")
-                    
-                    var completionCalled = false
-                    let fallbackTimer = Timer.scheduledTimer(withTimeInterval: estimatedDuration + 1.0, repeats: false) { _ in
-                        DispatchQueue.main.async {
-                            if !completionCalled && self.isPlaying {
-                                print("[LectureView] Fallback timer triggered")
-                                completionCalled = true
-                                self.completeTypewriterText()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    self.stopTypewriter()
-                                    self.stopAudioMonitoring()
-                                    completion()
-                                }
-                            }
-                        }
-                    }
-                    self.startAudioMonitoring(estimatedDuration: estimatedDuration) {
-                        if !completionCalled {
-                            print("[LectureView] Audio monitoring detected completion")
-                            completionCalled = true
-                            fallbackTimer.invalidate()
-                            self.completeTypewriterText()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                self.stopTypewriter()
-                                completion()
-                            }
-                        }
-                    }
-                    let originalCompletion = delegate.completion
-                    delegate.completion = {
-                        if !completionCalled {
-                            print("[LectureView] Audio player delegate completion")
-                            completionCalled = true
-                            fallbackTimer.invalidate()
-                            self.stopAudioMonitoring()
-                            originalCompletion()
-                        }
-                    }
-                    let success = self.audioPlayer?.play() ?? false
-                    if !success {
-                        print("[LectureView] Failed to start audio playback")
-                        self.audioError = "Failed to start audio playback."
-                        fallbackTimer.invalidate()
-                        self.stopAudioMonitoring()
-                        completion()
-                    } else {
-                        print("[LectureView] Audio playback started successfully")
-                    }
-                } catch {
-                    print("[LectureView] Audio player error: \(error.localizedDescription)")
-                    self.audioError = "Audio player error: \(error.localizedDescription)"
-                    completion()
-                }
+                // Cache the audio data
+                self.audioDataCache[audioFile.url] = data
+                self.handleAudioDataPlayback(data, completion: completion)
             }
         }.resume()
+    }
+    
+    private func handleAudioDataPlayback(_ data: Data, completion: @escaping () -> Void) {
+        do {
+            self.audioPlayer = try AVAudioPlayer(data: data)
+            let delegate = AudioPlayerDelegate {
+                DispatchQueue.main.async {
+                    print("[LectureView] Audio playback completed")
+                    // Complete the typewriter text when audio finishes
+                    self.completeTypewriterText()
+                    // Don't immediately stop typewriter, let it complete naturally
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        self.stopTypewriter()
+                        self.stopAudioMonitoring()
+                        completion()
+                    }
+                }
+            }
+            self.audioPlayer?.delegate = delegate
+            let estimatedDuration = self.audioPlayer?.duration ?? 5.0
+            print("[LectureView] Audio duration: \(estimatedDuration) seconds")
+            
+            var completionCalled = false
+            let fallbackTimer = Timer.scheduledTimer(withTimeInterval: estimatedDuration + 1.0, repeats: false) { _ in
+                DispatchQueue.main.async {
+                    if !completionCalled && self.isPlaying {
+                        print("[LectureView] Fallback timer triggered")
+                        completionCalled = true
+                        self.completeTypewriterText()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            self.stopTypewriter()
+                            self.stopAudioMonitoring()
+                            completion()
+                        }
+                    }
+                }
+            }
+            self.startAudioMonitoring(estimatedDuration: estimatedDuration) {
+                if !completionCalled {
+                    print("[LectureView] Audio monitoring detected completion")
+                    completionCalled = true
+                    fallbackTimer.invalidate()
+                    self.completeTypewriterText()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        self.stopTypewriter()
+                        completion()
+                    }
+                }
+            }
+            let originalCompletion = delegate.completion
+            delegate.completion = {
+                if !completionCalled {
+                    print("[LectureView] Audio player delegate completion")
+                    completionCalled = true
+                    fallbackTimer.invalidate()
+                    self.stopAudioMonitoring()
+                    originalCompletion()
+                }
+            }
+            let success = self.audioPlayer?.play() ?? false
+            if !success {
+                print("[LectureView] Failed to start audio playback")
+                self.audioError = "Failed to start audio playback."
+                fallbackTimer.invalidate()
+                self.stopAudioMonitoring()
+                completion()
+            } else {
+                print("[LectureView] Audio playback started successfully")
+            }
+        } catch {
+            print("[LectureView] Audio player error: \(error.localizedDescription)")
+            self.audioError = "Audio player error: \(error.localizedDescription)"
+            completion()
+        }
     }
     
     private func startTypewriter(for text: String) {
