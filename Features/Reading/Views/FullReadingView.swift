@@ -31,9 +31,13 @@ struct FullReadingView: View {
     init(itemID: String, collectionName: String, itemTitle: String) {
         _viewModel = StateObject(wrappedValue: FullReadingViewModel(itemID: itemID, collectionName: collectionName))
         self.itemTitle = itemTitle // Store title for navigation bar
+        self.itemID = itemID
+        self.collectionName = collectionName
     }
     
-    private var itemTitle: String
+    let itemTitle: String
+    let itemID: String
+    let collectionName: String
 
     var body: some View {
         ScrollView {

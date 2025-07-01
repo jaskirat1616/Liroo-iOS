@@ -6,11 +6,11 @@ class AppCoordinator: ObservableObject {
     enum Tab: Hashable, CaseIterable, Identifiable {
         case dashboard
         case reading
-        case flashcards
         case history
         case profile
         case generation
         case settings
+        case help
         
         var id: String { self.rawValue }
         
@@ -18,11 +18,11 @@ class AppCoordinator: ObservableObject {
             switch self {
             case .dashboard: return "dashboard"
             case .reading: return "reading"
-            case .flashcards: return "flashcards"
             case .history: return "history"
             case .profile: return "profile"
             case .generation: return "generation"
             case .settings: return "settings"
+            case .help: return "help"
             }
         }
         
@@ -30,11 +30,11 @@ class AppCoordinator: ObservableObject {
             switch self {
             case .dashboard: return "Dashboard"
             case .reading: return "Reading"
-            case .flashcards: return "Flashcards"
             case .history: return "History"
             case .profile: return "Profile"
             case .generation: return "Generate"
             case .settings: return "Settings"
+            case .help: return "Help"
             }
         }
         
@@ -42,11 +42,11 @@ class AppCoordinator: ObservableObject {
             switch self {
             case .dashboard: return "square.grid.2x2.fill"
             case .reading: return "book.fill"
-            case .flashcards: return "rectangle.on.rectangle.fill"
             case .history: return "list.bullet.rectangle.portrait"
             case .profile: return "person.fill"
             case .generation: return "wand.and.stars"
             case .settings: return "gearshape.fill"
+            case .help: return "questionmark.circle.fill"
             }
         }
     }

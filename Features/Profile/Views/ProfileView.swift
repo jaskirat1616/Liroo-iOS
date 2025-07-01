@@ -39,6 +39,29 @@ struct ProfileView: View {
                         )
                     }
                     
+                    // Help Button
+                    NavigationLink(destination: HelpView()) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "questionmark.circle")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.cyan)
+                            Text("Help")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.cyan)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.cyan.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                    }
+                    
                     // Settings Button
                     NavigationLink(destination: SettingsView()) {
                         HStack(spacing: 8) {

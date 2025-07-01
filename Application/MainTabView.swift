@@ -98,10 +98,12 @@ struct MainTabView_Previews: PreviewProvider {
         Group {
             MainTabView()
                 .environmentObject(AppCoordinator())
+                .environmentObject(AuthViewModel())
                 .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
                 .previewDevice("iPhone 15 Pro")
             MainTabView()
                 .environmentObject(AppCoordinator())
+                .environmentObject(AuthViewModel())
                 .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
                 .previewDevice("iPad Pro (12.9-inch) (6th generation)")
         }

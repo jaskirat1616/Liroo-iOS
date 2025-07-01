@@ -79,6 +79,13 @@ struct DashboardView: View {
                 .font(.headline)
                 .foregroundColor(.primary)
             Spacer()
+            NavigationLink(destination: HelpView()) {
+                Image(systemName: "questionmark.circle")
+                    .font(.title2)
+                    .foregroundColor(.cyan)
+                    .padding(8)
+            }
+            .accessibilityLabel("Help")
             NavigationLink(destination: SettingsView()) {
                 Image(systemName: "gearshape")
                     .font(.title2)

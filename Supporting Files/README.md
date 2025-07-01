@@ -17,7 +17,6 @@ Each feature is organized into its own module with Views and ViewModels:
 - Profile
 - Reading
 - History
-- Flashcards
 - Dialogue
 - Slideshow
 - Settings

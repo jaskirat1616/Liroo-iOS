@@ -26,22 +26,6 @@ struct ReadingContent: Identifiable {
     var tags: [String]
 }
 
-// MARK: - Flashcard
-struct Flashcard: Identifiable {
-    let id: String
-    var question: String
-    var answer: String
-    var category: String
-    var difficulty: Difficulty
-    var lastReviewed: Date?
-}
-
-enum Difficulty: String, Codable {
-    case easy
-    case medium
-    case hard
-}
-
 // MARK: - History Item
 struct HistoryItem: Identifiable {
     let id: String
@@ -53,7 +37,6 @@ struct HistoryItem: Identifiable {
 
 enum HistoryType: String, Codable {
     case reading
-    case flashcard
     case quiz
     case dialogue
 } 
