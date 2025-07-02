@@ -58,6 +58,14 @@ struct ContentGenerationView: View {
                     
                     // Generate Button
                     generateButton
+                    Spacer(minLength: 100)
+                    
+                    // Status Message
+                    if let status = viewModel.statusMessage {
+                        Text(status)
+                            .foregroundColor(.secondary)
+                            .padding()
+                    }
                     
                     // Error Message
                     if let errorMessage = viewModel.errorMessage {

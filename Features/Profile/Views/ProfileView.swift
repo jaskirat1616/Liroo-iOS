@@ -36,9 +36,8 @@ struct ProfileView: View {
                                 .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.purple)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, isIPad ? 14 : 10)
-                        .padding(.horizontal, isIPad ? 20 : 16)
+                        .padding(.vertical, isIPad ? 12 : 8)
+                        .padding(.horizontal, isIPad ? 14 : 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.purple.opacity(0.08))
@@ -59,9 +58,8 @@ struct ProfileView: View {
                                 .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.cyan)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, isIPad ? 14 : 10)
-                        .padding(.horizontal, isIPad ? 20 : 16)
+                        .padding(.vertical, isIPad ? 12 : 8)
+                        .padding(.horizontal, isIPad ? 14 : 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.cyan.opacity(0.08))
@@ -82,9 +80,8 @@ struct ProfileView: View {
                                 .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                                 .foregroundColor(.purple)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, isIPad ? 14 : 10)
-                        .padding(.horizontal, isIPad ? 20 : 16)
+                        .padding(.vertical, isIPad ? 12 : 8)
+                        .padding(.horizontal, isIPad ? 14 : 10)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.purple.opacity(0.08))

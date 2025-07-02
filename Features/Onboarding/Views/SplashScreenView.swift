@@ -26,8 +26,7 @@ struct SplashScreenView: View {
     @State private var isActive = false
     @State private var player: AVPlayer?
     @EnvironmentObject private var authViewModel: AuthViewModel
-    @StateObject private var onboardingViewModel = OnboardingViewModel()
-    
+
     private let splashDuration: Double = 5.0
     private let fadeOutDuration: Double = 0.75
     
@@ -78,11 +77,7 @@ struct SplashScreenView: View {
         }
         .fullScreenCover(isPresented: $isActive) {
             if authViewModel.isAuthenticated {
-                if onboardingViewModel.hasCompletedOnboarding {
-                    AppView()
-                } else {
-                    OnboardingView()
-                }
+                AppView()
             } else {
                 WelcomeAuthEntryView()
             }

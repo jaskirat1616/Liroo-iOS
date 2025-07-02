@@ -21,6 +21,7 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var isShowingFullScreenStory = false
     @Published var isShowingFullScreenLecture = false
     @Published var todayGenerationCount: Int = 0
+    @Published var statusMessage: String? = nil
     
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
@@ -58,22 +59,49 @@ class ContentGenerationViewModel: ObservableObject {
         
         isLoading = true
         errorMessage = nil
-        
-        do {
-            if selectedSummarizationTier == .story {
-                try await generateStory()
-            } else if selectedSummarizationTier == .lecture {
-                try await generateLecture()
-            } else {
-                try await generateRegularContent()
+        statusMessage = "Generating... Liroo will notify you when it's done."
+        let maxRetries = 2
+        var attempt = 0
+        var lastError: Error?
+        repeat {
+            do {
+                if selectedSummarizationTier == .story {
+                    try await generateStory()
+                } else if selectedSummarizationTier == .lecture {
+                    try await generateLecture()
+                } else {
+                    try await generateRegularContent()
+                }
+                // Refresh count after successful generation
+                await refreshTodayGenerationCount()
+                statusMessage = nil
+                isLoading = false
+                return
+            } catch {
+                lastError = error
+                attempt += 1
+                let nsError = error as NSError
+                let isNetworkLost = nsError.domain == NSURLErrorDomain && nsError.code == -1005
+                if isNetworkLost && attempt <= maxRetries {
+                    await MainActor.run {
+                        self.statusMessage = "Network connection lost. Retrying (\(attempt)/\(maxRetries))..."
+                    }
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                } else {
+                    await MainActor.run {
+                        self.errorMessage = error.localizedDescription
+                        self.statusMessage = nil
+                    }
+                    isLoading = false
+                    return
+                }
             }
-            // Refresh count after successful generation
-            await refreshTodayGenerationCount()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
+        } while attempt <= maxRetries
         isLoading = false
+        statusMessage = nil
+        if let lastError = lastError {
+            errorMessage = lastError.localizedDescription
+        }
     }
     
     private func generateStory() async throws {

@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import FirebaseAuth
+
 
 @MainActor
 class HelpViewModel: ObservableObject {
@@ -123,54 +125,38 @@ class HelpViewModel: ObservableObject {
     }
     
     func submitFeedback(subject: String, message: String, email: String) async throws {
-        // In a real app, this would send feedback to a server
-        // For now, we'll just simulate success
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
-        
-        // Log feedback locally
-        let feedback = FeedbackItem(
+        let userId = Auth.auth().currentUser?.uid
+        let feedback = FirestoreSupportRequest(
             subject: subject,
             message: message,
             email: email,
+            userId: userId,
             timestamp: Date()
         )
-        
-        // Save to UserDefaults for demo purposes
-        saveFeedback(feedback)
-    }
-    
-    private func saveFeedback(_ feedback: FeedbackItem) {
-        var feedbacks = getSavedFeedbacks()
-        feedbacks.append(feedback)
-        
-        if let encoded = try? JSONEncoder().encode(feedbacks) {
-            userDefaults.set(encoded, forKey: "savedFeedbacks")
+        do {
+            _ = try await FirestoreService.shared.create(feedback, in: "supportRequests")
+        } catch {
+            print("[HelpViewModel] ERROR: Failed to submit support request to Firestore: \(error)")
+            throw error
         }
-    }
-    
-    private func getSavedFeedbacks() -> [FeedbackItem] {
-        guard let data = userDefaults.data(forKey: "savedFeedbacks"),
-              let feedbacks = try? JSONDecoder().decode([FeedbackItem].self, from: data) else {
-            return []
-        }
-        return feedbacks
     }
 }
 
 // MARK: - Data Models
+struct FirestoreSupportRequest: Codable {
+    let subject: String
+    let message: String
+    let email: String
+    let userId: String?
+    let timestamp: Date
+}
+
 struct FAQItem: Identifiable {
     let id = UUID()
     let question: String
     let answer: String
     let category: HelpCategory
     var isExpanded: Bool = false
-}
-
-struct FeedbackItem: Codable {
-    let subject: String
-    let message: String
-    let email: String
-    let timestamp: Date
 }
 
 enum HelpCategory: String, CaseIterable {
