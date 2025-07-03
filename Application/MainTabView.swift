@@ -129,16 +129,6 @@ struct MainTabView: View {
                 .edgesIgnoringSafeArea(.bottom)
                 .environmentObject(coordinator)
             }
-            
-            // Global Background Processing Indicator
-            if globalManager.isBackgroundProcessing {
-                VStack {
-                    Spacer()
-                    globalBackgroundProcessingIndicator
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, isPad ? 20 : 100) // Above tab bar
-                }
-            }
         }
         .onAppear {
             globalManager.restoreFromUserDefaults()

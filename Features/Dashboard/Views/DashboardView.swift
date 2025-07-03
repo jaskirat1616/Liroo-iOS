@@ -8,6 +8,7 @@ struct DashboardView: View {
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var profileViewModel = ProfileViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var showGlobalProcessingIndicator: Bool = true
     
     // MARK: - iPad Detection
     private var isIPad: Bool {
@@ -52,10 +53,12 @@ struct DashboardView: View {
             )
             
             // Global Background Processing Indicator
-            if globalManager.isBackgroundProcessing {
+            if globalManager.isBackgroundProcessing && globalManager.isIndicatorVisible {
                 VStack {
                     Spacer()
-                    globalBackgroundProcessingIndicator
+                    globalBackgroundProcessingIndicator(dismissAction: {
+                        globalManager.dismissIndicator()
+                    })
                         .padding(.horizontal, 20)
                         .padding(.bottom, 20)
                 }
@@ -1024,31 +1027,33 @@ struct DashboardView: View {
     }
     
     // MARK: - Global Background Processing Indicator
-    private var globalBackgroundProcessingIndicator: some View {
+    private func globalBackgroundProcessingIndicator(dismissAction: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 HStack(spacing: 8) {
                     ProgressView()
                         .scaleEffect(0.8)
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    
                     Text("Generating \(globalManager.generationType)...")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
                 }
-                
                 Spacer()
-                
                 Text("\(Int(globalManager.progress * 100))%")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
+                Button(action: dismissAction) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.leading, 8)
+                }
+                .accessibilityLabel("Dismiss background processing indicator")
             }
-            
             // Progress Bar
             ProgressView(value: globalManager.progress)
                 .progressViewStyle(LinearProgressViewStyle(tint: .white))
                 .frame(height: 3)
-            
             if !globalManager.currentStep.isEmpty {
                 Text(globalManager.currentStep)
                     .font(.system(size: 12, weight: .medium))

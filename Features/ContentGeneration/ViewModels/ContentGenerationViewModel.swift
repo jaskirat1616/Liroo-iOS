@@ -205,9 +205,27 @@ class ContentGenerationViewModel: ObservableObject {
         await checkNotificationSettings()
         
         // Send test notification
+        let funnyBodies = [
+            "Looks like your notifications are working. We promise not to spam you... unless you forget about us. 😉",
+            "Don't ignore me! I get lonely. 🦉",
+            "This is your phone's way of saying 'hi'!",
+            "If you see this, you deserve a gold star. ⭐️",
+            "You just unlocked the secret notification achievement! 🏆",
+            "Congrats! You have successfully annoyed your phone. 🎉"
+        ]
+        let funnyTitles = [
+            "Psst... Over here!",
+            "Hey, it's me again!",
+            "Knock knock!",
+            "Guess who? 🦉",
+            "Surprise!",
+            "Achievement Unlocked!"
+        ]
+        let randomTitle = funnyTitles.randomElement() ?? "Psst... Over here!"
+        let randomBody = funnyBodies.randomElement() ?? "Looks like your notifications are working. We promise not to spam you... unless you forget about us. 😉"
         sendNotification(
-            title: "Test Notification 📱",
-            body: "This is a test notification to verify that notifications are working properly!",
+            title: randomTitle,
+            body: randomBody,
             isSuccess: true
         )
         
@@ -235,9 +253,25 @@ class ContentGenerationViewModel: ObservableObject {
         
         // This method uses a more direct approach
         await MainActor.run {
+            let forceBodies = [
+                "Just kidding! This is a high-priority test. If you saw this, our notification system is locked and loaded.",
+                "This is not a drill! (But it is a test.)",
+                "You have been chosen by the Notification Council. 🦉",
+                "If you see this, you are officially a notification ninja. 🥷",
+                "Alert! Alert! You are awesome. 🚨"
+            ]
+            let forceTitles = [
+                "🚨 INTRUSION ALERT! 🚨",
+                "⚡️ Emergency Notification! ⚡️",
+                "🦉 Duolingo Owl is Watching!",
+                "Test Alert!",
+                "You rang?"
+            ]
+            let randomForceTitle = forceTitles.randomElement() ?? "🚨 INTRUSION ALERT! 🚨"
+            let randomForceBody = forceBodies.randomElement() ?? "Just kidding! This is a high-priority test. If you saw this, our notification system is locked and loaded."
             let content = UNMutableNotificationContent()
-            content.title = "FORCE TEST 📱"
-            content.body = "This is a force test notification - if you see this, notifications work!"
+            content.title = randomForceTitle
+            content.body = randomForceBody
             content.sound = .default
             content.badge = NSNumber(value: 1)
             
@@ -360,11 +394,14 @@ class ContentGenerationViewModel: ObservableObject {
         errorMessage = nil
         statusMessage = "Starting generation... You can continue using the app."
         
-        // Clear any existing full screen states
+        // Clear any existing full screen states AND previous content
         isShowingFullScreenStory = false
         isShowingFullScreenLecture = false
         isShowingFullScreenContent = false
         savedContentDocumentId = nil
+        currentStory = nil
+        currentLecture = nil
+        blocks = []
         
         // Store generation parameters for background processing
         let generationParams = GenerationParameters(
@@ -399,10 +436,26 @@ class ContentGenerationViewModel: ObservableObject {
                 await refreshTodayGenerationCount()
                 
                 // Send success notification
+                let successBodies = [
+                    "Your new \(self.selectedSummarizationTier.displayName.lowercased()) has been conjured up and is ready for you. 🪄",
+                    "Voilà! Your content is ready. Don't leave me hanging!",
+                    "Freshly baked content, just for you. 🍞",
+                    "Your content is ready. Time to celebrate! 🎉",
+                    "You did it! Now go show off your new content."
+                ]
+                let successTitles = [
+                    "Abracadabra! ✨ It's Ready!",
+                    "Ding! Content Complete!",
+                    "Look what I made!",
+                    "Ta-da!",
+                    "Mission Complete!"
+                ]
+                let randomSuccessTitle = successTitles.randomElement() ?? "Abracadabra! ✨ It's Ready!"
+                let randomSuccessBody = successBodies.randomElement() ?? "Your new \(self.selectedSummarizationTier.displayName.lowercased()) has been conjured up and is ready for you. 🪄"
                 await MainActor.run {
                     self.sendNotification(
-                        title: "Content Generation Complete! 🎉",
-                        body: "Your \(self.selectedSummarizationTier.displayName.lowercased()) content is ready to view.",
+                        title: randomSuccessTitle,
+                        body: randomSuccessBody,
                         isSuccess: true
                     )
                 }
@@ -426,10 +479,26 @@ class ContentGenerationViewModel: ObservableObject {
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
                 } else {
                     // Send error notification
+                    let errorBodies = [
+                        "Looks like some gremlins got into the AI machine. Please try generating your content again. 🦉",
+                        "Oops! Something went wrong. Try again and pretend this never happened.",
+                        "The AI tripped over a cable. Give it another shot!",
+                        "Error 404: Motivation not found. Try again!",
+                        "Well, this is awkward. Let's try that again."
+                    ]
+                    let errorTitles = [
+                        "Uh Oh, Gremlins! 🛠️",
+                        "Oopsie Daisy!",
+                        "Yikes!",
+                        "Try Again!",
+                        "Whoops!"
+                    ]
+                    let randomErrorTitle = errorTitles.randomElement() ?? "Uh Oh, Gremlins! 🛠️"
+                    let randomErrorBody = errorBodies.randomElement() ?? "Looks like some gremlins got into the AI machine. Please try generating your content again. 🦉"
                     await MainActor.run {
                         self.sendNotification(
-                            title: "Generation Failed ❌",
-                            body: "There was an error generating your content. Please try again.",
+                            title: randomErrorTitle,
+                            body: randomErrorBody,
                             isSuccess: false
                         )
                     }
@@ -558,10 +627,10 @@ class ContentGenerationViewModel: ObservableObject {
                         globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 4)
                         
                         // Show full screen view AFTER everything is saved
-                        await MainActor.run {
-                            self.isShowingFullScreenStory = true
-                            print("[Story] Story fully saved to Firebase, now showing full screen")
-                        }
+                        // await MainActor.run {
+                        //     self.isShowingFullScreenStory = true
+                        //     print("[Story] Story fully saved to Firebase, now showing full screen")
+                        // }
                         
                         globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
                         print("[Story] Story content and image processing completed.")
@@ -644,6 +713,7 @@ class ContentGenerationViewModel: ObservableObject {
                 await MainActor.run {
                     self.currentLecture = lecture
                     print("[Lecture] Updated UI with lecture object")
+                    globalManager.setLastGeneratedContent(type: .lecture, id: lecture.id.uuidString, title: lecture.title)
                 }
                 
                 globalManager.updateProgress(step: "Generating audio narration...", stepNumber: 2, totalSteps: 3)
@@ -655,10 +725,10 @@ class ContentGenerationViewModel: ObservableObject {
                     globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
                     
                     // Show full screen view AFTER everything is saved
-                    await MainActor.run {
-                        self.isShowingFullScreenLecture = true
-                        print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
-                    }
+                    // await MainActor.run {
+                    //     self.isShowingFullScreenLecture = true
+                    //     print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
+                    // }
                     print("[Lecture] Lecture content and audio processing completed.")
                 } else {
                     print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save or generate audio.")
@@ -804,6 +874,10 @@ class ContentGenerationViewModel: ObservableObject {
                 await MainActor.run {
                     self.blocks = updatedBlocks
                     print("[Content] Updated UI with all processed blocks")
+                    if let firstBlock = updatedBlocks.first {
+                        let title = extractTopicTitle(from: inputText)
+                        globalManager.setLastGeneratedContent(type: .userContent, id: firstBlock.id.uuidString, title: title)
+                    }
                 }
                 
                 globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
@@ -819,17 +893,16 @@ class ContentGenerationViewModel: ObservableObject {
                         userId: currentUser.uid
                     )
                     
-                    // Store the saved document ID and show full screen
+                    // Store the saved document ID
                     await MainActor.run {
                         self.savedContentDocumentId = documentId
-                        self.isShowingFullScreenContent = true
-                        print("[Content] Content saved to Firebase with ID: \(documentId), now showing full screen")
+                        print("[Content] Content saved to Firebase with ID: \(documentId)")
                     }
                 } else {
                     print("[Content] WARNING: No authenticated user found, skipping Firebase save")
-                    // Still show full screen even without saving
+                    // Still show the content without saving
                     await MainActor.run {
-                        self.isShowingFullScreenContent = true
+                        self.isShowingFullScreenContent = false // Ensure we don't navigate
                     }
                 }
             } else if let error = apiResponse.error {
@@ -970,6 +1043,7 @@ class ContentGenerationViewModel: ObservableObject {
         await MainActor.run {
             self.currentStory = finalStoryToSave // Update UI with the story containing all attempted image URLs
             print("[Story][ImageGen] ✅ Image generation process for all chapters completed. UI updated with final story.")
+            globalManager.setLastGeneratedContent(type: .story, id: finalStoryToSave.id.uuidString, title: finalStoryToSave.title)
         }
         
         if let userId = Auth.auth().currentUser?.uid {
@@ -1461,18 +1535,91 @@ class ContentGenerationViewModel: ObservableObject {
             print("[Notifications] 💡 For full notification testing, use a real device")
             
             // Send a test notification
+            let simBodies = [
+                "This notification is from inside the simulator. Don't forget to check Notification Center!",
+                "Simulated notification: 100% less calories, 100% more fun!",
+                "If you see this, you are living in the Matrix. 🤖",
+                "This is a test. If this were a real notification, you'd be learning Spanish right now.",
+                "Sim Owl says: 'Practice makes perfect!' 🦉"
+            ]
+            let simTitles = [
+                "Greetings from the Matrix! 🤖",
+                "Simulated Success!",
+                "Virtual High Five! ✋",
+                "Owlgram Incoming!",
+                "Test Complete!"
+            ]
+            let randomSimTitle = simTitles.randomElement() ?? "Greetings from the Matrix! 🤖"
+            let randomSimBody = simBodies.randomElement() ?? "This notification is from inside the simulator. Don't forget to check Notification Center!"
             sendNotification(
-                title: "Simulator Test 📱",
-                body: "This notification was sent from iOS Simulator. Check Notification Center!",
+                title: randomSimTitle,
+                body: randomSimBody,
                 isSuccess: true
             )
         } else {
             print("[Notifications] 📱 Real device detected - notifications should work normally")
+            let realBodies = [
+                "This notification escaped the lab and made it to your real device. Hooray!",
+                "You did it! Notifications are alive and well.",
+                "If you see this, you are officially a notification champion! 🏅",
+                "Your phone just wanted to say hi. 👋",
+                "This is not a test. Or is it?"
+            ]
+            let realTitles = [
+                "It's Alive! ⚡️",
+                "Mission Accomplished!",
+                "Success!",
+                "Real World Notification!",
+                "You Win!"
+            ]
+            let randomRealTitle = realTitles.randomElement() ?? "It's Alive! ⚡️"
+            let randomRealBody = realBodies.randomElement() ?? "This notification escaped the lab and made it to your real device. Hooray!"
             sendNotification(
-                title: "Real Device Test 📱",
-                body: "This notification was sent from a real device. Check your lock screen!",
+                title: randomRealTitle,
+                body: randomRealBody,
                 isSuccess: true
             )
+        }
+    }
+    
+    // MARK: - Repeated Test Notifications
+    func scheduleRepeatedTestNotifications(count: Int = 5, interval: TimeInterval = 10) {
+        let funnyBodies = [
+            "Still here! Did you forget about me? 🦉",
+            "Knock knock... it's notification #\(UUID().uuidString.prefix(4))!",
+            "Just checking in. Your phone misses you!",
+            "Another one! DJ Khaled would be proud.",
+            "You can't escape me that easily!",
+            "This is your friendly reminder that I'm persistent."
+        ]
+        let funnyTitles = [
+            "Hey again!",
+            "Still Testing!",
+            "Ping!",
+            "Guess Who?",
+            "Surprise (again)!"
+        ]
+        for i in 0..<count {
+            let randomTitle = funnyTitles.randomElement() ?? "Hey again!"
+            let randomBody = funnyBodies.randomElement() ?? "Still here! Did you forget about me? 🦉"
+            let content = UNMutableNotificationContent()
+            content.title = randomTitle
+            content.body = "[Test #\(i+1)] " + randomBody
+            content.sound = .default
+            content.badge = NSNumber(value: 1)
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval * Double(i+1), repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "repeated_test_\(UUID().uuidString)",
+                content: content,
+                trigger: trigger
+            )
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("[Notifications] ❌ Failed to schedule repeated notification: \(error.localizedDescription)")
+                } else {
+                    print("[Notifications] ✅ Scheduled repeated notification #\(i+1) for \(interval * Double(i+1)) seconds from now.")
+                }
+            }
         }
     }
 }
@@ -1563,7 +1710,7 @@ struct BackendAudioFile: Codable {
     let section: Int?
 }
 
-struct Story: Identifiable, Codable {
+struct Story: Identifiable, Codable, Equatable {
     let id: UUID
     let title: String
     let content: String // This is the overview/summary of the story
@@ -1625,7 +1772,7 @@ struct Story: Identifiable, Codable {
     }
 }
 
-struct StoryChapter: Identifiable, Codable {
+struct StoryChapter: Identifiable, Codable, Equatable {
     let id: UUID
     let title: String
     let content: String

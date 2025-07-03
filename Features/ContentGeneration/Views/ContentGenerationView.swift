@@ -157,6 +157,9 @@ struct ContentGenerationView: View {
         return userContent
     }
 
+    // MARK: - Global Background Processing Indicator
+    @State private var showGlobalProcessingIndicator: Bool = true
+
     var body: some View {
         ZStack {
             // Background gradient matching other screens
@@ -176,6 +179,47 @@ struct ContentGenerationView: View {
                     // Header Section
                     headerSection
                     
+                    // Persistent Recently Generated Box (always visible, compact, no dismiss)
+                    if let recent = globalManager.lastGeneratedContent {
+                        HStack(spacing: 8) {
+                            Image(systemName: {
+                                switch recent.type {
+                                case .story: return "book.fill"
+                                case .lecture: return "mic.fill"
+                                case .userContent: return "doc.text.fill"
+                                }
+                            }())
+                            .foregroundColor(.green)
+                            .font(.system(size: 16, weight: .semibold))
+                            Text(recent.title)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer()
+                            Text("Recently generated")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(Color.green.opacity(0.13))
+                        .cornerRadius(10)
+                        .onTapGesture {
+                            // Open the correct full reading view based on type
+                            switch recent.type {
+                            case .story:
+                                viewModel.isShowingFullScreenStory = true
+                            case .lecture:
+                                viewModel.isShowingFullScreenLecture = true
+                            case .userContent:
+                                viewModel.isShowingFullScreenContent = true
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                    }
+                    
                     // Input Section
                     inputSection
                     
@@ -183,8 +227,15 @@ struct ContentGenerationView: View {
                     dailyLimitSection
                     
                     // Background Progress Section
-                    if globalManager.isBackgroundProcessing {
-                        backgroundProgressSection
+                    if globalManager.isBackgroundProcessing && globalManager.isIndicatorVisible {
+                        VStack {
+                            Spacer()
+                            globalBackgroundProcessingIndicator(dismissAction: {
+                                globalManager.dismissIndicator()
+                            })
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                        }
                     }
                     
                     // Configuration Section
@@ -205,8 +256,65 @@ struct ContentGenerationView: View {
                     // Simulator Test Button
                     simulatorTestButton
                     
+                    // Repeated Test Notifications Button
+                    repeatedTestNotificationsButton
+                    
                     // Spacer
                     Spacer(minLength: 100)
+                    
+                    // Temporary Success Box for ALL content types
+                    if globalManager.showSuccessBox && (
+                        globalManager.recentlyGeneratedStory != nil ||
+                        globalManager.recentlyGeneratedLecture != nil ||
+                        globalManager.recentlyGeneratedUserContent != nil
+                    ) {
+                        Button(action: {
+                            // Open the correct full reading view
+                            if globalManager.recentlyGeneratedStory != nil {
+                                viewModel.isShowingFullScreenStory = true
+                            } else if globalManager.recentlyGeneratedLecture != nil {
+                                viewModel.isShowingFullScreenLecture = true
+                            } else if globalManager.recentlyGeneratedUserContent != nil {
+                                viewModel.isShowingFullScreenContent = true
+                            }
+                            globalManager.clearRecentlyGeneratedContent()
+                        }) {
+                            HStack(spacing: 16) {
+                                Image(systemName: globalManager.recentlyGeneratedStory != nil ? "book.fill" : (globalManager.recentlyGeneratedLecture != nil ? "mic.fill" : "doc.text.fill"))
+                                    .font(.system(size: 28, weight: .bold))
+                                    .foregroundColor(.accentColor)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Content Ready!")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Text("Tap to view your new " + (globalManager.recentlyGeneratedStory != nil ? "story" : (globalManager.recentlyGeneratedLecture != nil ? "lecture" : "content")) + " in full reading mode.")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                Button(action: { globalManager.showSuccessBox = false }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 20, weight: .bold))
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 4)
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.green.opacity(0.12))
+                                    .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                            )
+                        }
+                        .padding(.horizontal, isIPad ? 24 : 12)
+                        .padding(.vertical, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.spring(), value: globalManager.recentlyGeneratedStory)
+                    }
                     
                     // Status Message
                     if let status = viewModel.statusMessage {
@@ -338,7 +446,7 @@ struct ContentGenerationView: View {
                  print("🔄 ContentGenerationView: OCR error exists. Not updating input text from recognizedText.")
             }
         }
-        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory, onDismiss: { }) {
             if let story = viewModel.currentStory {
                 NavigationStack {
                     FullReadingView(
@@ -350,9 +458,20 @@ struct ContentGenerationView: View {
                         }
                     )
                 }
+            } else if let recent = globalManager.lastGeneratedContent, recent.type == .story {
+                NavigationStack {
+                    FullReadingView(
+                        itemID: recent.id,
+                        collectionName: "stories",
+                        itemTitle: recent.title,
+                        dismissAction: {
+                            viewModel.isShowingFullScreenStory = false
+                        }
+                    )
+                }
             }
         }
-        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenLecture) {
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenLecture, onDismiss: { }) {
             if let lecture = viewModel.currentLecture {
                 LectureView(
                     lecture: lecture, 
@@ -361,15 +480,38 @@ struct ContentGenerationView: View {
                         viewModel.isShowingFullScreenLecture = false
                     }
                 )
+            } else if let recent = globalManager.lastGeneratedContent, recent.type == .lecture {
+                // For lectures, we need to fetch the content from Firebase since we don't store the full lecture object
+                NavigationStack {
+                    FullReadingView(
+                        itemID: recent.id,
+                        collectionName: "lectures",
+                        itemTitle: recent.title,
+                        dismissAction: {
+                            viewModel.isShowingFullScreenLecture = false
+                        }
+                    )
+                }
             }
         }
-        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenContent) {
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenContent, onDismiss: { }) {
             if !viewModel.blocks.isEmpty {
                 NavigationStack {
                     FullReadingView(
                         itemID: viewModel.savedContentDocumentId ?? convertedUserContent.id ?? UUID().uuidString,
                         collectionName: "userGeneratedContent",
                         itemTitle: convertedUserContent.topic ?? "Generated Content",
+                        dismissAction: {
+                            viewModel.isShowingFullScreenContent = false
+                        }
+                    )
+                }
+            } else if let recent = globalManager.lastGeneratedContent, recent.type == .userContent {
+                NavigationStack {
+                    FullReadingView(
+                        itemID: recent.id,
+                        collectionName: "userGeneratedContent",
+                        itemTitle: recent.title,
                         dismissAction: {
                             viewModel.isShowingFullScreenContent = false
                         }
@@ -585,44 +727,6 @@ struct ContentGenerationView: View {
                     .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
-        }
-        .padding(isIPad ? 28 : 16)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-    }
-    
-    // MARK: - Background Progress Section
-    private var backgroundProgressSection: some View {
-        VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
-            HStack {
-                Text("Background Processing")
-                    .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
-                Spacer()
-                Text("\(Int(globalManager.progress * 100))%")
-                    .font(.system(size: isIPad ? 20 : 18, weight: .bold))
-                    .foregroundColor(.primary)
-            }
-            
-            // Progress Bar
-            ProgressView(value: globalManager.progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                .frame(height: isIPad ? 6 : 4)
-            
-            if !globalManager.currentStep.isEmpty {
-                HStack(spacing: isIPad ? 8 : 6) {
-                    Image(systemName: "gear")
-                        .font(.system(size: isIPad ? 13 : 12, weight: .medium))
-                        .foregroundColor(.blue)
-                    Text(globalManager.currentStep)
-                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Text("Step \(globalManager.currentStepNumber) of \(globalManager.totalSteps)")
-                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                .foregroundColor(.secondary)
         }
         .padding(isIPad ? 28 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
@@ -918,6 +1022,35 @@ struct ContentGenerationView: View {
         .buttonStyle(PlainButtonStyle())
     }
     
+    // MARK: - Repeated Test Notifications Button
+    private var repeatedTestNotificationsButton: some View {
+        Button(action: {
+            viewModel.scheduleRepeatedTestNotifications(count: 5, interval: 10)
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "repeat.circle.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.green)
+                
+                Text("Repeated Test Notifications")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.green)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.green.opacity(0.1))
+                }
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
     // MARK: - Error Section
     private func errorSection(_ message: String) -> some View {
         HStack(spacing: 8) {
@@ -947,6 +1080,51 @@ struct ContentGenerationView: View {
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+    }
+
+    // MARK: - Global Background Processing Indicator
+    private func globalBackgroundProcessingIndicator(dismissAction: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    Text("Generating \(globalManager.generationType)...")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                Spacer()
+                Text("\(Int(globalManager.progress * 100))%")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                Button(action: dismissAction) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.leading, 8)
+                }
+                .accessibilityLabel("Dismiss background processing indicator")
+            }
+            // Progress Bar
+            ProgressView(value: globalManager.progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                .frame(height: 3)
+            if !globalManager.currentStep.isEmpty {
+                Text(globalManager.currentStep)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.blue.opacity(0.9))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(.easeInOut(duration: 0.3), value: globalManager.isBackgroundProcessing)
     }
 }
 
