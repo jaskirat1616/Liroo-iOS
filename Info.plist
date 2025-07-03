@@ -27,5 +27,9 @@
 	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.liroo.contentgeneration</string>
+	</array>
 </dict>
 </plist>

@@ -95,6 +95,7 @@ extension SummarizationTier: CustomStringConvertible {
 
 struct ContentGenerationView: View {
     @StateObject private var viewModel = ContentGenerationViewModel()
+    @StateObject private var globalManager = GlobalBackgroundProcessingManager.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
@@ -180,6 +181,11 @@ struct ContentGenerationView: View {
                     
                     // Daily Limit Section
                     dailyLimitSection
+                    
+                    // Background Progress Section
+                    if globalManager.isBackgroundProcessing {
+                        backgroundProgressSection
+                    }
                     
                     // Configuration Section
                     configurationSection
@@ -532,7 +538,7 @@ struct ContentGenerationView: View {
     // MARK: - Daily Limit Section
     private var dailyLimitSection: some View {
         let used = viewModel.todayGenerationCount
-        let limit = 8
+        let limit = 12
         let atLimit = used >= limit
         let progress = Double(used) / Double(limit)
         
@@ -565,6 +571,44 @@ struct ContentGenerationView: View {
                     .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
+        }
+        .padding(isIPad ? 28 : 16)
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+    }
+    
+    // MARK: - Background Progress Section
+    private var backgroundProgressSection: some View {
+        VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
+            HStack {
+                Text("Background Processing")
+                    .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
+                Spacer()
+                Text("\(Int(globalManager.progress * 100))%")
+                    .font(.system(size: isIPad ? 20 : 18, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+            
+            // Progress Bar
+            ProgressView(value: globalManager.progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                .frame(height: isIPad ? 6 : 4)
+            
+            if !globalManager.currentStep.isEmpty {
+                HStack(spacing: isIPad ? 8 : 6) {
+                    Image(systemName: "gear")
+                        .font(.system(size: isIPad ? 13 : 12, weight: .medium))
+                        .foregroundColor(.blue)
+                    Text(globalManager.currentStep)
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Text("Step \(globalManager.currentStepNumber) of \(globalManager.totalSteps)")
+                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                .foregroundColor(.secondary)
         }
         .padding(isIPad ? 28 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
@@ -729,9 +773,9 @@ struct ContentGenerationView: View {
             )
             .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.75), value: viewModel.isLoading)
         }
-        .disabled(viewModel.isLoading || viewModel.todayGenerationCount >= 8)
-        .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.5 : 1.0)
-        .scaleEffect(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.98 : 1.0)
+        .disabled(viewModel.isLoading || viewModel.todayGenerationCount >= 12)
+        .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 12 ? 0.5 : 1.0)
+        .scaleEffect(viewModel.isLoading || viewModel.todayGenerationCount >= 12 ? 0.98 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
         .animation(.easeInOut(duration: 0.2), value: viewModel.todayGenerationCount)
     }

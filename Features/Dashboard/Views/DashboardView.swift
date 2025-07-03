@@ -4,6 +4,7 @@ import CoreData
 
 struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var globalManager = GlobalBackgroundProcessingManager.shared
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var profileViewModel = ProfileViewModel()
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -18,36 +19,51 @@ struct DashboardView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: isIPad ? 20 : 12) {
-                dashboardHeader
-                weeklyReadingProgressSection
-                dashboardGridSection
-                streaksSection
-                recentReadingsSection
-                Spacer(minLength: isIPad ? 80 : 120)
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: isIPad ? 20 : 12) {
+                    dashboardHeader
+                    weeklyReadingProgressSection
+                    dashboardGridSection
+                    streaksSection
+                    recentReadingsSection
+                    Spacer(minLength: isIPad ? 80 : 120)
+                }
+                .padding(.horizontal, isIPad ? 24 : 16)
+                .padding(.top, isIPad ? 16 : 8)
             }
-            .padding(.horizontal, isIPad ? 24 : 16)
-            .padding(.top, isIPad ? 16 : 8)
-        }
-        .refreshable {
-            viewModel.refreshData()
+            .refreshable {
+                viewModel.refreshData()
+            }
+            .onAppear {
+                viewModel.refreshData()
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(
+                        colors: colorScheme == .dark ?
+                        [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
+                        [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
+                    ),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
+            
+            // Global Background Processing Indicator
+            if globalManager.isBackgroundProcessing {
+                VStack {
+                    Spacer()
+                    globalBackgroundProcessingIndicator
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 20)
+                }
+            }
         }
         .onAppear {
-            viewModel.refreshData()
+            globalManager.restoreFromUserDefaults()
         }
-        .background(
-            LinearGradient(
-                gradient: Gradient(
-                    colors: colorScheme == .dark ?
-                    [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
-                    [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
-                ),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        )
     }
     
     // MARK: - Dashboard Header
@@ -995,7 +1011,6 @@ struct DashboardView: View {
             } else {
                 standardNoDataView("daily reading activity")
             }
-            }
         }
     }
 
@@ -1006,6 +1021,50 @@ struct DashboardView: View {
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding()
+    }
+    
+    // MARK: - Global Background Processing Indicator
+    private var globalBackgroundProcessingIndicator: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    
+                    Text("Generating \(globalManager.generationType)...")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                Text("\(Int(globalManager.progress * 100))%")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            
+            // Progress Bar
+            ProgressView(value: globalManager.progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                .frame(height: 3)
+            
+            if !globalManager.currentStep.isEmpty {
+                Text(globalManager.currentStep)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.blue.opacity(0.9))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(.easeInOut(duration: 0.3), value: globalManager.isBackgroundProcessing)
+    }
 }
 
 // MARK: - Supporting Views

@@ -5,6 +5,7 @@ struct MainTabView: View {
     @EnvironmentObject private var authViewModel: AuthViewModel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @StateObject private var globalManager = GlobalBackgroundProcessingManager.shared
     
     private let tabBarItems: [AppCoordinator.Tab] = [
         .dashboard, .generation, .history, .profile
@@ -15,118 +16,176 @@ struct MainTabView: View {
     }
     
     var body: some View {
-        if isPad {
-            // Optimized TabView for iPad - no sidebar, clean layout
-            TabView(selection: $coordinator.currentTab) {
-                NavigationStack { 
-                    DashboardView()
-                        .navigationTitle("Dashboard")
-                        .navigationBarTitleDisplayMode(.large)
-                }
-                .tabItem { 
-                    Label("Dashboard", systemImage: "square.grid.2x2.fill") 
-                }
-                .tag(AppCoordinator.Tab.dashboard)
-                
-                NavigationStack { 
-                    ContentGenerationView()
-                        .navigationTitle("Generate")
-                        .navigationBarTitleDisplayMode(.large)
-                }
-                .tabItem { 
-                    Label("Generate", systemImage: "wand.and.stars") 
-                }
-                .tag(AppCoordinator.Tab.generation)
-                
-                NavigationStack { 
-                    HistoryView()
-                        .navigationTitle("History")
-                        .navigationBarTitleDisplayMode(.large)
-                }
-                .tabItem { 
-                    Label("History", systemImage: "list.bullet.rectangle.portrait") 
-                }
-                .tag(AppCoordinator.Tab.history)
-                
-                NavigationStack { 
-                    ProfileView()
-                        .navigationTitle("Profile")
-                        .navigationBarTitleDisplayMode(.large)
-                }
-                .tabItem { 
-                    Label("Profile", systemImage: "person.fill") 
-                }
-                .tag(AppCoordinator.Tab.profile)
-            }
-            .environmentObject(coordinator)
-            .onAppear {
-                // Configure tab bar appearance for iPad
-                let appearance = UITabBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                appearance.backgroundColor = UIColor.systemBackground
-                
-                UITabBar.appearance().standardAppearance = appearance
-                UITabBar.appearance().scrollEdgeAppearance = appearance
-            }
-        } else {
-            // Custom floating tab bar for iPhone
-            ZStack(alignment: .bottom) {
-                // Main content
-                Group {
-                    switch coordinator.currentTab {
-                    case .dashboard:
-                        NavigationStack { DashboardView() }
-                    case .generation:
-                        NavigationStack { ContentGenerationView() }
-                    case .history:
-                        NavigationStack { HistoryView() }
-                    case .profile:
-                        NavigationStack { ProfileView() }
-                    default:
-                        NavigationStack { DashboardView() }
+        ZStack {
+            if isPad {
+                // Optimized TabView for iPad - no sidebar, clean layout
+                TabView(selection: $coordinator.currentTab) {
+                    NavigationStack { 
+                        DashboardView()
+                            .navigationTitle("Dashboard")
+                            .navigationBarTitleDisplayMode(.large)
                     }
+                    .tabItem { 
+                        Label("Dashboard", systemImage: "square.grid.2x2.fill") 
+                    }
+                    .tag(AppCoordinator.Tab.dashboard)
+                    
+                    NavigationStack { 
+                        ContentGenerationView()
+                            .navigationTitle("Generate")
+                            .navigationBarTitleDisplayMode(.large)
+                    }
+                    .tabItem { 
+                        Label("Generate", systemImage: "wand.and.stars") 
+                    }
+                    .tag(AppCoordinator.Tab.generation)
+                    
+                    NavigationStack { 
+                        HistoryView()
+                            .navigationTitle("History")
+                            .navigationBarTitleDisplayMode(.large)
+                    }
+                    .tabItem { 
+                        Label("History", systemImage: "list.bullet.rectangle.portrait") 
+                    }
+                    .tag(AppCoordinator.Tab.history)
+                    
+                    NavigationStack { 
+                        ProfileView()
+                            .navigationTitle("Profile")
+                            .navigationBarTitleDisplayMode(.large)
+                    }
+                    .tabItem { 
+                        Label("Profile", systemImage: "person.fill") 
+                    }
+                    .tag(AppCoordinator.Tab.profile)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
-                // Custom Tab Bar
-                HStack {
-                    ForEach(tabBarItems, id: \.self) { tab in
-                        Button(action: {
-                            withAnimation(.spring()) {
-                                coordinator.switchToTab(tab)
-                            }
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: tab.icon)
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .foregroundColor(coordinator.currentTab == tab ? Color.accentColor : Color.primary.opacity(0.6))
-                                Text(tab.title)
-                                    .font(.caption2)
-                                    .foregroundColor(coordinator.currentTab == tab ? Color.accentColor : Color.primary.opacity(0.6))
-                            }
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
+                .environmentObject(coordinator)
+                .onAppear {
+                    // Configure tab bar appearance for iPad
+                    let appearance = UITabBarAppearance()
+                    appearance.configureWithOpaqueBackground()
+                    appearance.backgroundColor = UIColor.systemBackground
+                    
+                    UITabBar.appearance().standardAppearance = appearance
+                    UITabBar.appearance().scrollEdgeAppearance = appearance
+                }
+            } else {
+                // Custom floating tab bar for iPhone
+                ZStack(alignment: .bottom) {
+                    // Main content
+                    Group {
+                        switch coordinator.currentTab {
+                        case .dashboard:
+                            NavigationStack { DashboardView() }
+                        case .generation:
+                            NavigationStack { ContentGenerationView() }
+                        case .history:
+                            NavigationStack { HistoryView() }
+                        case .profile:
+                            NavigationStack { ProfileView() }
+                        default:
+                            NavigationStack { DashboardView() }
                         }
                     }
-                }
-                .padding(.horizontal, 24)
-                .background(
-                    Group {
-                        RoundedRectangle(cornerRadius: 32, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                            )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                    // Custom Tab Bar
+                    HStack {
+                        ForEach(tabBarItems, id: \.self) { tab in
+                            Button(action: {
+                                withAnimation(.spring()) {
+                                    coordinator.switchToTab(tab)
+                                }
+                            }) {
+                                VStack(spacing: 4) {
+                                    Image(systemName: tab.icon)
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundColor(coordinator.currentTab == tab ? Color.accentColor : Color.primary.opacity(0.6))
+                                    Text(tab.title)
+                                        .font(.caption2)
+                                        .foregroundColor(coordinator.currentTab == tab ? Color.accentColor : Color.primary.opacity(0.6))
+                                }
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
                     }
-                    .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 8)
-                )
-                .padding(.horizontal, 32)
-                .padding(.bottom, 24)
+                    .padding(.horizontal, 24)
+                    .background(
+                        Group {
+                            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+                        .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 8)
+                    )
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 24)
+                }
+                .edgesIgnoringSafeArea(.bottom)
+                .environmentObject(coordinator)
             }
-            .edgesIgnoringSafeArea(.bottom)
-            .environmentObject(coordinator)
+            
+            // Global Background Processing Indicator
+            if globalManager.isBackgroundProcessing {
+                VStack {
+                    Spacer()
+                    globalBackgroundProcessingIndicator
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, isPad ? 20 : 100) // Above tab bar
+                }
+            }
         }
+        .onAppear {
+            globalManager.restoreFromUserDefaults()
+        }
+    }
+    
+    // MARK: - Global Background Processing Indicator
+    private var globalBackgroundProcessingIndicator: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    
+                    Text("Generating \(globalManager.generationType)...")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                Text("\(Int(globalManager.progress * 100))%")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            
+            // Progress Bar
+            ProgressView(value: globalManager.progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: .white))
+                .frame(height: 3)
+            
+            if !globalManager.currentStep.isEmpty {
+                Text(globalManager.currentStep)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.blue.opacity(0.9))
+                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+        )
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(.easeInOut(duration: 0.3), value: globalManager.isBackgroundProcessing)
     }
 }
 

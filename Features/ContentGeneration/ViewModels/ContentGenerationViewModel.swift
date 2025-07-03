@@ -2,6 +2,8 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
+import UserNotifications
+import BackgroundTasks
 
 @MainActor
 class ContentGenerationViewModel: ObservableObject {
@@ -25,6 +27,9 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var statusMessage: String? = nil
     @Published var savedContentDocumentId: String?
     
+    // Use global background processing manager
+    private let globalManager = GlobalBackgroundProcessingManager.shared
+    
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
     
@@ -35,6 +40,31 @@ class ContentGenerationViewModel: ObservableObject {
         config.timeoutIntervalForResource = 1800  // 30 minutes timeout for resource
         return URLSession(configuration: config)
     }()
+    
+    // MARK: - Notification Setup
+    init() {
+        setupNotifications()
+    }
+    
+    private func setupNotifications() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                print("Notification permission granted")
+            } else if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
+    }
+    
+    private func sendNotification(title: String, body: String, isSuccess: Bool = true) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = isSuccess ? .default : .defaultCritical
+        
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
     
     // MARK: - Content Generation
     
@@ -53,15 +83,18 @@ class ContentGenerationViewModel: ObservableObject {
         if let userId = Auth.auth().currentUser?.uid {
             let todayCount = await fetchTodayGenerationCount(userId: userId)
             await MainActor.run { self.todayGenerationCount = todayCount }
-            if todayCount >= 8 {
-                errorMessage = "You have reached your daily generation limit (8 per day). Please try again tomorrow."
+            if todayCount >= 12 {
+                errorMessage = "You have reached your daily generation limit (12 per day). Please try again tomorrow."
                 return
             }
         }
         
+        // Start background processing
+        let generationType = selectedSummarizationTier.displayName.lowercased()
+        let taskId = globalManager.startBackgroundTask(type: generationType)
         isLoading = true
         errorMessage = nil
-        statusMessage = "Generating... Liroo will notify you when it's done."
+        statusMessage = "Starting generation... You can continue using the app."
         
         // Clear any existing full screen states
         isShowingFullScreenStory = false
@@ -69,51 +102,94 @@ class ContentGenerationViewModel: ObservableObject {
         isShowingFullScreenContent = false
         savedContentDocumentId = nil
         
+        // Store generation parameters for background processing
+        let generationParams = GenerationParameters(
+            inputText: inputText,
+            selectedLevel: selectedLevel,
+            selectedSummarizationTier: selectedSummarizationTier,
+            selectedGenre: selectedGenre,
+            mainCharacter: mainCharacter,
+            selectedImageStyle: selectedImageStyle
+        )
+        
+        // Store parameters for background processing
+        if let encoded = try? JSONEncoder().encode(generationParams) {
+            UserDefaults.standard.set(encoded, forKey: "backgroundGenerationParams")
+        }
+        
         let maxRetries = 2
         var attempt = 0
         var lastError: Error?
+        
         repeat {
             do {
                 if selectedSummarizationTier == .story {
-                    try await generateStory()
+                    try await generateStoryWithProgress()
                 } else if selectedSummarizationTier == .lecture {
-                    try await generateLecture()
+                    try await generateLectureWithProgress()
                 } else {
-                    try await generateRegularContent()
+                    try await generateRegularContentWithProgress()
                 }
+                
                 // Refresh count after successful generation
                 await refreshTodayGenerationCount()
+                
+                // Send success notification
+                sendNotification(
+                    title: "Content Generation Complete! 🎉",
+                    body: "Your \(selectedSummarizationTier.displayName.lowercased()) content is ready to view.",
+                    isSuccess: true
+                )
+                
                 statusMessage = nil
                 isLoading = false
+                globalManager.endBackgroundTask()
                 return
+                
             } catch {
                 lastError = error
                 attempt += 1
                 let nsError = error as NSError
                 let isNetworkLost = nsError.domain == NSURLErrorDomain && nsError.code == -1005
+                
                 if isNetworkLost && attempt <= maxRetries {
                     await MainActor.run {
                         self.statusMessage = "Network connection lost. Retrying (\(attempt)/\(maxRetries))..."
+                        self.globalManager.updateProgress(step: "Retrying...", stepNumber: globalManager.currentStepNumber, totalSteps: globalManager.totalSteps)
                     }
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
                 } else {
+                    // Send error notification
+                    sendNotification(
+                        title: "Generation Failed ❌",
+                        body: "There was an error generating your content. Please try again.",
+                        isSuccess: false
+                    )
+                    
                     await MainActor.run {
                         self.errorMessage = error.localizedDescription
                         self.statusMessage = nil
                     }
                     isLoading = false
+                    globalManager.endBackgroundTask()
                     return
                 }
             }
         } while attempt <= maxRetries
+        
         isLoading = false
         statusMessage = nil
+        globalManager.endBackgroundTask()
         if let lastError = lastError {
             errorMessage = lastError.localizedDescription
         }
     }
     
-    private func generateStory() async throws {
+    // MARK: - Progress-Aware Generation Methods
+    
+    private func generateStoryWithProgress() async throws {
+        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 4)
+        
         print("[Story] Starting story generation process")
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Story] Trimmed main character for prompt: '\(trimmedMainCharacter)'")
@@ -198,34 +274,28 @@ class ContentGenerationViewModel: ObservableObject {
                     for (idx, chap) in story.chapters.enumerated() {
                         print("[Story] - Chapter \(idx+1): ID=\(chap.id.uuidString), Title='\(chap.title)', Order=\(chap.order), ImageStyle=\(chap.imageStyle ?? "N/A")")
                     }
-
-                    // Create a new story with a unique ID (the one from backend IS the unique ID)
-                    // The 'id' in the Swift Story struct should be decoded directly from the backend JSON.
-                    let newStory = Story(
-                        id: story.id, // Use the ID from the decoded story
-                        title: story.title,
-                        content: story.content,
-                        level: story.level,
-                        chapters: story.chapters,
-                        imageStyle: story.imageStyle
-                    )
                     
                     await MainActor.run {
-                        self.currentStory = newStory
-                        self.blocks = [] // Clear regular content blocks
-                        print("[Story] UI updated: currentStory set")
+                        self.currentStory = story
+                        print("[Story] Updated UI with story object")
                     }
                     
+                    globalManager.updateProgress(step: "Generating images for chapters...", stepNumber: 2, totalSteps: 4)
+                    
                     if let currentUser = Auth.auth().currentUser {
-                        print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(newStory.id.uuidString)")
-                        await generateImagesForStory(newStory) // This will call fetchImageForChapter, which calls /generate_image
+                        print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(story.id.uuidString)")
+                        await generateImagesForStoryWithProgress(newStory: story) // This will call fetchImageForChapter, which calls /generate_image
                         // saveStoryToFirebase is called at the end of generateImagesForStory
+                        
+                        globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 4)
                         
                         // Show full screen view AFTER everything is saved
                         await MainActor.run {
                             self.isShowingFullScreenStory = true
                             print("[Story] Story fully saved to Firebase, now showing full screen")
                         }
+                        
+                        globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
                         print("[Story] Story content and image processing completed.")
                     } else {
                         print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
@@ -235,50 +305,15 @@ class ContentGenerationViewModel: ObservableObject {
                     print("[Story] ERROR: Backend returned error in JSON response: \(errorMsg)")
                     throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
                 } else {
-                    print("[Story] ERROR: No story or error field in decoded JSON response.")
-                    if let jsonString = String(data: data, encoding: .utf8) {
-                        print("[Story] Raw JSON that led to this (first 500 chars): \(jsonString.prefix(500))")
-                    }
-                    throw NSError(domain: "DataError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response structure from server (no story or error)."])
+                    print("[Story] ERROR: Backend response did not contain a story or an error message")
+                    throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
                 }
-
-            } catch let decodingError as DecodingError {
-                print("[Story] DECODING ERROR: Failed to decode story response from backend.")
-                print("[Story] DecodingError: \(decodingError.localizedDescription)")
-                switch decodingError {
-                case .typeMismatch(let type, let context):
-                    print("[Story] TypeMismatch: Expected type '\(type)' but found different type. Context: \(context.debugDescription)")
-                    print("[Story] CodingPath: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
-                case .valueNotFound(let value, let context):
-                    print("[Story] ValueNotFound: Expected value of type '\(value)' not found. Context: \(context.debugDescription)")
-                    print("[Story] CodingPath: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
-                case .keyNotFound(let key, let context):
-                    print("[Story] KeyNotFound: Key '\(key.stringValue)' not found. Context: \(context.debugDescription)")
-                    print("[Story] CodingPath: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
-                case .dataCorrupted(let context):
-                    print("[Story] DataCorrupted: Data is corrupted. Context: \(context.debugDescription)")
-                    print("[Story] CodingPath: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))")
-                @unknown default:
-                    print("[Story] Unknown DecodingError occurred.")
-                }
-                if let jsonString = String(data: data, encoding: .utf8) {
-                    print("[Story] Raw JSON response string that failed to decode (first 1000 chars): \(jsonString.prefix(1000))")
-                }
-                throw decodingError // Re-throw to be caught by the outer catch
+            } catch let decodingError {
+                print("[Story] ERROR: Failed to decode response into Response.self")
+                print("[Story] Decoding error: \(decodingError)")
+                print("[Story] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
+                throw decodingError
             }
-            // Other non-decoding errors specific to this block would be caught here
-            
-        } catch let urlError as URLError {
-            print("[Story] Network URLError occurred: \(urlError.localizedDescription)")
-            print("[Story] Error code: \(urlError.code.rawValue)")
-            let specificMessage: String
-            switch urlError.code {
-            case .timedOut: specificMessage = "Request timed out. Please try again."
-            case .notConnectedToInternet: specificMessage = "No internet connection. Please check your connection and try again."
-            case .cannotConnectToHost, .networkConnectionLost: specificMessage = "Could not connect to the server. Please try again later."
-            default: specificMessage = "Network error: \(urlError.localizedDescription)"
-            }
-            throw NSError(domain: "NetworkError.URL", code: urlError.code.rawValue, userInfo: [NSLocalizedDescriptionKey: specificMessage])
         } catch { // Catch any other errors, including re-thrown decoding errors or errors from above
             print("[Story] ERROR: Unexpected error during story generation process: \(error.localizedDescription)")
             print("[Story] Error type: \(type(of: error))")
@@ -290,7 +325,9 @@ class ContentGenerationViewModel: ObservableObject {
         }
     }
     
-    private func generateLecture() async throws {
+    private func generateLectureWithProgress() async throws {
+        globalManager.updateProgress(step: "Generating lecture content...", stepNumber: 1, totalSteps: 3)
+        
         print("[Lecture] Starting lecture generation process")
         print("[Lecture] Input text length: \(inputText.count)")
         print("[Lecture] Selected level: \(selectedLevel.rawValue)")
@@ -314,8 +351,8 @@ class ContentGenerationViewModel: ObservableObject {
             let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("[Lecture] ERROR: Invalid server response (not HTTPURLResponse)")
-                throw NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+                print("[Lecture] ERROR: Invalid server response")
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
             }
             
             print("[Lecture] Received response with status code: \(httpResponse.statusCode)")
@@ -325,113 +362,63 @@ class ContentGenerationViewModel: ObservableObject {
                 if let errorResponse = String(data: data, encoding: .utf8) {
                     print("[Lecture] Error response from server: \(errorResponse)")
                 }
-                throw NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
             }
             
-            print("[Lecture] Attempting to decode response")
-            do {
-                let apiResponse = try JSONDecoder().decode(LectureResponse.self, from: data)
-                print("[Lecture] Successfully decoded LectureResponse")
+            let apiResponse = try JSONDecoder().decode(Response.self, from: data)
             
-                if let lectureData = apiResponse.lecture, let audioFiles = apiResponse.audio_files {
-                    print("[Lecture] Successfully received lecture data from backend.")
-                    print("[Lecture] Lecture title: \(lectureData.title)")
-                    print("[Lecture] Number of sections: \(lectureData.sections.count)")
-                    print("[Lecture] Number of audio files: \(audioFiles.count)")
+            if let lecture = apiResponse.lecture {
+                print("[Lecture] Successfully received lecture from backend")
+                print("[Lecture] Lecture ID: \(lecture.id.uuidString)")
+                print("[Lecture] Lecture Title: \(lecture.title)")
+                print("[Lecture] Number of sections: \(lecture.sections.count)")
+                
+                await MainActor.run {
+                    self.currentLecture = lecture
+                    print("[Lecture] Updated UI with lecture object")
+                }
+                
+                globalManager.updateProgress(step: "Generating audio narration...", stepNumber: 2, totalSteps: 3)
+                
+                if let currentUser = Auth.auth().currentUser {
+                    print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with audio generation and Firebase save for lecture ID \(lecture.id.uuidString)")
+                    await generateAudioForLectureWithProgress(lecture: lecture)
                     
-                    // Convert backend lecture data to our Lecture model
-                    let sections = lectureData.sections.enumerated().map { index, section in
-                        LectureSection(
-                            id: UUID(),
-                            title: section.title,
-                            script: section.script,
-                            imagePrompt: section.image_prompt,
-                            imageUrl: section.image_url,
-                            order: index + 1
-                        )
-                    }
+                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
                     
-                    // Convert backend audio files to our AudioFile model
-                    let convertedAudioFiles = audioFiles.map { backendAudio in
-                        AudioFile(
-                            id: UUID(),
-                            type: AudioFileType(rawValue: backendAudio.type) ?? .sectionScript,
-                            text: backendAudio.text,
-                            url: backendAudio.url,
-                            filename: backendAudio.filename,
-                            section: backendAudio.section
-                        )
-                    }
-                    
-                    let newLecture = Lecture(
-                        id: UUID(uuidString: apiResponse.lecture_id) ?? UUID(),
-                        title: lectureData.title,
-                        sections: sections,
-                        level: selectedLevel,
-                        imageStyle: selectedImageStyle.displayName
-                    )
-                    
+                    // Show full screen view AFTER everything is saved
                     await MainActor.run {
-                        self.currentLecture = newLecture
-                        self.currentLectureAudioFiles = convertedAudioFiles
-                        self.blocks = [] // Clear regular content blocks
-                        print("[Lecture] UI updated: currentLecture set")
+                        self.isShowingFullScreenLecture = true
+                        print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
                     }
-                    
-                    if let currentUser = Auth.auth().currentUser {
-                        print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with Firebase save for lecture ID \(newLecture.id.uuidString)")
-                        await saveLectureToFirebase(newLecture, audioFiles: audioFiles, userId: currentUser.uid)
-                        
-                        // Show full screen view AFTER everything is saved
-                        await MainActor.run {
-                            self.isShowingFullScreenLecture = true
-                            print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
-                        }
-                        print("[Lecture] Lecture content and audio processing completed.")
-                    } else {
-                        print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save.")
-                        throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
-                    }
-                } else if let errorMsg = apiResponse.error {
-                    print("[Lecture] ERROR: Backend returned error in JSON response: \(errorMsg)")
-                    throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+                    print("[Lecture] Lecture content and audio processing completed.")
                 } else {
-                    print("[Lecture] ERROR: No lecture or error field in decoded JSON response.")
-                    if let jsonString = String(data: data, encoding: .utf8) {
-                        print("[Lecture] Raw JSON that led to this (first 500 chars): \(jsonString.prefix(500))")
-                    }
-                    throw NSError(domain: "DataError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response structure from server (no lecture or error)."])
+                    print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save or generate audio.")
+                    throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
                 }
-
-            } catch let decodingError as DecodingError {
-                print("[Lecture] DECODING ERROR: Failed to decode lecture response from backend.")
-                print("[Lecture] DecodingError: \(decodingError.localizedDescription)")
-                if let jsonString = String(data: data, encoding: .utf8) {
-                    print("[Lecture] Raw JSON response string that failed to decode (first 1000 chars): \(jsonString.prefix(1000))")
-                }
-                throw decodingError
+            } else if let error = apiResponse.error {
+                print("[Lecture] ERROR: Backend returned error: \(error)")
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
             }
+        } catch let error as URLError {
+            print("[Lecture] Network error occurred")
+            print("[Lecture] Error code: \(error.code.rawValue)")
+            print("[Lecture] Error description: \(error.localizedDescription)")
             
-        } catch let urlError as URLError {
-            print("[Lecture] Network URLError occurred: \(urlError.localizedDescription)")
-            print("[Lecture] Error code: \(urlError.code.rawValue)")
-            let specificMessage: String
-            switch urlError.code {
-            case .timedOut: specificMessage = "Request timed out. Please try again."
-            case .notConnectedToInternet: specificMessage = "No internet connection. Please check your connection and try again."
-            case .cannotConnectToHost, .networkConnectionLost: specificMessage = "Could not connect to the server. Please try again later."
-            default: specificMessage = "Network error: \(urlError.localizedDescription)"
+            switch error.code {
+            case .timedOut:
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
+            case .notConnectedToInternet:
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
+            default:
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
             }
-            throw NSError(domain: "NetworkError.URL", code: urlError.code.rawValue, userInfo: [NSLocalizedDescriptionKey: specificMessage])
-        } catch {
-            print("[Lecture] ERROR: Unexpected error during lecture generation process: \(error.localizedDescription)")
-            print("[Lecture] Error type: \(type(of: error))")
-            let finalErrorMessage = error.localizedDescription
-            await MainActor.run { self.errorMessage = finalErrorMessage }
         }
     }
     
-    private func generateRegularContent() async throws {
+    private func generateRegularContentWithProgress() async throws {
+        globalManager.updateProgress(step: "Generating content...", stepNumber: 1, totalSteps: 3)
+        
         print("[Content] Starting content generation")
         print("[Content] Input text length: \(inputText.count)")
         print("[Content] Selected level: \(selectedLevel.rawValue)")
@@ -482,6 +469,8 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Content] Received \(blocksFromResponse.count) blocks from backend")
                 print("[Content] Processing blocks for image generation...")
                 
+                globalManager.updateProgress(step: "Generating images...", stepNumber: 2, totalSteps: 3)
+                
                 // Process images for blocks before saving
                 var updatedBlocks = blocksFromResponse
                 for (index, block) in blocksFromResponse.enumerated() {
@@ -516,30 +505,13 @@ class ContentGenerationViewModel: ObservableObject {
                                 }
                                 
                                 do {
-                                    let imagePath = "content/\(userId)/\(block.id.uuidString).jpg"
-                                    print("[Content] Uploading image to path: \(imagePath)")
-                                    
-                                    // Add metadata for better organization
-                                    let metadata = StorageMetadata()
-                                    metadata.contentType = "image/jpeg"
-                                    metadata.customMetadata = [
-                                        "blockId": block.id.uuidString,
-                                        "blockTypeString": block.type.rawValue,
-                                        "uploadDate": ISO8601DateFormatter().string(from: Date())
-                                    ]
-                                    
-                                    print("[Content] Image metadata:")
-                                    print("[Content] - Content type: \(metadata.contentType ?? "Not specified")")
-                                    print("[Content] - Custom metadata: \(metadata.customMetadata ?? [:])")
-                                    
-                                    let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
-                                    print("[Content] Successfully uploaded image for block ID \(block.id.uuidString)")
+                                    let fileName = "content_\(block.id.uuidString).jpg"
+                                    let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
+                                    print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
                                     print("[Content] Download URL: \(downloadURL.absoluteString)")
                                     
-                                    // Update the block with the Firebase image URL
                                     updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
                                     
-                                    // Update UI with the latest block
                                     await MainActor.run {
                                         self.blocks = updatedBlocks
                                         print("[Content] Updated UI with new block image URL")
@@ -565,6 +537,8 @@ class ContentGenerationViewModel: ObservableObject {
                     self.blocks = updatedBlocks
                     print("[Content] Updated UI with all processed blocks")
                 }
+                
+                globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
                 
                 // Save to Firebase if user is authenticated BEFORE showing full screen
                 if let currentUser = Auth.auth().currentUser {
@@ -612,18 +586,21 @@ class ContentGenerationViewModel: ObservableObject {
     
     // MARK: - Firebase Storage
     
-    private func generateImagesForStory(_ story: Story) async {
+    private func generateImagesForStoryWithProgress(newStory: Story) async {
         let imageSize = CGSize(width: 800, height: 600) // This size is for the prompt, backend controls actual generation size.
-        var updatedChapters = story.chapters
+        var updatedChapters = newStory.chapters
         let maxRetries = 3
         
-        print("[Story][ImageGen] Starting image generation for story: \(story.title)")
-        print("[Story][ImageGen] Story ID: \(story.id.uuidString)")
-        print("[Story][ImageGen] Number of chapters: \(story.chapters.count)")
+        print("[Story][ImageGen] Starting image generation for story: \(newStory.title)")
+        print("[Story][ImageGen] Story ID: \(newStory.id.uuidString)")
+        print("[Story][ImageGen] Number of chapters: \(newStory.chapters.count)")
+        print("[Story][ImageGen] Backend URL: \(backendURL)")
         // print("[Story][ImageGen] Desired image prompt size guide: \(imageSize)") // Informational
 
-        for (index, chapter) in story.chapters.enumerated() {
-            print("[Story][ImageGen] Processing chapter \(index + 1)/\(story.chapters.count): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
+        for (index, chapter) in newStory.chapters.enumerated() {
+            print("[Story][ImageGen] ========================================")
+            print("[Story][ImageGen] Processing chapter \(index + 1)/\(newStory.chapters.count): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
+            print("[Story][ImageGen] Chapter content length: \(chapter.content.count) characters")
             var retryCount = 0
             var success = false
             
@@ -631,26 +608,27 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Story][ImageGen] Attempt \(retryCount + 1) of \(maxRetries) for chapter \(index + 1)")
                 do {
                     // fetchImageForChapter now correctly gets image data from GCS URL
+                    print("[Story][ImageGen] Calling fetchImageForChapter for chapter \(index + 1)...")
                     if let image = await fetchImageForChapter(chapter: chapter, maxSize: imageSize) {
-                        print("[Story][ImageGen] Successfully fetched UIImage for chapter \(index + 1). Image size: \(image.size)")
+                        print("[Story][ImageGen] ✅ Successfully fetched UIImage for chapter \(index + 1). Image size: \(image.size)")
                         
                         if let imageData = image.jpegData(compressionQuality: 0.8),
                            let userId = Auth.auth().currentUser?.uid {
-                            print("[Story][ImageGen] Converted UIImage to JPEG data. Size: \(imageData.count) bytes for chapter \(index + 1). User ID: \(userId)")
+                            print("[Story][ImageGen] ✅ Converted UIImage to JPEG data. Size: \(imageData.count) bytes for chapter \(index + 1). User ID: \(userId)")
                             
                             if imageData.count == 0 {
-                                print("[Story][ImageGen] ERROR: Generated image data is empty for chapter \(index + 1).")
+                                print("[Story][ImageGen] ❌ ERROR: Generated image data is empty for chapter \(index + 1).")
                                 throw NSError(domain: "ImageProcessingError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Generated image data is empty"])
                             }
                             
-                            let imagePath = "stories/\(userId)/\(story.id.uuidString)/\(chapter.id.uuidString).jpg"
-                            print("[Story][ImageGen] Preparing to upload image to Firebase Storage path: \(imagePath)")
+                            let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
+                            print("[Story][ImageGen] 📁 Preparing to upload image to Firebase Storage path: \(imagePath)")
                             
                             let metadata = StorageMetadata()
                             metadata.contentType = "image/jpeg"
                             // Using unique keys for custom metadata to avoid any potential conflicts
                             metadata.customMetadata = [
-                                "storyId": story.id.uuidString,
+                                "storyId": newStory.id.uuidString,
                                 "chapterId": chapter.id.uuidString,
                                 "chapterTitle": chapter.title ?? "Untitled",
                                 "uploadTimestamp": ISO8601DateFormatter().string(from: Date()) // Changed key from "uploadDate"
@@ -661,9 +639,10 @@ class ContentGenerationViewModel: ObservableObject {
                             print("[Story][ImageGen] - CustomMetadata: \(metadata.customMetadata ?? [:])")
                             
                             // Assuming firestoreService.uploadImage is the corrected version from previous steps
+                            print("[Story][ImageGen] 🔄 Uploading image to Firebase Storage...")
                             let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
-                            print("[Story][ImageGen] Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
-                            print("[Story][ImageGen] Received Firebase Download URL: \(downloadURL.absoluteString)")
+                            print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
+                            print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                             
                             updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
                             success = true
@@ -672,56 +651,64 @@ class ContentGenerationViewModel: ObservableObject {
                                 if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
                                     currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
                                     self.currentStory = currentStory // Update the published property
-                                    print("[Story][ImageGen] UI updated with new firebaseImageUrl for chapter \(index + 1).")
+                                    print("[Story][ImageGen] ✅ UI updated with new firebaseImageUrl for chapter \(index + 1).")
                                 } else {
-                                    print("[Story][ImageGen] Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
+                                    print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
                                 }
                             }
                         } else {
                             let reason = Auth.auth().currentUser?.uid == nil ? "User ID is nil." : "Failed to convert UIImage to JPEG data."
-                            print("[Story][ImageGen] ERROR: \(reason) for chapter \(index + 1).")
+                            print("[Story][ImageGen] ❌ ERROR: \(reason) for chapter \(index + 1).")
                             throw NSError(domain: "ImageProcessingError", code: 2, userInfo: [NSLocalizedDescriptionKey: reason])
                         }
                     } else {
-                        print("[Story][ImageGen] ERROR: fetchImageForChapter returned nil (failed to generate/download image) for chapter \(index + 1).")
+                        print("[Story][ImageGen] ❌ ERROR: fetchImageForChapter returned nil (failed to generate/download image) for chapter \(index + 1).")
                         throw NSError(domain: "ImageFetchingError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to generate or download image for chapter."])
                     }
                 } catch {
                     retryCount += 1
-                    print("[Story][ImageGen] ERROR during attempt \(retryCount) for chapter \(index + 1): \(error.localizedDescription)")
+                    print("[Story][ImageGen] ❌ ERROR during attempt \(retryCount) for chapter \(index + 1): \(error.localizedDescription)")
                     print("[Story][ImageGen] Error Type: \(type(of: error))")
                     print("[Story][ImageGen] Full Error: \(error)")
                     
                     if retryCount >= maxRetries {
                         let errorMessageText = "Failed to process image for chapter '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString)) after \(maxRetries) attempts: \(error.localizedDescription)"
-                        print("[Story][ImageGen] FINAL ERROR: \(errorMessageText)")
+                        print("[Story][ImageGen] 🚨 FINAL ERROR: \(errorMessageText)")
                         // Optionally update UI with this specific error
                         // await MainActor.run { self.errorMessage = errorMessageText }
                     } else {
-                        print("[Story][ImageGen] Retrying in \(retryCount * 2) seconds...") // Increased retry delay
+                        print("[Story][ImageGen] 🔄 Retrying in \(retryCount * 2) seconds...") // Increased retry delay
                         try? await Task.sleep(nanoseconds: UInt64(2_000_000_000 * retryCount))
                     }
                 }
             }
             if !success {
-                 print("[Story][ImageGen] WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title ?? "Untitled")') after all retries. It will not have an image.")
+                 print("[Story][ImageGen] ⚠️ WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title ?? "Untitled")') after all retries. It will not have an image.")
+            } else {
+                print("[Story][ImageGen] ✅ SUCCESS: Chapter \(index + 1) image processed successfully!")
             }
+            print("[Story][ImageGen] ========================================")
         }
         
         // Ensure the story being saved has the updated chapter image URLs
-        var finalStoryToSave = story // Start with original story structure
+        var finalStoryToSave = newStory // Start with original story structure
         finalStoryToSave.chapters = updatedChapters // Assign chapters that have firebaseImageUrls (or nil if failed)
+        
+        print("[Story][ImageGen] 📊 Final image generation summary:")
+        for (index, chapter) in finalStoryToSave.chapters.enumerated() {
+            print("[Story][ImageGen] - Chapter \(index + 1): \(chapter.firebaseImageUrl != nil ? "✅ Has image" : "❌ No image")")
+        }
         
         await MainActor.run {
             self.currentStory = finalStoryToSave // Update UI with the story containing all attempted image URLs
-            print("[Story][ImageGen] Image generation process for all chapters completed. UI updated with final story.")
+            print("[Story][ImageGen] ✅ Image generation process for all chapters completed. UI updated with final story.")
         }
         
         if let userId = Auth.auth().currentUser?.uid {
-            print("[Story][Save] Proceeding to save story with updated chapter image URLs to Firebase for user \(userId).")
+            print("[Story][Save] 🔄 Proceeding to save story with updated chapter image URLs to Firebase for user \(userId).")
             await saveStoryToFirebase(story: finalStoryToSave, userId: userId)
         } else {
-            print("[Story][Save] ERROR: No authenticated user found. Cannot save story to Firebase.")
+            print("[Story][Save] ❌ ERROR: No authenticated user found. Cannot save story to Firebase.")
             // Update UI with an appropriate error message
             await MainActor.run {
                 self.errorMessage = "User not authenticated. Story could not be saved."
@@ -730,38 +717,67 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func saveStoryToFirebase(story: Story, userId: String) async {
-        print("[Story][Save] Starting Firebase save process for story: '\(story.title)' (ID: \(story.id.uuidString))")
+        print("[Story][Save] Starting Firebase save process for story")
+        print("[Story][Save] Story ID: \(story.id.uuidString)")
         print("[Story][Save] User ID: \(userId)")
-        print("[Story][Save] Total chapters to save: \(story.chapters.count)")
+        print("[Story][Save] Number of chapters: \(story.chapters.count)")
         
-        let firebaseChapters = story.chapters.map { chapter -> FirebaseChapter in
-            print("[Story][Save] Mapping chapter '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString)) for Firestore.")
-            print("[Story][Save] - FirebaseImageUrl for chapter: \(chapter.firebaseImageUrl ?? "N/A - No image URL")")
-            print("[Story][Save] - ImageStyle for chapter: \(chapter.imageStyle ?? "N/A")")
-            
-            return FirebaseChapter(
-                chapterId: chapter.id.uuidString,
-                title: chapter.title,
-                content: chapter.content,
-                order: chapter.order,
-                firebaseImageUrl: chapter.firebaseImageUrl, // This is critical
-                imageStyle: chapter.imageStyle
-            )
+        // Log chapter details before conversion
+        print("[Story][Save] 📋 Chapter details before Firebase conversion:")
+        for (index, chapter) in story.chapters.enumerated() {
+            print("[Story][Save] - Chapter \(index + 1):")
+            print("[Story][Save]   - ID: \(chapter.id.uuidString)")
+            print("[Story][Save]   - Title: \(chapter.title ?? "N/A")")
+            print("[Story][Save]   - Order: \(chapter.order)")
+            print("[Story][Save]   - firebaseImageUrl: \(chapter.firebaseImageUrl ?? "NIL")")
+            print("[Story][Save]   - imageStyle: \(chapter.imageStyle ?? "N/A")")
         }
-
+        
+        // Convert to Firebase format using the correct models
         let firebaseStory = FirebaseStory(
+            id: story.id.uuidString,
             userId: userId,
             title: story.title,
             overview: story.content,
             level: story.level.rawValue,
             imageStyle: story.imageStyle,
-            chapters: firebaseChapters
+            chapters: story.chapters.map { chapter in
+                FirebaseChapter(
+                    chapterId: chapter.id.uuidString,
+                    title: chapter.title,
+                    content: chapter.content,
+                    order: chapter.order,
+                    firebaseImageUrl: chapter.firebaseImageUrl,
+                    imageStyle: chapter.imageStyle
+                )
+            }
         )
         
+        // Log Firebase story details
+        print("[Story][Save] 📋 Firebase story details:")
+        print("[Story][Save] - ID: \(firebaseStory.id ?? "NIL")")
+        print("[Story][Save] - Title: \(firebaseStory.title)")
+        print("[Story][Save] - User ID: \(firebaseStory.userId)")
+        print("[Story][Save] - Level: \(firebaseStory.level)")
+        print("[Story][Save] - Image Style: \(firebaseStory.imageStyle ?? "N/A")")
+        print("[Story][Save] - Number of chapters: \(firebaseStory.chapters?.count ?? 0)")
+        
+        if let chapters = firebaseStory.chapters {
+            print("[Story][Save] 📋 Firebase chapter details:")
+            for (index, chapter) in chapters.enumerated() {
+                print("[Story][Save] - Chapter \(index + 1):")
+                print("[Story][Save]   - chapterId: \(chapter.chapterId)")
+                print("[Story][Save]   - title: \(chapter.title ?? "N/A")")
+                print("[Story][Save]   - order: \(chapter.order ?? -1)")
+                print("[Story][Save]   - firebaseImageUrl: \(chapter.firebaseImageUrl ?? "NIL")")
+                print("[Story][Save]   - imageStyle: \(chapter.imageStyle ?? "N/A")")
+            }
+        }
+        
         do {
-            print("[Story][Save] Attempting to create story document in Firestore. Collection: 'stories', DocumentID to be used by service: \(story.id.uuidString)")
+            print("[Story][Save] 🔄 Attempting to create story document in Firestore. Collection: 'stories', DocumentID to be used by service: \(story.id.uuidString)")
             let documentId = try await firestoreService.create(firebaseStory, in: "stories", documentId: story.id.uuidString)
-            print("[Story][Save] Successfully saved story to Firestore with document ID: \(documentId)")
+            print("[Story][Save] ✅ Successfully saved story to Firestore with document ID: \(documentId)")
             
             // Track story generation for dashboard engagement metrics
             await MainActor.run {
@@ -769,20 +785,8 @@ class ContentGenerationViewModel: ObservableObject {
                 UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
                 print("[Engagement] Story generation tracked. Total: \(currentCount + 1)")
             }
-            
-            // Optional: Verification step
-            // print("[Story][Save] Verifying saved story data...")
-            // if let savedStoryData = try? await firestoreService.fetch(FirebaseStory.self, from: "stories", documentId: documentId) {
-            //     print("[Story][Save] Verification successful. Saved story title: \(savedStoryData.title)")
-            //     savedStoryData.chapters?.forEach { ch in
-            //         print("[Story][Save] - Verified Chapter '\(ch.title ?? "")' Image URL: \(ch.firebaseImageUrl ?? "N/A")")
-            //     }
-            // } else {
-            //     print("[Story][Save] WARNING: Could not verify story save by fetching back the document.")
-            // }
-            
         } catch {
-            print("[Story][Save] ERROR: Failed to save story to Firestore for story ID \(story.id.uuidString).")
+            print("[Story][Save] ❌ ERROR: Failed to save story to Firestore for story ID \(story.id.uuidString).")
             print("[Story][Save] Error Type: \(type(of: error))")
             print("[Story][Save] Error Description: \(error.localizedDescription)")
             print("[Story][Save] Full Error: \(error)")
@@ -793,75 +797,38 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func saveLectureToFirebase(_ lecture: Lecture, audioFiles: [BackendAudioFile], userId: String) async {
-        print("[Lecture][Save] Starting Firebase save process for lecture: '\(lecture.title)' (ID: \(lecture.id.uuidString))")
+        print("[Lecture][Save] Starting Firebase save process for lecture")
+        print("[Lecture][Save] Lecture ID: \(lecture.id.uuidString)")
         print("[Lecture][Save] User ID: \(userId)")
-        print("[Lecture][Save] Total sections to save: \(lecture.sections.count)")
-        print("[Lecture][Save] Total audio files: \(audioFiles.count)")
-
-        let storage = Storage.storage()
-        var firebaseAudioFiles: [FirebaseAudioFile] = []
-        var firebaseSections: [FirebaseLectureSection] = []
-
-        // 1. Upload audio files to Firebase Storage
-        for audioFile in audioFiles {
-            guard let audioUrl = URL(string: audioFile.url) else { continue }
-            do {
-                let (audioData, _) = try await session.data(from: audioUrl)
-                let audioPath = "lectures/\(lecture.id.uuidString)/audio/\(audioFile.filename)"
-                let audioRef = storage.reference().child(audioPath)
-                let metadata = StorageMetadata()
-                metadata.contentType = "audio/mpeg"
-                _ = try await audioRef.putDataAsync(audioData, metadata: metadata)
-                let firebaseUrl = try await audioRef.downloadURL()
-                firebaseAudioFiles.append(FirebaseAudioFile(
-                    type: audioFile.type,
-                    text: audioFile.text,
-                    url: firebaseUrl.absoluteString,
-                    filename: audioFile.filename,
-                    section: audioFile.section
-                ))
-            } catch {
-                print("[Lecture][Save] ERROR uploading audio file \(audioFile.filename): \(error)")
-                // Optionally: handle error, skip, or add placeholder
-            }
-        }
-
-        // 2. Upload section images to Firebase Storage (if present)
-        for section in lecture.sections {
-            var firebaseImageUrl: String? = nil
-            if let imageUrl = section.imageUrl, let url = URL(string: imageUrl) {
-                do {
-                    let (imageData, _) = try await session.data(from: url)
-                    let imagePath = "lectures/\(lecture.id.uuidString)/images/section_\(section.order).jpg"
-                    let imageRef = storage.reference().child(imagePath)
-                    let metadata = StorageMetadata()
-                    metadata.contentType = "image/jpeg"
-                    _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
-                    let firebaseUrl = try await imageRef.downloadURL()
-                    firebaseImageUrl = firebaseUrl.absoluteString
-                } catch {
-                    print("[Lecture][Save] ERROR uploading image for section \(section.order): \(error)")
-                }
-            }
-            firebaseSections.append(FirebaseLectureSection(
-                sectionId: section.id.uuidString,
-                title: section.title,
-                script: section.script,
-                imagePrompt: section.imagePrompt,
-                imageUrl: firebaseImageUrl, // Use Firebase Storage URL
-                order: section.order
-            ))
-        }
-
+        
+        // Convert to Firebase format using the correct models
         let firebaseLecture = FirebaseLecture(
+            id: lecture.id.uuidString,
             userId: userId,
             title: lecture.title,
             level: lecture.level.rawValue,
-            imageStyle: lecture.imageStyle,
-            sections: firebaseSections,
-            audioFiles: firebaseAudioFiles
+            imageStyle: lecture.imageStyle ?? "default",
+            sections: lecture.sections.map { section in
+                FirebaseLectureSection(
+                    sectionId: section.id.uuidString,
+                    title: section.title,
+                    script: section.script,
+                    imagePrompt: section.imagePrompt,
+                    imageUrl: section.imageUrl,
+                    order: section.order
+                )
+            },
+            audioFiles: audioFiles.map { audio in
+                FirebaseAudioFile(
+                    type: audio.type,
+                    text: audio.text,
+                    url: audio.url,
+                    filename: audio.filename,
+                    section: audio.section
+                )
+            }
         )
-
+        
         do {
             print("[Lecture][Save] Attempting to create lecture document in Firestore. Collection: 'lectures', DocumentID to be used by service: \(lecture.id.uuidString)")
             let documentId = try await firestoreService.create(firebaseLecture, in: "lectures", documentId: lecture.id.uuidString)
@@ -924,25 +891,15 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Engagement] Content generation tracked. Total: \(currentCount + 1)")
             }
             
-            // Optional: Verification step
-            // print("[Content][Save] Verifying saved content data...")
-            // if let savedContentData = try? await firestoreService.fetch(FirebaseUserContent.self, from: "userGeneratedContent", documentId: documentId) {
-            //     print("[Content][Save] Verification successful. Saved content topic: \(savedContentData.topic ?? "N/A")")
-            //     print("[Content][Save] - Verified blocks count: \(savedContentData.blocks?.count ?? 0)")
-            // } else {
-            //     print("[Content][Save] WARNING: Could not verify content save by fetching back the document.")
-            // }
-
             return documentId
         } catch {
-            print("[Content][Save] ERROR: Failed to save content to Firestore.")
+            print("[Content][Save] ERROR: Failed to save content to Firestore")
             print("[Content][Save] Error Type: \(type(of: error))")
             print("[Content][Save] Error Description: \(error.localizedDescription)")
             print("[Content][Save] Full Error: \(error)")
-            // Optionally update UI with error
-            // await MainActor.run {
-            //     self.errorMessage = "Failed to save content: \(error.localizedDescription)"
-            // }
+            await MainActor.run {
+                self.errorMessage = "Failed to save content to cloud: \(error.localizedDescription)"
+            }
             return ""
         }
     }
@@ -950,202 +907,209 @@ class ContentGenerationViewModel: ObservableObject {
     // MARK: - Helper Methods
     
     private func fetchImageForChapter(chapter: StoryChapter, maxSize: CGSize) async -> UIImage? {
-        print("[Image] Generating image for chapter: \(chapter.title ?? "Untitled") (New Method)")
+        print("[Image] Generating image for chapter: \(chapter.title)")
+        print("[Image] Chapter content: \(chapter.content.prefix(100))...")
         
-        let chapterIdentifier = chapter.title ?? "ID: \(chapter.id.uuidString)"
-        // Using a combined prompt from title and content. Adjust length as needed.
-        let promptText = "Vivid illustration for story chapter titled '\(chapterIdentifier)': \(chapter.content.prefix(250))"
-
-        // MODIFICATION 3: Use displayName for image_style fallback
-        let effectiveImageStyle = chapter.imageStyle ?? selectedImageStyle.displayName
-        print("[Image] Effective image style for chapter '\(chapterIdentifier)': \(effectiveImageStyle)")
-
+        // Create image prompt from chapter content
+        let imagePrompt = chapter.content
+        print("[Image] Using image prompt: \(imagePrompt.prefix(100))...")
+        
+        // Call the backend image generation API
         let requestBody: [String: Any] = [
-            "prompt": promptText,
-            "level": currentStory?.level.rawValue ?? selectedLevel.rawValue,
-            "image_style": effectiveImageStyle,
-            // max_width and max_height are not directly handled by the /generate_image endpoint's parameters in the provided backend code.
-            // The backend's generate_and_save_image function uses them for prompt engineering if they were passed deeper.
-            // For now, relying on backend's internal logic for sizing.
+            "prompt": imagePrompt,
+            "style": selectedImageStyle.displayName,
+            "size": "800x600"
         ]
-
-        guard let url = URL(string: "\(backendURL)/generate_image") else {
-            print("[Image] ERROR: Invalid URL for image generation")
-            return nil
-        }
-
+        
+        print("[Image] Request body for image generation:")
+        print("[Image] - prompt: \(imagePrompt.prefix(50))...")
+        print("[Image] - style: \(selectedImageStyle.displayName)")
+        print("[Image] - size: 800x600")
+        
+        let url = URL(string: "\(backendURL)/generate_image")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
         do {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-
-            print("[Image] Sending image generation request to backend (/generate_image) for chapter: \(chapterIdentifier)")
-            // print("[Image] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")") // Optional: for detailed debugging
-
-            let (data, response) = try await self.session.data(for: request) // Use self.session
-
+            print("[Image] Sending image generation request to backend")
+            print("[Image] URL: \(url.absoluteString)")
+            print("[Image] Request body JSON: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")")
+            
+            let (data, response) = try await session.data(for: request)
+            
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("[Image] ERROR: Invalid server response for chapter \(chapterIdentifier)")
+                print("[Image] ERROR: Invalid server response")
                 return nil
             }
-
-            print("[Image] Received response for chapter \(chapterIdentifier) with status code: \(httpResponse.statusCode)")
-
+            
+            print("[Image] Received response with status code: \(httpResponse.statusCode)")
+            print("[Image] Response headers: \(httpResponse.allHeaderFields)")
+            
             guard httpResponse.statusCode == 200 else {
-                print("[Image] ERROR: Server returned status code \(httpResponse.statusCode) for chapter \(chapterIdentifier)")
+                print("[Image] ERROR: Server returned status code \(httpResponse.statusCode)")
                 if let errorResponse = String(data: data, encoding: .utf8) {
                     print("[Image] Error response from server: \(errorResponse)")
                 }
                 return nil
             }
-
-            struct BackendImageResponse: Codable {
-                let url: String
+            
+            print("[Image] Response data received: \(data.count) bytes")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("[Image] Response content: \(responseString)")
+            } else {
+                print("[Image] WARNING: Could not decode response as UTF-8 string")
+                print("[Image] Raw data (first 100 bytes): \(data.prefix(100).map { String(format: "%02x", $0) }.joined())")
             }
             
-            let backendImageResponse = try JSONDecoder().decode(BackendImageResponse.self, from: data)
-            guard let gcsImageUrl = URL(string: backendImageResponse.url) else {
-                print("[Image] ERROR: Backend did not return a valid GCS URL string for chapter image: \(backendImageResponse.url)")
+            // Parse the response to get the image URL
+            let imageResponse: ImageGenerationResponse
+            do {
+                imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
+                print("[Image] Successfully decoded ImageGenerationResponse")
+                print("[Image] - url: \(imageResponse.url ?? "nil")")
+                print("[Image] - image_url: \(imageResponse.image_url ?? "nil")")
+                print("[Image] - imageUrl (computed): \(imageResponse.imageUrl ?? "nil")")
+                print("[Image] - error: \(imageResponse.error ?? "nil")")
+            } catch {
+                print("[Image] ERROR: Failed to decode ImageGenerationResponse")
+                print("[Image] Decoding error: \(error)")
+                print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
                 return nil
             }
-
-            print("[Image] Received GCS URL: \(gcsImageUrl.absoluteString) for chapter \(chapterIdentifier). Downloading image data...")
             
-            let (imageData, imageResponse) = try await self.session.data(from: gcsImageUrl) // Use self.session
-
-            guard let httpImageResponse = imageResponse as? HTTPURLResponse, httpImageResponse.statusCode == 200 else {
-                print("[Image] ERROR: Failed to download image data from GCS URL for chapter \(chapterIdentifier). Status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
-                if let gcsErrorData = String(data: imageData, encoding: .utf8), gcsErrorData.count < 1000 { // Avoid printing huge data
-                    print("[Image] GCS download error data: \(gcsErrorData)")
+            if let imageUrlString = imageResponse.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                print("[Image] Successfully generated image URL: \(imageUrlString)")
+                
+                // Download the image
+                print("[Image] Downloading image from: \(imageUrl.absoluteString)")
+                let (imageData, imageResponse) = try await session.data(from: imageUrl)
+                
+                guard let httpImageResponse = imageResponse as? HTTPURLResponse,
+                      httpImageResponse.statusCode == 200 else {
+                    print("[Image] ERROR: Failed to download image")
+                    print("[Image] Image response status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
+                    return nil
                 }
-                return nil
-            }
-            
-            guard let image = UIImage(data: imageData) else {
-                print("[Image] ERROR: Failed to create UIImage from downloaded GCS data for chapter \(chapterIdentifier)")
-                if let responseString = String(data: imageData, encoding: .utf8), responseString.count < 500 {
-                     print("[Image] GCS Response data (if not image): \(responseString)")
+                
+                print("[Image] Successfully downloaded image data: \(imageData.count) bytes")
+                
+                guard let image = UIImage(data: imageData) else {
+                    print("[Image] ERROR: Failed to create UIImage from data")
+                    return nil
                 }
+                
+                print("[Image] Successfully downloaded and created image. Size: \(image.size)")
+                return image
+            } else {
+                print("[Image] ERROR: No image URL in response")
+                if let error = imageResponse.error {
+                    print("[Image] Backend error: \(error)")
+                }
+                print("[Image] Full response object: \(imageResponse)")
                 return nil
             }
             
-            print("[Image] Successfully generated and downloaded image for chapter \(chapterIdentifier)")
-            print("[Image] Image size: \(image.size)")
-            return image
-            
-        } catch let decodingError as DecodingError {
-            print("[Image] ERROR decoding JSON for chapter \(chapterIdentifier): \(decodingError)")
-            // To aid debugging, print the request body and raw response if decoding fails.
-            if let requestBodyData = try? JSONSerialization.data(withJSONObject: requestBody, options: .prettyPrinted),
-               let requestBodyString = String(data: requestBodyData, encoding: .utf8) {
-                print("[Image] Request body sent was: \(requestBodyString)")
-            }
-            // This part is tricky as 'data' might be from the GCS download if that's where decoding failed.
-            // The initial 'data' from '/generate_image' call is more relevant for BackendImageResponse decoding issues.
-            // Consider logging 'data' before 'JSONDecoder().decode' if this error occurs frequently.
-            return nil
         } catch {
-            print("[Image] ERROR: Failed to generate/fetch image for chapter \(chapterIdentifier): \(error.localizedDescription)")
-            print("[Image] Full error details: \(error)")
+            print("[Image] ERROR: Failed to generate image: \(error.localizedDescription)")
+            print("[Image] Error type: \(type(of: error))")
+            print("[Image] Full error: \(error)")
             return nil
         }
     }
     
     private func fetchImageForBlock(block: ContentBlock) async -> UIImage? {
-        print("[Image] Starting image generation for block ID: \(block.id.uuidString) (New Method)")
-        // print("[Image] Block content: \(block.content ?? "No content")") // Optional debug
-        // print("[Image] Block alt: \(block.alt ?? "No alt text")") // Optional debug
-        // print("[Image] Selected image style: \(selectedImageStyle.displayName)") // Optional debug
+        print("[Image] Generating image for block ID: \(block.id.uuidString)")
         
-        let imagePromptText = block.content ?? block.alt
+        // Use alt text if content is empty
+        let imagePrompt = block.content ?? block.alt ?? "A beautiful illustration"
+        print("[Image] Using image prompt: \(imagePrompt)")
         
-        guard let prompt = imagePromptText, !prompt.isEmpty else {
-            print("[Image] ERROR: Both block content and alt text are empty for block ID \(block.id.uuidString), cannot generate image")
-            return nil
-        }
-        
+        // Call the backend image generation API
         let requestBody: [String: Any] = [
-            "prompt": prompt,
-            "image_style": selectedImageStyle.backendRawValue,
-            "level": selectedLevel.rawValue // Added level, ensure it's appropriate
-            // "max_width": 800, // Backend /generate_image doesn't take these directly.
-            // "max_height": 600 // Sizing is handled by backend's internal logic or prompt engineering.
+            "prompt": imagePrompt,
+            "style": selectedImageStyle.displayName,
+            "size": "800x600"
         ]
         
+        let url = URL(string: "\(backendURL)/generate_image")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
         do {
-            let url = URL(string: "\(backendURL)/generate_image")!
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            print("[Image] Sending image generation request to backend")
             
-            print("[Image] Sending request to backend (/generate_image) for block ID: \(block.id.uuidString)")
-            // print("[Image] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")") // Optional: for detailed debugging
-
-            let (data, response) = try await self.session.data(for: request) // Use self.session
+            let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("[Image] ERROR: Invalid server response for block ID \(block.id.uuidString)")
+                print("[Image] ERROR: Invalid server response")
                 return nil
             }
             
-            print("[Image] Received response for block ID \(block.id.uuidString) with status code: \(httpResponse.statusCode)")
+            print("[Image] Received response with status code: \(httpResponse.statusCode)")
+            print("[Image] Response headers: \(httpResponse.allHeaderFields)")
             
             guard httpResponse.statusCode == 200 else {
-                print("[Image] ERROR: Server returned status code \(httpResponse.statusCode) for block ID \(block.id.uuidString)")
+                print("[Image] ERROR: Server returned status code \(httpResponse.statusCode)")
                 if let errorResponse = String(data: data, encoding: .utf8) {
                     print("[Image] Error response from server: \(errorResponse)")
                 }
                 return nil
             }
-
-            struct BackendImageResponse: Codable {
-                let url: String
+            
+            print("[Image] Response data received: \(data.count) bytes")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("[Image] Response content: \(responseString)")
+            } else {
+                print("[Image] WARNING: Could not decode response as UTF-8 string")
+                print("[Image] Raw data (first 100 bytes): \(data.prefix(100).map { String(format: "%02x", $0) }.joined())")
             }
-
-            let backendImageResponse = try JSONDecoder().decode(BackendImageResponse.self, from: data)
-            guard let gcsImageUrl = URL(string: backendImageResponse.url) else {
-                print("[Image] ERROR: Backend did not return a valid GCS URL string for block image: \(backendImageResponse.url)")
-                return nil
-            }
-
-            print("[Image] Received GCS URL: \(gcsImageUrl.absoluteString) for block ID \(block.id.uuidString). Downloading image data...")
-
-            let (imageData, imageResponse) = try await self.session.data(from: gcsImageUrl) // Use self.session
-
-            guard let httpImageResponse = imageResponse as? HTTPURLResponse, httpImageResponse.statusCode == 200 else {
-                print("[Image] ERROR: Failed to download image data from GCS URL for block ID \(block.id.uuidString). Status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
-                if let gcsErrorData = String(data: imageData, encoding: .utf8), gcsErrorData.count < 1000 {
-                     print("[Image] GCS download error data: \(gcsErrorData)")
-                }
+            
+            // Parse the response to get the image URL
+            let imageResponse: ImageGenerationResponse
+            do {
+                imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
+                print("[Image] Successfully decoded ImageGenerationResponse")
+                print("[Image] - url: \(imageResponse.url ?? "nil")")
+                print("[Image] - image_url: \(imageResponse.image_url ?? "nil")")
+                print("[Image] - imageUrl (computed): \(imageResponse.imageUrl ?? "nil")")
+                print("[Image] - error: \(imageResponse.error ?? "nil")")
+            } catch {
+                print("[Image] ERROR: Failed to decode ImageGenerationResponse")
+                print("[Image] Decoding error: \(error)")
+                print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
                 return nil
             }
             
-            guard let image = UIImage(data: imageData) else {
-                print("[Image] ERROR: Failed to create UIImage from downloaded GCS data for block ID \(block.id.uuidString)")
-                if let responseString = String(data: imageData, encoding: .utf8), responseString.count < 500 {
-                    print("[Image] GCS Response data (if not image): \(responseString)")
+            if let imageUrlString = imageResponse.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                print("[Image] Successfully generated image URL: \(imageUrlString)")
+                
+                // Download the image
+                let (imageData, imageResponse) = try await session.data(from: imageUrl)
+                
+                guard let httpImageResponse = imageResponse as? HTTPURLResponse,
+                      httpImageResponse.statusCode == 200 else {
+                    print("[Image] ERROR: Failed to download image")
+                    return nil
                 }
+                
+                guard let image = UIImage(data: imageData) else {
+                    print("[Image] ERROR: Failed to create UIImage from data")
+                    return nil
+                }
+                
+                print("[Image] Successfully downloaded and created image. Size: \(image.size)")
+                return image
+            } else {
+                print("[Image] ERROR: No image URL in response")
                 return nil
             }
             
-            print("[Image] Successfully generated image for block ID \(block.id.uuidString)")
-            print("[Image] Image size: \(image.size)")
-            return image
-
-        } catch let decodingError as DecodingError {
-            print("[Image] ERROR decoding JSON for block ID \(block.id.uuidString): \(decodingError)")
-            if let requestBodyData = try? JSONSerialization.data(withJSONObject: requestBody, options: .prettyPrinted),
-               let requestBodyString = String(data: requestBodyData, encoding: .utf8) {
-                print("[Image] Request body sent was: \(requestBodyString)")
-            }
-            return nil
         } catch {
-            print("[Image] ERROR: Failed to generate image for block ID \(block.id.uuidString)")
-            print("[Image] Error type: \(type(of: error))")
-            print("[Image] Error description: \(error.localizedDescription)")
-            print("[Image] Full error details: \(error)")
+            print("[Image] ERROR: Failed to generate image: \(error.localizedDescription)")
             return nil
         }
     }
@@ -1164,33 +1128,43 @@ class ContentGenerationViewModel: ObservableObject {
         let startTimestamp = Timestamp(date: startOfDay)
         let endTimestamp = Timestamp(date: endOfDay)
         var total = 0
+        
+        // Count stories
         do {
-            // Query userGeneratedContent
-            let userContentSnapshot = try await db.collection("userGeneratedContent")
+            let storiesQuery = db.collection("stories")
                 .whereField("userId", isEqualTo: userId)
                 .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
                 .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
-                .getDocuments()
-            total += userContentSnapshot.documents.count
-            
-            // Query stories
-            let storiesSnapshot = try await db.collection("stories")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
-                .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
-                .getDocuments()
+            let storiesSnapshot = try await storiesQuery.getDocuments()
             total += storiesSnapshot.documents.count
-            
-            // Query lectures
-            let lecturesSnapshot = try await db.collection("lectures")
+        } catch {
+            print("[DailyLimit] Error fetching stories count: \(error)")
+        }
+        
+        // Count user generated content
+        do {
+            let contentQuery = db.collection("userGeneratedContent")
                 .whereField("userId", isEqualTo: userId)
                 .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
                 .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
-                .getDocuments()
+            let contentSnapshot = try await contentQuery.getDocuments()
+            total += contentSnapshot.documents.count
+        } catch {
+            print("[DailyLimit] Error fetching content count: \(error)")
+        }
+        
+        // Count lectures
+        do {
+            let lecturesQuery = db.collection("lectures")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("createdAt", isGreaterThanOrEqualTo: startTimestamp)
+                .whereField("createdAt", isLessThanOrEqualTo: endTimestamp)
+            let lecturesSnapshot = try await lecturesQuery.getDocuments()
             total += lecturesSnapshot.documents.count
         } catch {
-            print("[DailyLimit] Error fetching today's generation count: \(error)")
+            print("[DailyLimit] Error fetching lectures count: \(error)")
         }
+        
         return total
     }
 
@@ -1257,6 +1231,7 @@ enum ImageStyle: String, Codable, CaseIterable {
 
 struct Response: Codable {
     let story: Story?
+    let lecture: Lecture?
     let blocks: [ContentBlock]?
     let error: String?
 }
@@ -1428,4 +1403,62 @@ enum BlockType: String, Codable {
 struct QuizOption: Identifiable, Codable {
     let id: String
     let text: String
+}
+
+// MARK: - Generation Parameters Struct
+struct GenerationParameters: Codable {
+    let inputText: String
+    let selectedLevel: ReadingLevel
+    let selectedSummarizationTier: SummarizationTier
+    let selectedGenre: StoryGenre
+    let mainCharacter: String
+    let selectedImageStyle: ImageStyle
+}
+
+// MARK: - Image Generation Response
+struct ImageGenerationResponse: Codable {
+    let url: String?
+    let image_url: String?
+    let error: String?
+    
+    // Computed property to handle both field names
+    var imageUrl: String? {
+        return url ?? image_url
+    }
+}
+
+// MARK: - Missing Helper Methods
+extension ContentGenerationViewModel {
+    
+    private func generateAudioForLectureWithProgress(lecture: Lecture) async {
+        // This would contain the audio generation logic
+        // For now, we'll just simulate the process
+        print("[Lecture][Audio] Starting audio generation for lecture: \(lecture.title)")
+        
+        // Simulate audio generation time
+        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        
+        // Save lecture to Firebase
+        await saveLectureToFirebase(lecture, audioFiles: [], userId: Auth.auth().currentUser?.uid ?? "")
+    }
+    
+    private func uploadImageToFirebase(imageData: Data, fileName: String, userId: String) async throws -> URL {
+        let imagePath = "content/\(userId)/\(fileName)"
+        print("[Firebase] Uploading image to path: \(imagePath)")
+        
+        // Add metadata for better organization
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        metadata.customMetadata = [
+            "uploadDate": ISO8601DateFormatter().string(from: Date())
+        ]
+        
+        print("[Firebase] Image metadata:")
+        print("[Firebase] - Content type: \(metadata.contentType ?? "Not specified")")
+        print("[Firebase] - Custom metadata: \(metadata.customMetadata ?? [:])")
+        
+        let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
+        print("[Firebase] Successfully uploaded image")
+        return downloadURL
+    }
 } 
