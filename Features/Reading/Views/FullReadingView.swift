@@ -9,7 +9,9 @@ struct FullReadingView: View {
     @State private var userDialogueInput: String = "" // For the TextField in the sheet
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss // Add environment dismiss
     @State private var progressTimer: Timer?
+    let dismissAction: (() -> Void)? // Add dismiss action parameter
 
     // Reading Settings
     @AppStorage("readingThemeName") private var selectedThemeName: String = ReadingTheme.light.rawValue
@@ -28,11 +30,12 @@ struct FullReadingView: View {
         UIDevice.current.userInterfaceIdiom == .pad
     }
 
-    init(itemID: String, collectionName: String, itemTitle: String) {
+    init(itemID: String, collectionName: String, itemTitle: String, dismissAction: (() -> Void)? = nil) {
         _viewModel = StateObject(wrappedValue: FullReadingViewModel(itemID: itemID, collectionName: collectionName))
         self.itemTitle = itemTitle // Store title for navigation bar
         self.itemID = itemID
         self.collectionName = collectionName
+        self.dismissAction = dismissAction
     }
     
     let itemTitle: String
@@ -89,6 +92,18 @@ struct FullReadingView: View {
         )
         .navigationTitle(itemTitle) // Use the passed itemTitle
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if dismissAction != nil {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        // Dismiss the full screen view
+                        dismissAction?()
+                        dismiss() // Also call environment dismiss
+                    }
+                    .foregroundColor(.accentColor)
+                }
+            }
+        }
         .toolbarBackground(
             LinearGradient(
                 gradient: Gradient(

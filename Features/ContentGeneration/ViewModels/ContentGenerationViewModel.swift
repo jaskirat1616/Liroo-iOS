@@ -20,8 +20,10 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var blocks: [ContentBlock] = []
     @Published var isShowingFullScreenStory = false
     @Published var isShowingFullScreenLecture = false
+    @Published var isShowingFullScreenContent = false
     @Published var todayGenerationCount: Int = 0
     @Published var statusMessage: String? = nil
+    @Published var savedContentDocumentId: String?
     
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
@@ -60,6 +62,13 @@ class ContentGenerationViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         statusMessage = "Generating... Liroo will notify you when it's done."
+        
+        // Clear any existing full screen states
+        isShowingFullScreenStory = false
+        isShowingFullScreenLecture = false
+        isShowingFullScreenContent = false
+        savedContentDocumentId = nil
+        
         let maxRetries = 2
         var attempt = 0
         var lastError: Error?
@@ -204,15 +213,20 @@ class ContentGenerationViewModel: ObservableObject {
                     await MainActor.run {
                         self.currentStory = newStory
                         self.blocks = [] // Clear regular content blocks
-                        self.isShowingFullScreenStory = true
-                        print("[Story] UI updated: currentStory set, isShowingFullScreenStory = true")
+                        print("[Story] UI updated: currentStory set")
                     }
                     
                     if let currentUser = Auth.auth().currentUser {
                         print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(newStory.id.uuidString)")
                         await generateImagesForStory(newStory) // This will call fetchImageForChapter, which calls /generate_image
                         // saveStoryToFirebase is called at the end of generateImagesForStory
-                        print("[Story] Story content and image processing initiated.")
+                        
+                        // Show full screen view AFTER everything is saved
+                        await MainActor.run {
+                            self.isShowingFullScreenStory = true
+                            print("[Story] Story fully saved to Firebase, now showing full screen")
+                        }
+                        print("[Story] Story content and image processing completed.")
                     } else {
                         print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
                         throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
@@ -361,13 +375,18 @@ class ContentGenerationViewModel: ObservableObject {
                         self.currentLecture = newLecture
                         self.currentLectureAudioFiles = convertedAudioFiles
                         self.blocks = [] // Clear regular content blocks
-                        self.isShowingFullScreenLecture = true
-                        print("[Lecture] UI updated: currentLecture set, isShowingFullScreenLecture = true")
+                        print("[Lecture] UI updated: currentLecture set")
                     }
                     
                     if let currentUser = Auth.auth().currentUser {
                         print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with Firebase save for lecture ID \(newLecture.id.uuidString)")
                         await saveLectureToFirebase(newLecture, audioFiles: audioFiles, userId: currentUser.uid)
+                        
+                        // Show full screen view AFTER everything is saved
+                        await MainActor.run {
+                            self.isShowingFullScreenLecture = true
+                            print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
+                        }
                         print("[Lecture] Lecture content and audio processing completed.")
                     } else {
                         print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save.")
@@ -547,18 +566,29 @@ class ContentGenerationViewModel: ObservableObject {
                     print("[Content] Updated UI with all processed blocks")
                 }
                 
-                // Save to Firebase if user is authenticated
+                // Save to Firebase if user is authenticated BEFORE showing full screen
                 if let currentUser = Auth.auth().currentUser {
                     print("[Content] Saving content to Firebase for user: \(currentUser.uid)")
-                    await saveContentBlocksToFirebase(
+                    let documentId = await saveContentBlocksToFirebase(
                         topic: extractTopicTitle(from: inputText),
                         blocks: updatedBlocks,
                         level: selectedLevel,
                         summarizationTier: selectedSummarizationTier,
                         userId: currentUser.uid
                     )
+                    
+                    // Store the saved document ID and show full screen
+                    await MainActor.run {
+                        self.savedContentDocumentId = documentId
+                        self.isShowingFullScreenContent = true
+                        print("[Content] Content saved to Firebase with ID: \(documentId), now showing full screen")
+                    }
                 } else {
                     print("[Content] WARNING: No authenticated user found, skipping Firebase save")
+                    // Still show full screen even without saving
+                    await MainActor.run {
+                        self.isShowingFullScreenContent = true
+                    }
                 }
             } else if let error = apiResponse.error {
                 print("[Content] ERROR: Backend returned error: \(error)")
@@ -852,7 +882,7 @@ class ContentGenerationViewModel: ObservableObject {
         }
     }
     
-    private func saveContentBlocksToFirebase(topic: String, blocks: [ContentBlock], level: ReadingLevel, summarizationTier: SummarizationTier, userId: String) async {
+    private func saveContentBlocksToFirebase(topic: String, blocks: [ContentBlock], level: ReadingLevel, summarizationTier: SummarizationTier, userId: String) async -> String {
         print("[Content][Save] Starting Firebase save process for content")
         print("[Content][Save] Topic: \(topic)")
         print("[Content][Save] Number of blocks: \(blocks.count)")
@@ -903,6 +933,7 @@ class ContentGenerationViewModel: ObservableObject {
             //     print("[Content][Save] WARNING: Could not verify content save by fetching back the document.")
             // }
 
+            return documentId
         } catch {
             print("[Content][Save] ERROR: Failed to save content to Firestore.")
             print("[Content][Save] Error Type: \(type(of: error))")
@@ -912,6 +943,7 @@ class ContentGenerationViewModel: ObservableObject {
             // await MainActor.run {
             //     self.errorMessage = "Failed to save content: \(error.localizedDescription)"
             // }
+            return ""
         }
     }
     

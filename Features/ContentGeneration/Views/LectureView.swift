@@ -5,6 +5,7 @@ import UIKit
 struct LectureView: View {
     let lecture: Lecture
     let audioFiles: [AudioFile]
+    let dismissAction: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var isPlaying = false
@@ -95,7 +96,7 @@ struct LectureView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        dismiss()
+                        dismissAction?()
                     }
                     .foregroundColor(.purple)
                 }
@@ -956,7 +957,7 @@ struct LectureView_Previews: PreviewProvider {
                 ],
                 level: .teen,
                 imageStyle: "Studio Ghibli"
-            ), audioFiles: [])
+            ), audioFiles: [], dismissAction: nil)
         }
     }
 } 

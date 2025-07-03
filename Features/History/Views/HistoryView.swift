@@ -343,7 +343,7 @@ struct LectureDestinationView: View {
                 }
                 .padding()
             } else if let lecture = lecture {
-                LectureView(lecture: lecture, audioFiles: audioFiles)
+                LectureView(lecture: lecture, audioFiles: audioFiles, dismissAction: nil)
             }
         }
         .navigationTitle("Lecture")

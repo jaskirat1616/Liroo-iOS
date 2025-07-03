@@ -1,6 +1,97 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import UIKit
+import FirebaseFirestore
+
+struct BlurView: UIViewRepresentable {
+    var style: UIBlurEffect.Style = .systemMaterial
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        return UIVisualEffectView(effect: UIBlurEffect(style: style))
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+}
+
+extension SummarizationTier {
+    var displayName: String {
+        switch self {
+        case .keyTakeaways: return "Key"
+        case .quickSummary: return "Quick"
+        case .detailedExplanation: return "Detailed"
+        case .story: return "Story"
+        case .lecture: return "Lecture"
+        }
+    }
+}
+
+extension ReadingLevel {
+    var displayName: String {
+        switch self {
+        case .kid: return "Kid"
+        case .preTeen: return "PreTeen"
+        case .teen: return "Teen"
+        case .university: return "Univ."
+        case .standard: return "Std."
+        }
+    }
+}
+
+struct CustomSegmentedControl<T: Hashable>: View {
+    @Binding var selection: T
+    var options: [T]
+    var pillColor: Color = Color(.systemGray6)
+    var textColor: Color = .secondary
+    var selectedTextColor: Color = .primary
+    var font: Font = .system(size: 15, weight: .semibold)
+    var displayName: (T) -> String
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options, id: \.self) { option in
+                Button(action: { selection = option }) {
+                    Text(displayName(option))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(selection == option ? selectedTextColor : textColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            ZStack {
+                                if selection == option {
+                                    // Glassy effect for selected pill
+                                    BlurView(style: .systemUltraThinMaterial)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(Color.purple.opacity(0.8))
+                                        
+                              
+                                } else {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(pillColor)
+                                }
+                            }
+                        )
+                        .animation(.interactiveSpring(response: 0.75, dampingFraction: 0.95), value: selection == option)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(pillColor.opacity(0.7))
+        )
+    }
+}
+
+extension ReadingLevel: CustomStringConvertible {
+    var description: String { rawValue }
+}
+
+extension SummarizationTier: CustomStringConvertible {
+    var description: String { rawValue }
+}
 
 struct ContentGenerationView: View {
     @StateObject private var viewModel = ContentGenerationViewModel()
@@ -27,6 +118,43 @@ struct ContentGenerationView: View {
     @State private var capturedImageByCamera: UIImage? // Can be used for preview if needed
     @State private var cameraAccessGranted: Bool? = nil
     @State private var showCameraPermissionAlert = false
+
+    // MARK: - Converted User Content
+    private var convertedUserContent: FirebaseUserContent {
+        // Convert ContentBlock array to FirebaseContentBlock format
+        let firebaseBlocks = viewModel.blocks.map { block in
+            var firebaseBlock = FirebaseContentBlock()
+            firebaseBlock.id = block.id.uuidString
+            firebaseBlock.type = block.type.rawValue
+            firebaseBlock.content = block.content
+            firebaseBlock.alt = block.alt
+            firebaseBlock.firebaseImageUrl = block.firebaseImageUrl
+            firebaseBlock.correctAnswerID = block.correctAnswerID
+            firebaseBlock.explanation = block.explanation
+            
+            // Convert quiz options if they exist
+            if let options = block.options {
+                firebaseBlock.options = options.map { option in
+                    var firebaseOption = FirebaseQuizOption()
+                    firebaseOption.id = option.id
+                    firebaseOption.text = option.text
+                    return firebaseOption
+                }
+            }
+            
+            return firebaseBlock
+        }
+        
+        var userContent = FirebaseUserContent()
+        userContent.id = UUID().uuidString
+        userContent.topic = viewModel.inputText
+        userContent.blocks = firebaseBlocks
+        userContent.level = viewModel.selectedLevel.rawValue
+        userContent.summarizationTier = viewModel.selectedSummarizationTier.rawValue
+        userContent.createdAt = Timestamp(date: Date())
+        
+        return userContent
+    }
 
     var body: some View {
         ZStack {
@@ -73,11 +201,11 @@ struct ContentGenerationView: View {
                     }
                     
                     // Generated Content
-                    if !viewModel.blocks.isEmpty {
+                    if !viewModel.blocks.isEmpty && !viewModel.isShowingFullScreenContent {
                         generatedContentSection
                     }
                 }
-                .padding(.horizontal, isIPad ? 24 : 16)
+                .padding(.horizontal, isIPad ? 24 : 12)
                 .padding(.vertical, isIPad ? 32 : 20)
             }
         }
@@ -192,12 +320,41 @@ struct ContentGenerationView: View {
         }
         .fullScreenCover(isPresented: $viewModel.isShowingFullScreenStory) {
             if let story = viewModel.currentStory {
-                StoryView(story: story)
+                NavigationStack {
+                    FullReadingView(
+                        itemID: story.id.uuidString,
+                        collectionName: "stories",
+                        itemTitle: story.title,
+                        dismissAction: {
+                            viewModel.isShowingFullScreenStory = false
+                        }
+                    )
+                }
             }
         }
         .fullScreenCover(isPresented: $viewModel.isShowingFullScreenLecture) {
             if let lecture = viewModel.currentLecture {
-                LectureView(lecture: lecture, audioFiles: viewModel.currentLectureAudioFiles)
+                LectureView(
+                    lecture: lecture, 
+                    audioFiles: viewModel.currentLectureAudioFiles,
+                    dismissAction: {
+                        viewModel.isShowingFullScreenLecture = false
+                    }
+                )
+            }
+        }
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenContent) {
+            if !viewModel.blocks.isEmpty {
+                NavigationStack {
+                    FullReadingView(
+                        itemID: viewModel.savedContentDocumentId ?? convertedUserContent.id ?? UUID().uuidString,
+                        collectionName: "userGeneratedContent",
+                        itemTitle: convertedUserContent.topic ?? "Generated Content",
+                        dismissAction: {
+                            viewModel.isShowingFullScreenContent = false
+                        }
+                    )
+                }
             }
         }
         .task {
@@ -210,6 +367,7 @@ struct ContentGenerationView: View {
         VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
             Text("Content Generation")
                 .font(.system(size: isIPad ? 36 : 28, weight: .bold, design: .default))
+                .foregroundColor(.primary)
             
             Text("Transform your text into engaging content with AI-powered generation")
                 .font(.system(size: isIPad ? 18 : 16, weight: .regular))
@@ -217,6 +375,7 @@ struct ContentGenerationView: View {
                 .lineLimit(2)
         }
         .padding(.horizontal, isIPad ? 8 : 4)
+        .padding(.bottom, isIPad ? 8 : 4)
     }
     
     // MARK: - Input Section
@@ -224,126 +383,147 @@ struct ContentGenerationView: View {
         VStack(alignment: .leading, spacing: isIPad ? 20 : 16) {
             Text("Input Text")
                 .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
+                .foregroundColor(.primary)
             
-            // Text Editor
-            VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
-                ZStack(alignment: .bottomTrailing) {
-                    TextEditor(text: Binding(
-                        get: { String(viewModel.inputText.prefix(5000)) },
-                        set: { viewModel.inputText = String($0.prefix(5000)) }
-                    ))
-                    .frame(minHeight: isIPad ? 200 : 160)
-                    .padding(isIPad ? 16 : 12)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                    .overlay(
-                        Group {
-                            if viewModel.inputText.isEmpty {
-                                VStack {
-                                    HStack {
-                                        Text("Enter your text here or use OCR to scan from images...")
-                                            .foregroundColor(.secondary)
-                                            .font(.system(size: isIPad ? 17 : 16, weight: .regular))
-                                            .padding(.leading, isIPad ? 20 : 16)
-                                            .padding(.top, isIPad ? 24 : 20)
-                                        Spacer()
-                                    }
-                                    Spacer()
-                                }
-                            }
-                        }
-                    )
-                    
-                    // Character count
-                    Text("\(viewModel.inputText.count)/5000")
-                        .font(.system(size: isIPad ? 12 : 11, weight: .medium))
-                        .foregroundColor(viewModel.inputText.count > 4500 ? .red : .secondary)
-                        .padding(.horizontal, isIPad ? 10 : 8)
-                        .padding(.vertical, isIPad ? 6 : 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-                        )
-                        .padding(.trailing, isIPad ? 16 : 12)
-                        .padding(.bottom, isIPad ? 16 : 12)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: Binding(
+                    get: { String(viewModel.inputText.prefix(5000)) },
+                    set: { viewModel.inputText = String($0.prefix(5000)) }
+                ))
+                .frame(minHeight: isIPad ? 200 : 160)
+                .padding(12)
+                .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+                .cornerRadius(12)
+                .font(.system(size: 16))
+                .foregroundColor(.primary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.systemGray4), lineWidth: 1)
+                )
+                
+                if viewModel.inputText.isEmpty {
+                    Text("Enter your text here or use OCR to scan from images...")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: isIPad ? 17 : 16, weight: .regular))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 16)
                 }
                 
-                // OCR Buttons
-                VStack(spacing: isIPad ? 12 : 8) {
-                    HStack(spacing: isIPad ? 12 : 8) {
-                        OCRButton(
-                            title: "Photo Library",
-                            icon: "photo.on.rectangle",
-                            color: .customPrimary
-                        ) {
-                            showingPhotosPicker = true
-                        }
-                        
-                        OCRButton(
-                            title: "File Import",
-                            icon: "doc.text.image",
-                            color: .green
-                        ) {
-                            showingFileImporter = true
-                        }
+                // Character count
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text("\(viewModel.inputText.count)/5000")
+                            .font(.system(size: isIPad ? 12 : 11, weight: .medium))
+                            .foregroundColor(viewModel.inputText.count > 4500 ? .red : .secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+                            )
+                            .padding(.trailing, 12)
+                            .padding(.bottom, 12)
                     }
-                    
-                    OCRButton(
-                        title: "Camera",
-                        icon: "camera",
-                        color: .orange
-                    ) {
-                        CameraPickerView.checkCameraPermission { granted in
-                            self.cameraAccessGranted = granted
-                            if granted {
-                                self.ocrViewModel.setImageForProcessing(nil)
-                                self.capturedImageByCamera = nil
-                                self.showingCameraPicker = true
-                            } else {
-                                self.showCameraPermissionAlert = true
-                            }
-                        }
-                    }
-                }
-                
-                // OCR Status
-                if ocrViewModel.isProcessing {
-                    HStack(spacing: isIPad ? 10 : 8) {
-                        ProgressView()
-                            .scaleEffect(isIPad ? 0.8 : 0.7)
-                        Text(ocrViewModel.totalPages > 1 ? 
-                             "Processing page \(ocrViewModel.currentPage) of \(ocrViewModel.totalPages)..." :
-                             "Scanning image...")
-                            .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, isIPad ? 16 : 12)
-                    .padding(.vertical, isIPad ? 12 : 8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                } else if let ocrError = ocrViewModel.errorMessage {
-                    HStack(spacing: isIPad ? 10 : 8) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: isIPad ? 13 : 12, weight: .medium))
-                            .foregroundColor(.red)
-                        Text("OCR Error: \(ocrError)")
-                            .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                            .foregroundColor(.red)
-                    }
-                    .padding(.horizontal, isIPad ? 16 : 12)
-                    .padding(.vertical, isIPad ? 12 : 8)
-                    .background(Color.red.opacity(0.1))
-                    .cornerRadius(8)
                 }
             }
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { UIApplication.shared.endEditing() }
+            
+            // OCR Buttons
+            HStack(spacing: isIPad ? 16 : 10) {
+                Button(action: { showingPhotosPicker = true }) {
+                    Text("Photos")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+                        .padding(.horizontal, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
                 }
+                
+                Button(action: { showingFileImporter = true }) {
+                    Text("File Import")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+                        .padding(.horizontal, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
+                }
+                
+                Button(action: {
+                    CameraPickerView.checkCameraPermission { granted in
+                        self.cameraAccessGranted = granted
+                        if granted {
+                            self.ocrViewModel.setImageForProcessing(nil)
+                            self.capturedImageByCamera = nil
+                            self.showingCameraPicker = true
+                        } else {
+                            self.showCameraPermissionAlert = true
+                        }
+                    }
+                }) {
+                    Text("Camera")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
+                        .padding(.horizontal, 8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
+                }
+            }
+            
+            // OCR Status
+            if ocrViewModel.isProcessing {
+                HStack(spacing: isIPad ? 10 : 8) {
+                    ProgressView()
+                        .scaleEffect(isIPad ? 0.8 : 0.7)
+                    Text(ocrViewModel.totalPages > 1 ? 
+                         "Processing page \(ocrViewModel.currentPage) of \(ocrViewModel.totalPages)..." :
+                         "Scanning image...")
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, isIPad ? 16 : 12)
+                .padding(.vertical, isIPad ? 12 : 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+            }
+            
+            if let ocrError = ocrViewModel.errorMessage {
+                HStack(spacing: isIPad ? 10 : 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: isIPad ? 13 : 12, weight: .medium))
+                        .foregroundColor(.red)
+                    Text("OCR Error: \(ocrError)")
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                        .foregroundColor(.red)
+                }
+                .padding(.horizontal, isIPad ? 16 : 12)
+                .padding(.vertical, isIPad ? 12 : 8)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
             }
         }
-        .padding(isIPad ? 28 : 20)
+        .padding(isIPad ? 28 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -386,7 +566,7 @@ struct ContentGenerationView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(isIPad ? 24 : 20)
+        .padding(isIPad ? 28 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -396,33 +576,40 @@ struct ContentGenerationView: View {
     private var configurationSection: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Configuration")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
+                .foregroundColor(.primary)
             
             VStack(spacing: 20) {
                 // Reading Level Selection
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Reading Level")
-                        .font(.system(size: 16, weight: .medium))
-                    
-                    Picker("Reading Level", selection: $viewModel.selectedLevel) {
-                        ForEach(ReadingLevel.allCases, id: \.self) { level in
-                            Text(level.rawValue).tag(level)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                        .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                        .foregroundColor(.primary)
+                    CustomSegmentedControl(
+                        selection: $viewModel.selectedLevel,
+                        options: ReadingLevel.allCases,
+                        pillColor: Color(.systemGray6),
+                        textColor: .primary,
+                        selectedTextColor: .white,
+                        font: .system(size: 15, weight: .semibold),
+                        displayName: { $0.displayName }
+                    )
                 }
                 
                 // Content Type Selection
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Content Type")
-                        .font(.system(size: 16, weight: .medium))
-                    
-                    Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
-                        ForEach(SummarizationTier.allCases, id: \.self) { tier in
-                            Text(tier.rawValue).tag(tier)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                        .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                        .foregroundColor(.primary)
+                    CustomSegmentedControl(
+                        selection: $viewModel.selectedSummarizationTier,
+                        options: SummarizationTier.allCases,
+                        pillColor: Color(.systemGray6),
+                        textColor: .primary,
+                        selectedTextColor: .white,
+                        font: .system(size: 15, weight: .semibold),
+                        displayName: { $0.displayName }
+                    )
                 }
                 
                 // Story-specific options
@@ -434,10 +621,10 @@ struct ContentGenerationView: View {
                         // Genre Selection
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Genre")
-                                .font(.system(size: 16, weight: .medium))
-                            
+                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .foregroundColor(.primary)
                             Picker("Genre", selection: $viewModel.selectedGenre) {
-                                ForEach(StoryGenre.allCases, id: \.self) { genre in
+                                ForEach(StoryGenre.allCases, id: \ .self) { genre in
                                     Text(genre.rawValue).tag(genre)
                                 }
                             }
@@ -448,20 +635,25 @@ struct ContentGenerationView: View {
                         // Main Character Input
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Main Character (Optional)")
-                                .font(.system(size: 16, weight: .medium))
-                            
+                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .foregroundColor(.primary)
                             TextField("Enter character name", text: $viewModel.mainCharacter)
+#if swift(>=5.8)
+                                .textFieldStyle(.roundedBorder)
+#else
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+#endif
                                 .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(.primary)
                         }
                         
                         // Image Style Selection
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Image Style")
-                                .font(.system(size: 16, weight: .medium))
-                            
+                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .foregroundColor(.primary)
                             Picker("Image Style", selection: $viewModel.selectedImageStyle) {
-                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                ForEach(ImageStyle.allCases, id: \ .self) { style in
                                     Text(style.displayName).tag(style)
                                 }
                             }
@@ -469,6 +661,7 @@ struct ContentGenerationView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .padding(.top, 8)
                 }
                 
                 // Lecture-specific options
@@ -480,43 +673,22 @@ struct ContentGenerationView: View {
                         // Image Style Selection for Lecture
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Image Style")
-                                .font(.system(size: 16, weight: .medium))
-                            
+                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .foregroundColor(.primary)
                             Picker("Image Style", selection: $viewModel.selectedImageStyle) {
-                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                ForEach(ImageStyle.allCases, id: \ .self) { style in
                                     Text(style.displayName).tag(style)
                                 }
                             }
                             .pickerStyle(.menu)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        
-                        // Lecture Info
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "info.circle.fill")
-                                    .foregroundColor(.purple)
-                                Text("Lecture Features")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("• Audio narration with high-quality voices")
-                                Text("• Visual illustrations for each section")
-                                Text("• Structured content breakdown")
-                                Text("• Automatic progression through sections")
-                            }
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(8)
                     }
+                    .padding(.top, 8)
                 }
             }
         }
-        .padding(20)
+        .padding(isIPad ? 28 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -532,29 +704,30 @@ struct ContentGenerationView: View {
             HStack(spacing: 12) {
                 if viewModel.isLoading {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .primary))
                         .scaleEffect(0.8)
                 } else {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.purple)
+                        .foregroundColor(.primary)
                 }
                 
                 Text(viewModel.isLoading ? "Generating..." : "Generate Content")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.purple)
+                    .foregroundColor(.primary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .padding(.horizontal, 20)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.purple.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-                    )
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.accentColor.opacity(0.06))
+                }
             )
+            .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.75), value: viewModel.isLoading)
         }
         .disabled(viewModel.isLoading || viewModel.todayGenerationCount >= 8)
         .opacity(viewModel.isLoading || viewModel.todayGenerationCount >= 8 ? 0.5 : 1.0)
@@ -595,215 +768,8 @@ struct ContentGenerationView: View {
     }
 }
 
-// MARK: - OCR Button Component
-struct OCRButton: View {
-    let title: String
-    let icon: String
-    let color: Color
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
-            .foregroundColor(.primary)
-            .cornerRadius(6)
-        }
-    }
-}
-
-// MARK: - Story View
-struct StoryView: View {
-    let story: Story
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                // Background gradient matching other screens
-                LinearGradient(
-                    gradient: Gradient(
-                        colors: colorScheme == .dark ? 
-                            [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
-                            [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
-                    ),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // Story Header
-                        storyHeader
-                        
-                        // Story Overview
-                        storyOverview
-                        
-                        // Chapters
-                        chaptersSection
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 20)
-                }
-            }
-            .navigationTitle("Story")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(.accentColor)
-                }
-            }
-        }
-    }
-    
-    // MARK: - Story Header
-    private var storyHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(story.title)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            Text("AI-Generated Story")
-                .font(.body)
-                .foregroundColor(.secondary)
-        }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
-    
-    // MARK: - Story Overview
-    private var storyOverview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Story Overview")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            Text(story.content)
-                .font(.body)
-                .foregroundColor(.primary)
-                .lineSpacing(4)
-        }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
-    
-    // MARK: - Chapters Section
-    private var chaptersSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Chapters")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            ForEach(story.chapters.sorted(by: { $0.order < $1.order })) { chapter in
-                ChapterView(chapter: chapter)
-            }
-        }
-    }
-}
-
-// MARK: - Chapter View
-struct ChapterView: View {
-    let chapter: StoryChapter
-    
-    // MARK: - iPad Detection
-    private var isIPad: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Chapter Header
-            HStack {
-                Text("Chapter \(chapter.order)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                
-                Spacer()
-            }
-            
-            // Chapter Title
-            Text(chapter.title)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            // Chapter Image
-            if let imageUrl = chapter.firebaseImageUrl {
-                AsyncImage(url: URL(string: imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading chapter image...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: isIPad ? 600 : .infinity)
-                            .frame(maxHeight: isIPad ? 400 : 300)
-                            .cornerRadius(12)
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.gray)
-                            Text("Failed to load chapter image")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-            
-            // Chapter Content
-            Text(chapter.content)
-                .font(.body)
-                .foregroundColor(.primary)
-                .lineSpacing(4)
-        }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
+#Preview {
+    ContentGenerationView()
 }
 
 // MARK: - Content Block Views
@@ -823,15 +789,15 @@ struct ContentBlockView: View {
                     switch phase {
                     case .empty:
                         VStack {
-                        ProgressView()
+                            ProgressView()
                                 .scaleEffect(1.2)
                             Text("Loading image...")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .padding(.top, 8)
                         }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: isIPad ? 300 : 200)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: isIPad ? 300 : 200)
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     case .success(let image):
@@ -904,19 +870,19 @@ struct ContentBlockView: View {
                     
                     if let options = block.options {
                         VStack(spacing: 8) {
-                        ForEach(options) { option in
-                            Button(action: {
-                                // Handle option selection
-                            }) {
-                                HStack {
-                                    Text(option.text)
+                            ForEach(options) { option in
+                                Button(action: {
+                                    // Handle option selection
+                                }) {
+                                    HStack {
+                                        Text(option.text)
                                             .font(.caption)
-                                        .foregroundColor(.primary)
+                                            .foregroundColor(.primary)
                                             .multilineTextAlignment(.leading)
-                                    Spacer()
-                                    if option.id == block.correctAnswerID {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
+                                        Spacer()
+                                        if option.id == block.correctAnswerID {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
                                                 .font(.title3)
                                         }
                                     }
@@ -935,9 +901,9 @@ struct ContentBlockView: View {
                                 .font(.caption)
                                 .fontWeight(.medium)
                                 .foregroundColor(.primary)
-                        Text(explanation)
+                            Text(explanation)
                                 .font(.caption)
-                            .foregroundColor(.secondary)
+                                .foregroundColor(.secondary)
                         }
                         .padding(12)
                         .background(Color.yellow.opacity(0.1))
@@ -962,10 +928,6 @@ struct ContentBlockView: View {
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
-}
-
-#Preview {
-    ContentGenerationView()
 }
 
 // Add this extension at the bottom of the file if not already present in the project
