@@ -192,6 +192,20 @@ struct ContentGenerationView: View {
                     
                     // Generate Button
                     generateButton
+                    
+                    // Test Notification Button
+                    testNotificationButton
+                    
+                    // Check Notification Settings Button
+                    checkNotificationSettingsButton
+                    
+                    // Force Test Notification Button
+                    forceTestNotificationButton
+                    
+                    // Simulator Test Button
+                    simulatorTestButton
+                    
+                    // Spacer
                     Spacer(minLength: 100)
                     
                     // Status Message
@@ -778,6 +792,130 @@ struct ContentGenerationView: View {
         .scaleEffect(viewModel.isLoading || viewModel.todayGenerationCount >= 12 ? 0.98 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
         .animation(.easeInOut(duration: 0.2), value: viewModel.todayGenerationCount)
+    }
+    
+    // MARK: - Test Notification Button
+    private var testNotificationButton: some View {
+        Button(action: {
+            Task {
+                await viewModel.sendTestNotification()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "bell.badge")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.orange)
+                
+                Text("Test Notification")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.orange)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.orange.opacity(0.1))
+                }
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Check Notification Settings Button
+    private var checkNotificationSettingsButton: some View {
+        Button(action: {
+            Task {
+                await viewModel.checkNotificationSettings()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "gear")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.blue)
+                
+                Text("Check Notification Settings")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.blue)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.blue.opacity(0.1))
+                }
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Force Test Notification Button
+    private var forceTestNotificationButton: some View {
+        Button(action: {
+            Task {
+                await viewModel.sendForceTestNotification()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.red)
+                
+                Text("Force Test Notification")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.red)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.red.opacity(0.1))
+                }
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Simulator Test Button
+    private var simulatorTestButton: some View {
+        Button(action: {
+            Task {
+                await viewModel.testSimulatorNotifications()
+            }
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "iphone")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.purple)
+                
+                Text("Simulator Test")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.purple)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                ZStack {
+                    BlurView(style: .systemUltraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.purple.opacity(0.1))
+                }
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - Error Section

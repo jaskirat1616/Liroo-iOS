@@ -8,11 +8,15 @@
 import SwiftUI
 import FirebaseCore
 import BackgroundTasks
+import UserNotifications
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        
+        // Set the notification delegate
+        UNUserNotificationCenter.current().delegate = self
         
         // Register background tasks
         BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.liroo.contentgeneration", using: nil) { task in
@@ -54,6 +58,33 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         } catch {
             print("Could not schedule background content generation: \(error)")
         }
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    // This function will be called when the app is in the foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        
+        print("[AppDelegate] Notification received in foreground: \(notification.request.content.title)")
+        
+        // Show the notification with an alert, sound, and badge
+        completionHandler([.banner, .sound, .badge])
+    }
+    
+    // This function will be called when the user taps on the notification
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        
+        print("[AppDelegate] User tapped on notification: \(response.notification.request.content.title)")
+        
+        // Here you can handle the user's interaction with the notification
+        // For example, navigate to a specific screen
+        
+        completionHandler()
     }
 }
 

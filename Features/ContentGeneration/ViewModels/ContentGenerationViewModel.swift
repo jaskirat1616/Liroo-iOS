@@ -47,23 +47,287 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func setupNotifications() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            if granted {
-                print("Notification permission granted")
-            } else if let error = error {
-                print("Notification permission error: \(error)")
+        print("[Notifications] Setting up notification permissions...")
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .provisional]) { granted, error in
+            DispatchQueue.main.async {
+                if granted {
+                    print("[Notifications] ✅ Notification permission granted")
+                    // Check current notification settings
+                    UNUserNotificationCenter.current().getNotificationSettings { settings in
+                        print("[Notifications] Current notification settings:")
+                        print("[Notifications] - Authorization status: \(settings.authorizationStatus.rawValue)")
+                        print("[Notifications] - Alert setting: \(settings.alertSetting.rawValue)")
+                        print("[Notifications] - Badge setting: \(settings.badgeSetting.rawValue)")
+                        print("[Notifications] - Sound setting: \(settings.soundSetting.rawValue)")
+                        print("[Notifications] - Notification center setting: \(settings.notificationCenterSetting.rawValue)")
+                        print("[Notifications] - Lock screen setting: \(settings.lockScreenSetting.rawValue)")
+                        
+                        // Check if lock screen notifications are enabled
+                        if settings.lockScreenSetting == .enabled {
+                            print("[Notifications] ✅ Lock screen notifications are enabled")
+                        } else {
+                            print("[Notifications] ❌ Lock screen notifications are DISABLED")
+                            print("[Notifications] 🔧 User needs to enable lock screen notifications in Settings")
+                        }
+                        
+                        // Check if notification center is enabled
+                        if settings.notificationCenterSetting == .enabled {
+                            print("[Notifications] ✅ Notification center is enabled")
+                        } else {
+                            print("[Notifications] ❌ Notification center is DISABLED")
+                        }
+                        
+                        // Check if alerts are enabled
+                        if settings.alertSetting == .enabled {
+                            print("[Notifications] ✅ Alerts are enabled")
+                        } else {
+                            print("[Notifications] ❌ Alerts are DISABLED")
+                        }
+                    }
+                } else {
+                    print("[Notifications] ❌ Notification permission denied")
+                    if let error = error {
+                        print("[Notifications] Error: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Notification Permission Check
+    func checkNotificationPermissions() async -> Bool {
+        return await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                let isAuthorized = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+                print("[Notifications] Permission check - Authorized: \(isAuthorized)")
+                print("[Notifications] Authorization status: \(settings.authorizationStatus.rawValue)")
+                continuation.resume(returning: isAuthorized)
+            }
+        }
+    }
+    
+    func requestNotificationPermissions() async -> Bool {
+        return await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .provisional]) { granted, error in
+                DispatchQueue.main.async {
+                    if granted {
+                        print("[Notifications] ✅ Notification permission granted")
+                    } else {
+                        print("[Notifications] ❌ Notification permission denied")
+                        if let error = error {
+                            print("[Notifications] Error: \(error.localizedDescription)")
+                        }
+                    }
+                    continuation.resume(returning: granted)
+                }
             }
         }
     }
     
     private func sendNotification(title: String, body: String, isSuccess: Bool = true) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = isSuccess ? .default : .defaultCritical
+        print("[Notifications] 📱 Sending notification...")
+        print("[Notifications] - Title: \(title)")
+        print("[Notifications] - Body: \(body)")
+        print("[Notifications] - Success: \(isSuccess)")
         
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        // Ensure we're on the main thread for UI notifications
+        DispatchQueue.main.async {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = isSuccess ? .default : .defaultCritical
+            content.badge = NSNumber(value: 1)
+            
+            // Add some additional metadata
+            content.userInfo = [
+                "type": "content_generation",
+                "success": isSuccess,
+                "timestamp": Date().timeIntervalSince1970
+            ]
+            
+            // Create a unique identifier for this notification
+            let identifier = "content_generation_\(UUID().uuidString)"
+            
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: nil // Immediate delivery
+            )
+            
+            print("[Notifications] 📤 Scheduling notification with ID: \(identifier)")
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("[Notifications] ❌ Failed to schedule notification: \(error.localizedDescription)")
+                    print("[Notifications] Error details: \(error)")
+                } else {
+                    print("[Notifications] ✅ Notification scheduled successfully")
+                    
+                    // Verify the notification was added
+                    UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                        print("[Notifications] Current pending notifications: \(requests.count)")
+                        for request in requests {
+                            print("[Notifications] - ID: \(request.identifier)")
+                            print("[Notifications] - Title: \(request.content.title)")
+                        }
+                    }
+                    
+                    // Also check delivered notifications
+                    UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+                        print("[Notifications] Current delivered notifications: \(notifications.count)")
+                        for notification in notifications {
+                            print("[Notifications] - ID: \(notification.request.identifier)")
+                            print("[Notifications] - Title: \(notification.request.content.title)")
+                            print("[Notifications] - Date: \(notification.date)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Test Notification
+    func sendTestNotification() async {
+        print("[Notifications] 🧪 Sending test notification...")
+        
+        // First check permissions
+        let isAuthorized = await checkNotificationPermissions()
+        if !isAuthorized {
+            print("[Notifications] ❌ Notifications not authorized. Requesting permissions...")
+            let granted = await requestNotificationPermissions()
+            if !granted {
+                print("[Notifications] ❌ Permission denied. Cannot send test notification.")
+                return
+            }
+        }
+        
+        // Check notification settings
+        await checkNotificationSettings()
+        
+        // Send test notification
+        sendNotification(
+            title: "Test Notification 📱",
+            body: "This is a test notification to verify that notifications are working properly!",
+            isSuccess: true
+        )
+        
+        print("[Notifications] ✅ Test notification sent!")
+    }
+    
+    // MARK: - Simulator Detection
+    private var isSimulator: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
+    
+    // MARK: - Force Test Notification (Alternative Method)
+    func sendForceTestNotification() async {
+        print("[Notifications] 🚀 Sending FORCE test notification...")
+        
+        if isSimulator {
+            print("[Notifications] 📱 Running on iOS Simulator - notifications may not appear on lock screen")
+            print("[Notifications] 💡 Check Notification Center by swiping down from top-right")
+            print("[Notifications] 💡 Or check the simulator's notification panel")
+        }
+        
+        // This method uses a more direct approach
+        await MainActor.run {
+            let content = UNMutableNotificationContent()
+            content.title = "FORCE TEST 📱"
+            content.body = "This is a force test notification - if you see this, notifications work!"
+            content.sound = .default
+            content.badge = NSNumber(value: 1)
+            
+            // Add critical importance
+            content.interruptionLevel = .timeSensitive
+            
+            let request = UNNotificationRequest(
+                identifier: "force_test_\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            )
+            
+            print("[Notifications] 📤 Force scheduling notification...")
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("[Notifications] ❌ Force notification failed: \(error.localizedDescription)")
+                } else {
+                    print("[Notifications] ✅ Force notification scheduled!")
+                    
+                    if self.isSimulator {
+                        print("[Notifications] 📱 Simulator: Check these locations for the notification:")
+                        print("[Notifications] 1. Swipe down from top-right corner (Notification Center)")
+                        print("[Notifications] 2. Simulator menu: Device → Notifications")
+                        print("[Notifications] 3. Simulator menu: Device → Trigger Notification")
+                    }
+                    
+                    // Immediately check if it was delivered
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+                            print("[Notifications] 📋 Delivered notifications after 1 second: \(notifications.count)")
+                            for notification in notifications {
+                                print("[Notifications] - \(notification.request.identifier): \(notification.request.content.title)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Check Notification Settings
+    func checkNotificationSettings() async {
+        return await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                print("[Notifications] 🔍 Checking notification settings...")
+                print("[Notifications] - Authorization status: \(settings.authorizationStatus.rawValue)")
+                print("[Notifications] - Lock screen setting: \(settings.lockScreenSetting.rawValue)")
+                print("[Notifications] - Notification center setting: \(settings.notificationCenterSetting.rawValue)")
+                print("[Notifications] - Alert setting: \(settings.alertSetting.rawValue)")
+                print("[Notifications] - Badge setting: \(settings.badgeSetting.rawValue)")
+                print("[Notifications] - Sound setting: \(settings.soundSetting.rawValue)")
+                
+                // Check for common issues
+                var issues: [String] = []
+                
+                if settings.authorizationStatus != .authorized && settings.authorizationStatus != .provisional {
+                    issues.append("Notifications not authorized")
+                }
+                
+                if settings.lockScreenSetting != .enabled {
+                    issues.append("Lock screen notifications disabled")
+                }
+                
+                if settings.notificationCenterSetting != .enabled {
+                    issues.append("Notification center disabled")
+                }
+                
+                if settings.alertSetting != .enabled {
+                    issues.append("Alerts disabled")
+                }
+                
+                if issues.isEmpty {
+                    print("[Notifications] ✅ All notification settings look good!")
+                } else {
+                    print("[Notifications] ⚠️ Found notification issues:")
+                    for issue in issues {
+                        print("[Notifications] - \(issue)")
+                    }
+                    print("[Notifications] 🔧 To fix these issues:")
+                    print("[Notifications] 1. Go to Settings > Notifications > Liroo")
+                    print("[Notifications] 2. Enable 'Allow Notifications'")
+                    print("[Notifications] 3. Enable 'Lock Screen'")
+                    print("[Notifications] 4. Enable 'Notification Center'")
+                    print("[Notifications] 5. Enable 'Banners'")
+                }
+                
+                continuation.resume()
+            }
+        }
     }
     
     // MARK: - Content Generation
@@ -135,11 +399,13 @@ class ContentGenerationViewModel: ObservableObject {
                 await refreshTodayGenerationCount()
                 
                 // Send success notification
-                sendNotification(
-                    title: "Content Generation Complete! 🎉",
-                    body: "Your \(selectedSummarizationTier.displayName.lowercased()) content is ready to view.",
-                    isSuccess: true
-                )
+                await MainActor.run {
+                    self.sendNotification(
+                        title: "Content Generation Complete! 🎉",
+                        body: "Your \(self.selectedSummarizationTier.displayName.lowercased()) content is ready to view.",
+                        isSuccess: true
+                    )
+                }
                 
                 statusMessage = nil
                 isLoading = false
@@ -160,11 +426,13 @@ class ContentGenerationViewModel: ObservableObject {
                     try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
                 } else {
                     // Send error notification
-                    sendNotification(
-                        title: "Generation Failed ❌",
-                        body: "There was an error generating your content. Please try again.",
-                        isSuccess: false
-                    )
+                    await MainActor.run {
+                        self.sendNotification(
+                            title: "Generation Failed ❌",
+                            body: "There was an error generating your content. Please try again.",
+                            isSuccess: false
+                        )
+                    }
                     
                     await MainActor.run {
                         self.errorMessage = error.localizedDescription
@@ -1174,6 +1442,37 @@ class ContentGenerationViewModel: ObservableObject {
         if let userId = Auth.auth().currentUser?.uid {
             let count = await fetchTodayGenerationCount(userId: userId)
             self.todayGenerationCount = count
+        }
+    }
+    
+    // MARK: - Simulator Notification Test
+    func testSimulatorNotifications() async {
+        print("[Notifications] 🎮 Testing notifications in iOS Simulator...")
+        
+        if isSimulator {
+            print("[Notifications] 📱 iOS Simulator detected!")
+            print("[Notifications] 🔧 To test notifications in simulator:")
+            print("[Notifications] 1. Send a test notification using the buttons below")
+            print("[Notifications] 2. Check Notification Center: Swipe down from top-right corner")
+            print("[Notifications] 3. Or use Simulator menu: Device → Notifications")
+            print("[Notifications] 4. Or use Simulator menu: Device → Trigger Notification")
+            print("[Notifications]")
+            print("[Notifications] 💡 Note: Lock screen notifications may not work in simulator")
+            print("[Notifications] 💡 For full notification testing, use a real device")
+            
+            // Send a test notification
+            sendNotification(
+                title: "Simulator Test 📱",
+                body: "This notification was sent from iOS Simulator. Check Notification Center!",
+                isSuccess: true
+            )
+        } else {
+            print("[Notifications] 📱 Real device detected - notifications should work normally")
+            sendNotification(
+                title: "Real Device Test 📱",
+                body: "This notification was sent from a real device. Check your lock screen!",
+                isSuccess: true
+            )
         }
     }
 }
