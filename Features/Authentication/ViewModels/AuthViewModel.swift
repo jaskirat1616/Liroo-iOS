@@ -2,6 +2,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import LocalAuthentication
+import FirebaseCrashlytics
 
 @MainActor
 class AuthViewModel: ObservableObject {
@@ -33,8 +34,24 @@ class AuthViewModel: ObservableObject {
                 if user == nil {
                     self?.resetRateLimiting()
                     self?.stopSessionTimer()
+                    
+                    // Log user sign out
+                    CrashlyticsManager.shared.logUserAction(
+                        action: "user_signed_out",
+                        screen: "authentication"
+                    )
                 } else {
                     self?.startSessionTimer()
+                    
+                    // Log user sign in
+                    CrashlyticsManager.shared.logUserAction(
+                        action: "user_signed_in",
+                        screen: "authentication",
+                        additionalData: [
+                            "user_id": user?.uid ?? "unknown",
+                            "email": user?.email ?? "unknown"
+                        ]
+                    )
                 }
             }
         }
@@ -74,6 +91,14 @@ class AuthViewModel: ObservableObject {
         
         if Date().timeIntervalSince(lastAttempt) < signInCooldown {
             if signInAttempts >= maxSignInAttempts {
+                CrashlyticsManager.shared.logNonFatalError(
+                    message: "Rate limit exceeded for sign-in attempts",
+                    context: "authentication_rate_limit",
+                    additionalData: [
+                        "attempts": signInAttempts,
+                        "time_since_last_attempt": Date().timeIntervalSince(lastAttempt)
+                    ]
+                )
                 return false
             }
         } else {
@@ -86,6 +111,14 @@ class AuthViewModel: ObservableObject {
     private func updateRateLimit() {
         lastSignInAttempt = Date()
         signInAttempts += 1
+        
+        CrashlyticsManager.shared.logUserAction(
+            action: "sign_in_attempt",
+            screen: "authentication",
+            additionalData: [
+                "attempt_number": signInAttempts
+            ]
+        )
     }
     
     private func resetRateLimiting() {
@@ -100,6 +133,15 @@ class AuthViewModel: ObservableObject {
             Task { @MainActor in
                 self?.sessionExpired = true
                 self?.isAuthenticated = false
+                
+                CrashlyticsManager.shared.logNonFatalError(
+                    message: "Session expired due to inactivity",
+                    context: "session_management",
+                    additionalData: [
+                        "session_timeout": self?.sessionTimeout ?? 3600
+                    ]
+                )
+                
                 try? self?.auth.signOut()
             }
         }
@@ -113,6 +155,11 @@ class AuthViewModel: ObservableObject {
     func refreshSession() {
         sessionExpired = false
         startSessionTimer()
+        
+        CrashlyticsManager.shared.logUserAction(
+            action: "session_refreshed",
+            screen: "authentication"
+        )
     }
     
     // MARK: - Biometric Authentication
@@ -121,15 +168,40 @@ class AuthViewModel: ObservableObject {
         var error: NSError?
         
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
-            throw AuthError.biometricNotAvailable
+            let authError = AuthError.biometricNotAvailable
+            
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error ?? NSError(domain: "BiometricError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Biometric authentication not available"]),
+                operation: "biometric_check"
+            )
+            
+            throw authError
         }
         
         let reason = "Authenticate to access your account"
         
         do {
             let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+            
+            if success {
+                CrashlyticsManager.shared.logUserAction(
+                    action: "biometric_authentication_successful",
+                    screen: "authentication"
+                )
+            } else {
+                CrashlyticsManager.shared.logAuthenticationError(
+                    error: NSError(domain: "BiometricError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Biometric authentication failed"]),
+                    operation: "biometric_authentication"
+                )
+            }
+            
             return success
         } catch {
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error,
+                operation: "biometric_authentication"
+            )
+            
             throw AuthError.biometricAuthenticationFailed
         }
     }
@@ -150,18 +222,39 @@ class AuthViewModel: ObservableObject {
         // Validate inputs
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Name cannot be empty"
-            throw AuthError.invalidInput("Name cannot be empty")
+            let error = AuthError.invalidInput("Name cannot be empty")
+            
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error,
+                operation: "sign_up_validation"
+            )
+            
+            throw error
         }
         
         guard validateEmail(email) else {
             errorMessage = "Please enter a valid email address"
-            throw AuthError.invalidInput("Invalid email format")
+            let error = AuthError.invalidInput("Invalid email format")
+            
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error,
+                operation: "sign_up_validation"
+            )
+            
+            throw error
         }
         
         let passwordValidation = validatePassword(password)
         guard passwordValidation.isValid else {
             errorMessage = passwordValidation.message
-            throw AuthError.invalidInput(passwordValidation.message ?? "Invalid password")
+            let error = AuthError.invalidInput(passwordValidation.message ?? "Invalid password")
+            
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error,
+                operation: "sign_up_validation"
+            )
+            
+            throw error
         }
         
         do {
@@ -191,8 +284,27 @@ class AuthViewModel: ObservableObject {
 
             try await db.collection("users").document(authResult.user.uid).setData(userData)
             
+            // Log successful sign up
+            CrashlyticsManager.shared.logUserAction(
+                action: "user_signed_up",
+                screen: "authentication",
+                additionalData: [
+                    "user_id": authResult.user.uid,
+                    "email": email,
+                    "has_interested_topics": interestedTopics?.isEmpty == false,
+                    "is_student": isStudent ?? false
+                ]
+            )
+            
         } catch {
             errorMessage = error.localizedDescription
+            
+            CrashlyticsManager.shared.logAuthenticationError(
+                error: error,
+                operation: "sign_up",
+                email: email
+            )
+            
             throw error
         }
     }

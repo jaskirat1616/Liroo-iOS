@@ -40,6 +40,7 @@ struct SplashScreenView: View {
                     .edgesIgnoringSafeArea(.all)
                     .opacity(videoOpacity)
             } else {
+                // Fallback to static splash screen if video fails to load
                 Color.black
                     .edgesIgnoringSafeArea(.all)
                     .opacity(videoOpacity)
@@ -57,16 +58,19 @@ struct SplashScreenView: View {
             .opacity(videoOpacity)
         }
         .onAppear {
+            print("SplashScreenView: onAppear called")
             DispatchQueue.main.async {
                  setupVideo()
             }
             
             DispatchQueue.main.asyncAfter(deadline: .now() + splashDuration) {
+                print("SplashScreenView: Starting fade out animation")
                 withAnimation(.easeInOut(duration: fadeOutDuration)) {
                     videoOpacity = 0.0
                 }
                 
                 DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDuration) {
+                    print("SplashScreenView: Transitioning to main app")
                     isActive = true
                 }
             }
@@ -103,41 +107,38 @@ struct SplashScreenView: View {
             print("SplashScreenView: Failed to set audio session category: \(error.localizedDescription)")
         }
 
-        // Try this path if 'Resources' is a blue folder reference in Xcode
+        // Try to find the video file in the main bundle (not in subdirectory)
         guard let videoURL = Bundle.main.url(forResource: "SplashVideo", withExtension: "mp4") else {
-            // If the above fails, it means "Resources/Media" was not found.
-            // Let's also try the original path in case "Resources" is a yellow group.
-            if let alternativeVideoURL = Bundle.main.url(forResource: "SplashVideo", withExtension: "mp4") {
-                // Found it with "Media" subdirectory, proceed with this one
-                let newPlayer = AVPlayer(url: alternativeVideoURL)
-                if newPlayer.currentItem?.status == .failed {
-                    print("SplashScreenView: AVPlayerItem failed to load (path: Media/SplashVideo.mp4). Check video file integrity/format.")
-                    return
+            print("SplashScreenView: Video file 'SplashVideo.mp4' NOT FOUND in main bundle.")
+            print("SplashScreenView: Available bundle resources:")
+            if let resourcePath = Bundle.main.resourcePath {
+                do {
+                    let contents = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
+                    print("SplashScreenView: Bundle contents: \(contents)")
+                } catch {
+                    print("SplashScreenView: Could not list bundle contents: \(error)")
                 }
-                self.player = newPlayer
-                self.player?.play()
-                // Don't loop the video - let it play once
-                // Set action at item end to pause to prevent looping
-                self.player?.actionAtItemEnd = .pause
-                return // Successfully setup with "Media" path
             }
-            
-            // If both paths fail, print a comprehensive error.
-            print("SplashScreenView: Video file 'SplashVideo.mp4' NOT FOUND. Tried looking in 'Resources/Media/' AND 'Media/' subdirectories. Please check: \n1. File Name and Extension. \n2. Target Membership for 'SplashVideo.mp4'. \n3. How 'Resources' and 'Media' folders are added to your Xcode project (blue folder reference vs. yellow group).")
             return
         }
         
-        // If the first guard let succeeded (found in "Resources/Media/")
+        print("SplashScreenView: Found video at: \(videoURL)")
+        
         let newPlayer = AVPlayer(url: videoURL)
+        
+        // Check if player item is ready to play
         if newPlayer.currentItem?.status == .failed {
-            print("SplashScreenView: AVPlayerItem failed to load (path: Resources/Media/SplashVideo.mp4). Check video file integrity/format.")
+            print("SplashScreenView: AVPlayerItem failed to load. Error: \(newPlayer.currentItem?.error?.localizedDescription ?? "Unknown error")")
             return
         }
+        
         self.player = newPlayer
         self.player?.play()
+        
         // Don't loop the video - let it play once
-        // Set action at item end to pause to prevent looping
         self.player?.actionAtItemEnd = .pause
+        
+        print("SplashScreenView: Video player setup complete")
     }
     
     private func setupVideoLoopObserver(for playerToLoop: AVPlayer) {

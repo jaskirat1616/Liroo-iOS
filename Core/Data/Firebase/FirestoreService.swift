@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseStorage
+import FirebaseCrashlytics
 
 enum FirestoreError: Error {
     case encodingError
@@ -93,19 +94,30 @@ final class FirestoreService {
                 print("[FirestoreService] Document data: \(snapshot.data() ?? [:])")
             } else {
                 print("[FirestoreService] WARNING: Document does not exist after creation")
+                
+                CrashlyticsManager.shared.logNonFatalError(
+                    message: "Document does not exist after creation",
+                    context: "firestore_document_verification",
+                    additionalData: [
+                        "collection": collection,
+                        "document_id": documentRef.documentID
+                    ]
+                )
             }
             
             print("[FirestoreService] Document creation completed successfully")
             return documentRef.documentID
-        } catch let error as EncodingError {
-            print("[FirestoreService] ERROR: Failed to encode document")
-            print("[FirestoreService] Encoding error details: \(error)")
-            throw FirestoreError.encodingError
         } catch {
-            print("[FirestoreService] ERROR: Failed to create document")
-            print("[FirestoreService] Error type: \(type(of: error))")
-            print("[FirestoreService] Error description: \(error.localizedDescription)")
-            print("[FirestoreService] Full error details: \(error)")
+            print("[FirestoreService] ERROR: Failed to create document in collection '\(collection)'")
+            print("[FirestoreService] Error: \(error.localizedDescription)")
+            
+            CrashlyticsManager.shared.logFirestoreError(
+                error: error,
+                operation: "create",
+                collection: collection,
+                documentId: documentId
+            )
+            
             throw FirestoreError.unknown(error)
         }
     }
@@ -144,6 +156,12 @@ final class FirestoreService {
         do {
             try await db.collection(collection).document(documentId).setData(from: document, merge: true)
         } catch {
+            CrashlyticsManager.shared.logFirestoreError(
+                error: error,
+                operation: "update",
+                collection: collection,
+                documentId: documentId
+            )
             throw FirestoreError.unknown(error)
         }
     }
@@ -153,6 +171,12 @@ final class FirestoreService {
         do {
             try await db.collection(collection).document(documentId).delete()
         } catch {
+            CrashlyticsManager.shared.logFirestoreError(
+                error: error,
+                operation: "delete",
+                collection: collection,
+                documentId: documentId
+            )
             throw FirestoreError.unknown(error)
         }
     }
@@ -168,8 +192,18 @@ final class FirestoreService {
                 try document.data(as: T.self)
             }
         } catch let error as DecodingError {
+            CrashlyticsManager.shared.logFirestoreError(
+                error: error,
+                operation: "query_decode",
+                collection: collection
+            )
             throw FirestoreError.decodingError
         } catch {
+            CrashlyticsManager.shared.logFirestoreError(
+                error: error,
+                operation: "query",
+                collection: collection
+            )
             throw FirestoreError.unknown(error)
         }
     }
@@ -188,8 +222,17 @@ final class FirestoreService {
         print("[FirebaseStorage][\(Date())] ℹ️ INFO Image data size: \(imageData.count) bytes")
 
         guard imageData.count > 0 else {
+            let error = UploadError.imageDataConversionFailed
+            
+            CrashlyticsManager.shared.logFirebaseStorageError(
+                error: error,
+                operation: "upload",
+                path: path,
+                fileSize: 0
+            )
+            
             print("[FirebaseStorage][\(Date())] 🆘 ERROR Image data is empty.")
-            throw UploadError.imageDataConversionFailed // Or a more specific error
+            throw error
         }
 
         let storageRef = storage.reference().child(path)
@@ -200,7 +243,7 @@ final class FirestoreService {
         if let meta = metadata {
             print("[FirebaseStorage][\(Date())] ℹ️ INFO Content type: \(meta.contentType ?? "Not set")")
             print("[FirebaseStorage][\(Date())] ℹ️ INFO Custom metadata: \(meta.customMetadata ?? [:])")
-            }
+        }
             
 
         // Using async/await version of putData
@@ -216,13 +259,30 @@ final class FirestoreService {
                     let nsError = error as NSError
                     print("[FirebaseStorage][\(Date())] 🆘 ERROR Code: \(nsError.code), Domain: \(nsError.domain)")
                     print("[FirebaseStorage][\(Date())] 🆘 ERROR UserInfo: \(nsError.userInfo)")
+                    
+                    CrashlyticsManager.shared.logFirebaseStorageError(
+                        error: error,
+                        operation: "upload",
+                        path: path,
+                        fileSize: imageData.count
+                    )
+                    
                     continuation.resume(throwing: UploadError.uploadFailed(error))
                     return
                 }
 
                 guard resultMetadata != nil else {
+                    let error = UploadError.unknownError
+                    
+                    CrashlyticsManager.shared.logFirebaseStorageError(
+                        error: error,
+                        operation: "upload_metadata",
+                        path: path,
+                        fileSize: imageData.count
+                    )
+                    
                     print("[FirebaseStorage][\(Date())] 🆘 ERROR Upload completed but metadata is nil for path: \(path).")
-                    continuation.resume(throwing: UploadError.unknownError)
+                    continuation.resume(throwing: error)
                     return
                 }
 
@@ -233,6 +293,14 @@ final class FirestoreService {
                     if let error = error {
                         print("[FirebaseStorage][\(Date())] 🆘 ERROR Failed to get download URL for path: \(path)")
                         print("[FirebaseStorage][\(Date())] 🆘 ERROR Details: \(error.localizedDescription)")
+                        
+                        CrashlyticsManager.shared.logFirebaseStorageError(
+                            error: error,
+                            operation: "download_url",
+                            path: path,
+                            fileSize: imageData.count
+                        )
+                        
                         continuation.resume(throwing: UploadError.downloadURLNotFound)
                         return
                     }
@@ -241,8 +309,17 @@ final class FirestoreService {
                         print("[FirebaseStorage][\(Date())] ✅ SUCCESS Got download URL: \(downloadURL.absoluteString)")
                         continuation.resume(returning: downloadURL)
                     } else {
+                        let error = UploadError.downloadURLNotFound
+                        
+                        CrashlyticsManager.shared.logFirebaseStorageError(
+                            error: error,
+                            operation: "download_url_nil",
+                            path: path,
+                            fileSize: imageData.count
+                        )
+                        
                         print("[FirebaseStorage][\(Date())] 🆘 ERROR Download URL is nil after successful fetch attempt for path: \(path).")
-                        continuation.resume(throwing: UploadError.downloadURLNotFound)
+                        continuation.resume(throwing: error)
                 }
             }
             }
@@ -258,6 +335,13 @@ final class FirestoreService {
         } catch {
             StorageLogger.log("Failed to delete image at path: \(path)", type: .error)
             StorageLogger.log("Error: \(error.localizedDescription)", type: .error)
+            
+            CrashlyticsManager.shared.logFirebaseStorageError(
+                error: error,
+                operation: "delete",
+                path: path
+            )
+            
             throw FirestoreError.unknown(error)
         }
     }

@@ -4,9 +4,10 @@ import FirebaseFirestore
 import FirebaseStorage
 import UserNotifications
 import BackgroundTasks
+import FirebaseCrashlytics
 
 @MainActor
-class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate, URLSessionTaskDelegate, URLSessionDataDelegate {
+class ContentGenerationViewModel: ObservableObject {
     @Published var inputText = ""
     @Published var selectedLevel: ReadingLevel = .standard
     @Published var selectedSummarizationTier: SummarizationTier = .quickSummary
@@ -27,40 +28,41 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
     @Published var statusMessage: String? = nil
     @Published var savedContentDocumentId: String?
     
-    // Use global background processing manager
     private let globalManager = GlobalBackgroundProcessingManager.shared
-    
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
     
-    // Add custom URLSession configuration
+    // Custom URLSession for regular, foreground tasks
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 600  // 10 minutes timeout for request
-        config.timeoutIntervalForResource = 1800  // 30 minutes timeout for resource
+        config.timeoutIntervalForRequest = 600
+        config.timeoutIntervalForResource = 1800
         return URLSession(configuration: config)
     }()
     
-    // Add background session property
-    private lazy var backgroundSession: URLSession = {
-        let config = URLSessionConfiguration.background(withIdentifier: "com.liroo.contentgeneration.bg")
-        config.timeoutIntervalForRequest = 600  // 10 minutes
-        config.timeoutIntervalForResource = 1800  // 30 minutes
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
-    
-    // Add a property to accumulate data for background tasks
-    private var backgroundTaskData: [Int: Data] = [:]
-    
-    // MARK: - Notification Setup
-    override init() {
+    // init() is no longer an override
+    init() {
         // Notifications are now handled automatically by NotificationManager
         // No manual setup needed
     }
     
-    // MARK: - Content Generation
-    
+    // The original, async generateContent() method remains for foreground operations
     func generateContent() async {
+        let startTime = Date()
+        
+        // Log user action
+        CrashlyticsManager.shared.logUserAction(
+            action: "content_generation_started",
+            screen: "content_generation",
+            additionalData: [
+                "content_type": selectedSummarizationTier.displayName,
+                "level": selectedLevel.rawValue,
+                "input_length": inputText.count,
+                "genre": selectedGenre.rawValue,
+                "image_style": selectedImageStyle.displayName
+            ]
+        )
+        
         guard !inputText.isEmpty else {
             errorMessage = "Please enter some text to generate content"
             return
@@ -70,6 +72,18 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             errorMessage = "Input text must be less than 5000 characters"
             return
         }
+        
+        if let userId = Auth.auth().currentUser?.uid {
+            let todayCount = await fetchTodayGenerationCount(userId: userId)
+            if todayCount >= 12 {
+                errorMessage = "You have reached your daily generation limit (12 per day)."
+                return
+            }
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        statusMessage = "Starting generation..."
         
         // Daily generation limit check
         if let userId = Auth.auth().currentUser?.uid {
@@ -126,6 +140,27 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                     try await generateRegularContentWithProgress()
                 }
                 
+                // Log successful completion
+                let duration = Date().timeIntervalSince(startTime)
+                CrashlyticsManager.shared.logUserAction(
+                    action: "content_generation_completed",
+                    screen: "content_generation",
+                    additionalData: [
+                        "content_type": selectedSummarizationTier.displayName,
+                        "duration": duration,
+                        "attempt": attempt + 1
+                    ]
+                )
+                
+                // Check for performance issues
+                if duration > 60 { // Log if generation takes more than 60 seconds
+                    CrashlyticsManager.shared.logPerformanceIssue(
+                        operation: "content_generation",
+                        duration: duration,
+                        threshold: 60
+                    )
+                }
+                
                 // Refresh count after successful generation
                 await refreshTodayGenerationCount()
                 
@@ -142,6 +177,17 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                 attempt += 1
                 let nsError = error as NSError
                 let isNetworkLost = nsError.domain == NSURLErrorDomain && nsError.code == -1005
+                
+                // Log error with comprehensive context
+                CrashlyticsManager.shared.logContentGenerationError(
+                    error: error,
+                    contentType: selectedSummarizationTier.displayName,
+                    inputLength: inputText.count,
+                    level: selectedLevel.rawValue,
+                    tier: selectedSummarizationTier.rawValue,
+                    genre: selectedGenre.rawValue,
+                    imageStyle: selectedImageStyle.displayName
+                )
                 
                 if isNetworkLost && attempt <= maxRetries {
                     await MainActor.run {
@@ -171,8 +217,103 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             errorMessage = lastError.localizedDescription
         }
     }
+
+    // MARK: - Background Generation Methods (Refactored to use Singleton)
+
+    func generateStoryWithProgressInBackground() {
+        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 4)
+        let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
+        var effectiveInputText = inputText
+        if !trimmedMainCharacter.isEmpty {
+            effectiveInputText = "The main character of this story is \(trimmedMainCharacter).\n\n\(inputText)"
+        }
+        let storyPrompt = """
+        [Level: \(selectedLevel.rawValue)]
+        Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story.
+        Image Style to consider for tone and visuals: \(selectedImageStyle.displayName).
+        Original Text:
+        \(effectiveInputText)
+        """
+        let requestBody: [String: Any] = [
+            "text": storyPrompt,
+            "level": selectedLevel.rawValue,
+            "genre": selectedGenre.rawValue.lowercased(),
+            "image_style": selectedImageStyle.displayName
+        ]
+        startBackgroundTask(with: requestBody, endpoint: "/generate_story", type: "Story")
+    }
+
+    func generateLectureWithProgressInBackground() {
+        globalManager.updateProgress(step: "Generating lecture content... (background)", stepNumber: 1, totalSteps: 3)
+        let requestBody: [String: Any] = [
+            "text": inputText,
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.displayName
+        ]
+        startBackgroundTask(with: requestBody, endpoint: "/generate_lecture", type: "Lecture")
+    }
+
+    func generateRegularContentWithProgressInBackground() {
+        globalManager.updateProgress(step: "Generating content... (background)", stepNumber: 1, totalSteps: 3)
+        let requestBody: [String: Any] = [
+            "input_text": inputText,
+            "level": selectedLevel.rawValue,
+            "summarization_tier": selectedSummarizationTier.rawValue,
+            "profile": [
+                "studentLevel": selectedLevel.rawValue,
+                "topicsOfInterest": []
+            ]
+        ]
+        startBackgroundTask(with: requestBody, endpoint: "/process", type: "Content")
+    }
     
-    // MARK: - Progress-Aware Generation Methods
+    // Generic method to start any background task via the manager
+    private func startBackgroundTask(with requestBody: [String: Any], endpoint: String, type: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            self.errorMessage = "Failed to encode request."
+            return
+        }
+
+        let fileName = "\(type.lowercased())_upload_\(UUID().uuidString).json"
+        guard let fileURL = try? writeDataToTempFile(data, fileName: fileName) else {
+            self.errorMessage = "Failed to write request to temp file."
+            return
+        }
+
+        let url = URL(string: "\(backendURL)\(endpoint)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        BackgroundNetworkManager.shared.startBackgroundUpload(request: request, fromFile: fileURL) { [weak self] result in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                switch result {
+                case .success(let responseData):
+                    self?.handleSuccessfulBackgroundResponse(data: responseData, type: type)
+                case .failure(let error):
+                    self?.errorMessage = "Background \(type) generation failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    // Generic handler for successful background responses
+    private func handleSuccessfulBackgroundResponse(data: Data, type: String) {
+        do {
+            let decoded = try JSONDecoder().decode(Response.self, from: data)
+            if let story = decoded.story { self.currentStory = story }
+            else if let lecture = decoded.lecture { self.currentLecture = lecture }
+            else if let blocks = decoded.blocks { self.blocks = blocks }
+            
+            self.statusMessage = "Background \(type) generation complete."
+            sendBackgroundCompletionNotification(type: type)
+        } catch {
+            self.errorMessage = "Failed to decode background response: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Helper Methods
     
     private func generateStoryWithProgress() async throws {
         globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 4)
@@ -227,8 +368,17 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
+                let error = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+                
+                CrashlyticsManager.shared.logNetworkError(
+                    error: error,
+                    endpoint: "/generate_story",
+                    method: "POST",
+                    requestBody: requestBody
+                )
+                
                 print("[Story] ERROR: Invalid server response (not HTTPURLResponse)")
-                throw NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+                throw error
             }
             
             print("[Story] Received response with status code: \(httpResponse.statusCode)")
@@ -240,10 +390,31 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                     // Try to decode a simple error message if backend sends one
                     struct BackendError: Codable { let error: String? }
                     if let decodedError = try? JSONDecoder().decode(BackendError.self, from: data), let message = decodedError.error {
-                         throw NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(message) (Status \(httpResponse.statusCode))"])
+                        let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(message) (Status \(httpResponse.statusCode))"])
+                        
+                        CrashlyticsManager.shared.logNetworkError(
+                            error: serverError,
+                            endpoint: "/generate_story",
+                            method: "POST",
+                            statusCode: httpResponse.statusCode,
+                            requestBody: requestBody
+                        )
+                        
+                        throw serverError
                     }
                 }
-                throw NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                
+                let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                
+                CrashlyticsManager.shared.logNetworkError(
+                    error: serverError,
+                    endpoint: "/generate_story",
+                    method: "POST",
+                    statusCode: httpResponse.statusCode,
+                    requestBody: requestBody
+                )
+                
+                throw serverError
             }
             
             print("[Story] Attempting to decode response into Response.self")
@@ -285,25 +456,83 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                         globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
                         print("[Story] Story content and image processing completed.")
                     } else {
+                        let authError = NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                        
+                        CrashlyticsManager.shared.logAuthenticationError(
+                            error: authError,
+                            operation: "story_generation"
+                        )
+                        
                         print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
-                        throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                        throw authError
                     }
                 } else if let errorMsg = apiResponse.error { // Check our Response.error field
                     print("[Story] ERROR: Backend returned error in JSON response: \(errorMsg)")
-                    throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+                    
+                    let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+                    
+                    CrashlyticsManager.shared.logNetworkError(
+                        error: backendError,
+                        endpoint: "/generate_story",
+                        method: "POST",
+                        requestBody: requestBody
+                    )
+                    
+                    throw backendError
                 } else {
                     print("[Story] ERROR: Backend response did not contain a story or an error message")
-                    throw NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
+                    
+                    let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
+                    
+                    CrashlyticsManager.shared.logNetworkError(
+                        error: backendError,
+                        endpoint: "/generate_story",
+                        method: "POST",
+                        requestBody: requestBody
+                    )
+                    
+                    throw backendError
                 }
             } catch let decodingError {
                 print("[Story] ERROR: Failed to decode response into Response.self")
                 print("[Story] Decoding error: \(decodingError)")
                 print("[Story] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
+                
+                CrashlyticsManager.shared.logCustomError(
+                    error: decodingError,
+                    context: "story_response_decoding",
+                    additionalData: [
+                        "endpoint": "/generate_story",
+                        "response_size": data.count,
+                        "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode"
+                    ]
+                )
+                
                 throw decodingError
             }
         } catch { // Catch any other errors, including re-thrown decoding errors or errors from above
             print("[Story] ERROR: Unexpected error during story generation process: \(error.localizedDescription)")
             print("[Story] Error type: \(type(of: error))")
+            
+            // Log network errors specifically
+            if let urlError = error as? URLError {
+                CrashlyticsManager.shared.logNetworkError(
+                    error: urlError,
+                    endpoint: "/generate_story",
+                    method: "POST",
+                    requestBody: requestBody
+                )
+            } else {
+                CrashlyticsManager.shared.logCustomError(
+                    error: error,
+                    context: "story_generation_unexpected",
+                    additionalData: [
+                        "endpoint": "/generate_story",
+                        "method": "POST"
+                    ]
+                )
+            }
+            
             // Ensure the errorMessage is updated on the main thread for UI
             let finalErrorMessage = error.localizedDescription
             await MainActor.run { self.errorMessage = finalErrorMessage }
@@ -943,6 +1172,15 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
+                let error = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+                
+                CrashlyticsManager.shared.logImageGenerationError(
+                    error: error,
+                    prompt: imagePrompt,
+                    style: selectedImageStyle.displayName,
+                    size: "800x600"
+                )
+                
                 print("[Image] ERROR: Invalid server response")
                 return nil
             }
@@ -951,6 +1189,15 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             print("[Image] Response headers: \(httpResponse.allHeaderFields)")
             
             guard httpResponse.statusCode == 200 else {
+                let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                
+                CrashlyticsManager.shared.logImageGenerationError(
+                    error: serverError,
+                    prompt: imagePrompt,
+                    style: selectedImageStyle.displayName,
+                    size: "800x600"
+                )
+                
                 print("[Image] ERROR: Server returned status code \(httpResponse.statusCode)")
                 if let errorResponse = String(data: data, encoding: .utf8) {
                     print("[Image] Error response from server: \(errorResponse)")
@@ -979,6 +1226,19 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                 print("[Image] ERROR: Failed to decode ImageGenerationResponse")
                 print("[Image] Decoding error: \(error)")
                 print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
+                
+                CrashlyticsManager.shared.logCustomError(
+                    error: error,
+                    context: "image_response_decoding",
+                    additionalData: [
+                        "endpoint": "/generate_image",
+                        "response_size": data.count,
+                        "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode",
+                        "prompt": imagePrompt.prefix(100),
+                        "style": selectedImageStyle.displayName
+                    ]
+                )
+                
                 return nil
             }
             
@@ -991,6 +1251,18 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                 
                 guard let httpImageResponse = imageResponse as? HTTPURLResponse,
                       httpImageResponse.statusCode == 200 else {
+                    let downloadError = NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download image"])
+                    
+                    CrashlyticsManager.shared.logCustomError(
+                        error: downloadError,
+                        context: "image_download_failed",
+                        additionalData: [
+                            "image_url": imageUrlString,
+                            "status_code": (imageResponse as? HTTPURLResponse)?.statusCode ?? -1,
+                            "prompt": imagePrompt.prefix(100)
+                        ]
+                    )
+                    
                     print("[Image] ERROR: Failed to download image")
                     print("[Image] Image response status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
                     return nil
@@ -999,6 +1271,17 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                 print("[Image] Successfully downloaded image data: \(imageData.count) bytes")
                 
                 guard let image = UIImage(data: imageData) else {
+                    let imageCreationError = NSError(domain: "ImageCreationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create UIImage from data"])
+                    
+                    CrashlyticsManager.shared.logCustomError(
+                        error: imageCreationError,
+                        context: "image_creation_failed",
+                        additionalData: [
+                            "image_data_size": imageData.count,
+                            "prompt": imagePrompt.prefix(100)
+                        ]
+                    )
+                    
                     print("[Image] ERROR: Failed to create UIImage from data")
                     return nil
                 }
@@ -1009,6 +1292,15 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
                 print("[Image] ERROR: No image URL in response")
                 if let error = imageResponse.error {
                     print("[Image] Backend error: \(error)")
+                    
+                    let backendError = NSError(domain: "ImageGenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend error: \(error)"])
+                    
+                    CrashlyticsManager.shared.logImageGenerationError(
+                        error: backendError,
+                        prompt: imagePrompt,
+                        style: selectedImageStyle.displayName,
+                        size: "800x600"
+                    )
                 }
                 print("[Image] Full response object: \(imageResponse)")
                 return nil
@@ -1018,6 +1310,14 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
             print("[Image] ERROR: Failed to generate image: \(error.localizedDescription)")
             print("[Image] Error type: \(type(of: error))")
             print("[Image] Full error: \(error)")
+            
+            CrashlyticsManager.shared.logImageGenerationError(
+                error: error,
+                prompt: imagePrompt,
+                style: selectedImageStyle.displayName,
+                size: "800x600"
+            )
+            
             return nil
         }
     }
@@ -1190,142 +1490,37 @@ class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate
     // All notification functionality is now handled automatically by NotificationManager
     // No manual notification methods needed
     
-    // MARK: - URLSessionDelegate Methods
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        let taskId = dataTask.taskIdentifier
-        if backgroundTaskData[taskId] != nil {
-            backgroundTaskData[taskId]?.append(data)
-        } else {
-            backgroundTaskData[taskId] = data
-        }
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        let taskId = task.taskIdentifier
-        defer { backgroundTaskData.removeValue(forKey: taskId) }
-        if let error = error {
-            DispatchQueue.main.async {
-                self.errorMessage = "Background content generation failed: \(error.localizedDescription)"
-                self.isLoading = false
-            }
-            return
-        }
-        guard let data = backgroundTaskData[taskId], let response = (task as? URLSessionDataTask)?.response as? HTTPURLResponse else {
-            DispatchQueue.main.async {
-                self.errorMessage = "Background content generation failed: No data or response."
-                self.isLoading = false
-            }
-            return
-        }
-        guard response.statusCode == 200 else {
-            let errorMsg = String(data: data, encoding: .utf8) ?? "Unknown server error"
-            DispatchQueue.main.async {
-                self.errorMessage = "Server error (background): \(response.statusCode) - \(errorMsg)"
-                self.isLoading = false
-            }
-            return
-        }
-        // Try to decode as Response (story, lecture, or blocks)
-        if let decoded = try? JSONDecoder().decode(Response.self, from: data) {
-            DispatchQueue.main.async {
-                if let story = decoded.story {
-                    self.currentStory = story
-                    self.statusMessage = "Background story generation completed."
-                    self.sendBackgroundCompletionNotification(type: "Story")
-                } else if let lecture = decoded.lecture {
-                    self.currentLecture = lecture
-                    self.statusMessage = "Background lecture generation completed."
-                    self.sendBackgroundCompletionNotification(type: "Lecture")
-                } else if let blocks = decoded.blocks {
-                    self.blocks = blocks
-                    self.statusMessage = "Background content generation completed."
-                    self.sendBackgroundCompletionNotification(type: "Content")
-                } else if let error = decoded.error {
-                    self.errorMessage = "Background generation error: \(error)"
-                } else {
-                    self.statusMessage = "Background generation completed (no content)."
-                }
-                self.isLoading = false
-            }
-        } else {
-            let raw = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to decode background response: \(raw)"
-                self.isLoading = false
-            }
-        }
+    // MARK: - Missing Helper Methods
+    private func generateAudioForLectureWithProgress(lecture: Lecture) async {
+        // This would contain the audio generation logic
+        // For now, we'll just simulate the process
+        print("[Lecture][Audio] Starting audio generation for lecture: \(lecture.title)")
+        
+        // Simulate audio generation time
+        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        
+        // Save lecture to Firebase
+        await saveLectureToFirebase(lecture, audioFiles: [], userId: Auth.auth().currentUser?.uid ?? "")
     }
     
-    // Local notification for background completion
-    private func sendBackgroundCompletionNotification(type: String) {
-        let content = UNMutableNotificationContent()
-        content.title = "Liroo: \(type) Generation Complete"
-        content.body = "Your \(type.lowercased()) is ready!"
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
-    }
-    
-    // MARK: - Background lecture generation method using uploadTask
-    func generateLectureWithProgressInBackground() {
-        globalManager.updateProgress(step: "Generating lecture content... (background)", stepNumber: 1, totalSteps: 3)
-        let requestBody: [String: Any] = [
-            "text": inputText,
-            "level": selectedLevel.rawValue,
-            "image_style": selectedImageStyle.displayName
+    private func uploadImageToFirebase(imageData: Data, fileName: String, userId: String) async throws -> URL {
+        let imagePath = "content/\(userId)/\(fileName)"
+        print("[Firebase] Uploading image to path: \(imagePath)")
+        
+        // Add metadata for better organization
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        metadata.customMetadata = [
+            "uploadDate": ISO8601DateFormatter().string(from: Date())
         ]
-        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            DispatchQueue.main.async { self.errorMessage = "Failed to encode request body." }
-            return
-        }
-        let fileName = "lecture_upload_\(UUID().uuidString).json"
-        guard let fileURL = try? writeDataToTempFile(data, fileName: fileName) else {
-            DispatchQueue.main.async { self.errorMessage = "Failed to write request body to file." }
-            return
-        }
-        let url = URL(string: "\(backendURL)/generate_lecture")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let task = backgroundSession.uploadTask(with: request, fromFile: fileURL)
-        task.resume()
-    }
-
-    // MARK: - Background regular content generation method using uploadTask
-    func generateRegularContentWithProgressInBackground() {
-        globalManager.updateProgress(step: "Generating content... (background)", stepNumber: 1, totalSteps: 3)
-        let requestBody: [String: Any] = [
-            "input_text": inputText,
-            "level": selectedLevel.rawValue,
-            "summarization_tier": selectedSummarizationTier.rawValue,
-            "profile": [
-                "studentLevel": selectedLevel.rawValue,
-                "topicsOfInterest": []
-            ]
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
-            DispatchQueue.main.async { self.errorMessage = "Failed to encode request body." }
-            return
-        }
-        let fileName = "content_upload_\(UUID().uuidString).json"
-        guard let fileURL = try? writeDataToTempFile(data, fileName: fileName) else {
-            DispatchQueue.main.async { self.errorMessage = "Failed to write request body to file." }
-            return
-        }
-        let url = URL(string: "\(backendURL)/process")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let task = backgroundSession.uploadTask(with: request, fromFile: fileURL)
-        task.resume()
-    }
-
-    // Helper to write Data to a temp file and return the URL
-    private func writeDataToTempFile(_ data: Data, fileName: String) throws -> URL {
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileURL = tempDir.appendingPathComponent(fileName)
-        try data.write(to: fileURL)
-        return fileURL
+        
+        print("[Firebase] Image metadata:")
+        print("[Firebase] - Content type: \(metadata.contentType ?? "Not specified")")
+        print("[Firebase] - Custom metadata: \(metadata.customMetadata ?? [:])")
+        
+        let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
+        print("[Firebase] Successfully uploaded image")
+        return downloadURL
     }
 }
 
@@ -1580,36 +1775,19 @@ struct ImageGenerationResponse: Codable {
 
 // MARK: - Missing Helper Methods
 extension ContentGenerationViewModel {
-    
-    private func generateAudioForLectureWithProgress(lecture: Lecture) async {
-        // This would contain the audio generation logic
-        // For now, we'll just simulate the process
-        print("[Lecture][Audio] Starting audio generation for lecture: \(lecture.title)")
-        
-        // Simulate audio generation time
-        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-        
-        // Save lecture to Firebase
-        await saveLectureToFirebase(lecture, audioFiles: [], userId: Auth.auth().currentUser?.uid ?? "")
+    private func writeDataToTempFile(_ data: Data, fileName: String) throws -> URL {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(fileName)
+        try data.write(to: fileURL)
+        return fileURL
     }
-    
-    private func uploadImageToFirebase(imageData: Data, fileName: String, userId: String) async throws -> URL {
-        let imagePath = "content/\(userId)/\(fileName)"
-        print("[Firebase] Uploading image to path: \(imagePath)")
-        
-        // Add metadata for better organization
-        let metadata = StorageMetadata()
-        metadata.contentType = "image/jpeg"
-        metadata.customMetadata = [
-            "uploadDate": ISO8601DateFormatter().string(from: Date())
-        ]
-        
-        print("[Firebase] Image metadata:")
-        print("[Firebase] - Content type: \(metadata.contentType ?? "Not specified")")
-        print("[Firebase] - Custom metadata: \(metadata.customMetadata ?? [:])")
-        
-        let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
-        print("[Firebase] Successfully uploaded image")
-        return downloadURL
+
+    private func sendBackgroundCompletionNotification(type: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Liroo: \(type) Generation Complete"
+        content.body = "Your \(type.lowercased()) is ready!"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 } 
