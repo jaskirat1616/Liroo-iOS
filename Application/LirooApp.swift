@@ -18,12 +18,94 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set the notification delegate
         UNUserNotificationCenter.current().delegate = self
         
+        // Register for push notifications
+        registerForPushNotifications()
+        
+        // Ensure local notifications are properly setup
+        Task {
+            await NotificationManager.shared.ensureNotificationsAreSetup()
+        }
+        
         // Register background tasks
         BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.liroo.contentgeneration", using: nil) { task in
             self.handleContentGenerationBackgroundTask(task: task as! BGAppRefreshTask)
         }
         
         return true
+    }
+    
+    // MARK: - Push Notification Registration
+    private func registerForPushNotifications() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .provisional]) { granted, error in
+            if granted {
+                print("[AppDelegate] ✅ Push notification permissions granted")
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+            } else {
+                print("[AppDelegate] ❌ Push notification permissions denied")
+                if let error = error {
+                    print("[AppDelegate] Error: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    // MARK: - Push Token Handling
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
+        let token = tokenParts.joined()
+        print("[AppDelegate] ✅ Device Token: \(token)")
+        
+        // Store the token for sending to your backend
+        UserDefaults.standard.set(token, forKey: "devicePushToken")
+        
+        // Here you would send this token to your backend server
+        // sendTokenToServer(token: token)
+    }
+    
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[AppDelegate] ❌ Failed to register for push notifications: \(error.localizedDescription)")
+    }
+    
+    // MARK: - Push Notification Handling
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        print("[AppDelegate] 📱 Received push notification: \(userInfo)")
+        
+        // Handle Live Activity updates
+        if let activityId = userInfo["activityId"] as? String,
+           let progress = userInfo["progress"] as? Double,
+           let currentStep = userInfo["currentStep"] as? String,
+           let currentStepNumber = userInfo["currentStepNumber"] as? Int,
+           let totalSteps = userInfo["totalSteps"] as? Int {
+            
+            Task { @MainActor in
+                ContentGenerationLiveActivityManager.shared.handlePushUpdate(
+                    activityId: activityId,
+                    progress: progress,
+                    currentStep: currentStep,
+                    currentStepNumber: currentStepNumber,
+                    totalSteps: totalSteps
+                )
+            }
+        }
+        
+        // Handle content generation completion
+        if let contentType = userInfo["contentType"] as? String,
+           let status = userInfo["status"] as? String {
+            
+            Task {
+                if status == "completed" {
+                    // Content generation completed
+                    await NotificationManager.shared.sendContentGenerationSuccess(contentType: contentType, level: "Standard")
+                } else if status == "error" {
+                    // Content generation failed
+                    await NotificationManager.shared.sendContentGenerationError(contentType: contentType)
+                }
+            }
+        }
+        
+        completionHandler(.newData)
     }
     
     private func handleContentGenerationBackgroundTask(task: BGAppRefreshTask) {
@@ -81,8 +163,27 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         
         print("[AppDelegate] User tapped on notification: \(response.notification.request.content.title)")
         
-        // Here you can handle the user's interaction with the notification
-        // For example, navigate to a specific screen
+        // Handle different notification types
+        let userInfo = response.notification.request.content.userInfo
+        
+        if let notificationType = userInfo["type"] as? String {
+            switch notificationType {
+            case "content_success":
+                // Navigate to content generation or history
+                print("[AppDelegate] User tapped on content success notification")
+            case "content_error":
+                // Navigate to content generation to retry
+                print("[AppDelegate] User tapped on content error notification")
+            case "achievement":
+                // Navigate to profile or achievements
+                print("[AppDelegate] User tapped on achievement notification")
+            case "streak_milestone":
+                // Navigate to dashboard
+                print("[AppDelegate] User tapped on streak notification")
+            default:
+                break
+            }
+        }
         
         completionHandler()
     }

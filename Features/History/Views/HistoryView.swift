@@ -140,18 +140,6 @@ struct HistoryView: View {
                     }
                 }
             }
-            
-            // Global Background Processing Indicator
-            if globalManager.isBackgroundProcessing && globalManager.isIndicatorVisible {
-                VStack {
-                    Spacer()
-                    globalBackgroundProcessingIndicator(dismissAction: {
-                        globalManager.dismissIndicator()
-                    })
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 20)
-                }
-            }
         }
         .navigationTitle("History")
         .toolbar {
@@ -204,50 +192,6 @@ struct HistoryView: View {
         .onAppear {
             globalManager.restoreFromUserDefaults()
         }
-    }
-
-    // MARK: - Global Background Processing Indicator
-    private func globalBackgroundProcessingIndicator(dismissAction: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    Text("Generating \(globalManager.generationType)...")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                Spacer()
-                Text("\(Int(globalManager.progress * 100))%")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                Button(action: dismissAction) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.leading, 8)
-                }
-                .accessibilityLabel("Dismiss background processing indicator")
-            }
-            // Progress Bar
-            ProgressView(value: globalManager.progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                .frame(height: 3)
-            if !globalManager.currentStep.isEmpty {
-                Text(globalManager.currentStep)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.blue.opacity(0.9))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-        )
-        .animation(.easeInOut(duration: 0.3), value: globalManager.isBackgroundProcessing)
     }
 
     // Polished lecture row

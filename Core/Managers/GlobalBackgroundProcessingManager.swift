@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import ActivityKit
 
 // MARK: - Global Background Processing Manager
 public class GlobalBackgroundProcessingManager: ObservableObject {
@@ -27,6 +28,8 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         }
     }
     
+    private let liveActivityManager = ContentGenerationLiveActivityManager.shared
+    
     private init() {
         restoreFromUserDefaults()
         // Restore lastGeneratedContent
@@ -44,6 +47,11 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         currentStepNumber = 0
         generationType = type
         isIndicatorVisible = true
+        
+        // Start Live Activity for Dynamic Island
+        Task { @MainActor in
+            liveActivityManager.startLiveActivity(generationType: type)
+        }
         
         // Store task info for background processing
         UserDefaults.standard.set(taskId, forKey: "currentBackgroundTaskId")
@@ -63,10 +71,36 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         totalSteps = 0
         generationType = ""
         
+        // End Live Activity with success
+        Task { @MainActor in
+            liveActivityManager.endLiveActivityWithSuccess()
+        }
+        
         // When the task ends, we can hide the indicator, but let's leave it visible
         // until the user dismisses it, so they see the "Complete!" message.
         // isIndicatorVisible = false
 
+        // Clear stored task info
+        UserDefaults.standard.removeObject(forKey: "currentBackgroundTaskId")
+        UserDefaults.standard.set(false, forKey: "isBackgroundProcessing")
+        UserDefaults.standard.removeObject(forKey: "backgroundGenerationType")
+        UserDefaults.standard.removeObject(forKey: "isIndicatorVisible")
+    }
+    
+    public func endBackgroundTaskWithError(errorMessage: String) {
+        isBackgroundProcessing = false
+        backgroundTaskId = nil
+        progress = 0.0
+        currentStep = ""
+        currentStepNumber = 0
+        totalSteps = 0
+        generationType = ""
+        
+        // End Live Activity with error
+        Task { @MainActor in
+            liveActivityManager.endLiveActivityWithError(errorMessage: errorMessage)
+        }
+        
         // Clear stored task info
         UserDefaults.standard.removeObject(forKey: "currentBackgroundTaskId")
         UserDefaults.standard.set(false, forKey: "isBackgroundProcessing")
@@ -84,6 +118,16 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         currentStepNumber = stepNumber
         self.totalSteps = totalSteps
         progress = Double(stepNumber) / Double(totalSteps)
+        
+        // Update Live Activity
+        Task { @MainActor in
+            liveActivityManager.updateLiveActivity(
+                progress: progress,
+                currentStep: step,
+                currentStepNumber: stepNumber,
+                totalSteps: totalSteps
+            )
+        }
         
         // Store progress for background updates
         UserDefaults.standard.set(progress, forKey: "backgroundProgress")

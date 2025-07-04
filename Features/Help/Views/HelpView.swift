@@ -112,6 +112,18 @@ struct QuickActionsSection: View {
             description: "Get help from our team",
             icon: "envelope.fill",
             color: .orange
+        ),
+        QuickAction(
+            title: "Test Notifications",
+            description: "Check if notifications work",
+            icon: "bell.fill",
+            color: .blue
+        ),
+        QuickAction(
+            title: "Notification Status",
+            description: "View notification settings",
+            icon: "gear",
+            color: .green
         )
     ]
     
@@ -135,6 +147,12 @@ struct QuickActionsSection: View {
         switch action.title {
         case "Contact Support":
             viewModel.showingContactForm = true
+        case "Test Notifications":
+            Task {
+                await NotificationManager.shared.sendTestNotification()
+            }
+        case "Notification Status":
+            NotificationManager.shared.checkNotificationStatus()
         default:
             break
         }
@@ -218,6 +236,18 @@ struct SupportOptionsSection: View {
                 ) {
                     viewModel.showingContactForm = true
                 }
+                
+                NavigationLink(destination: NotificationTestView()) {
+                    SupportOptionCard(
+                        title: "Test Notifications",
+                        description: "Verify notification settings and functionality",
+                        icon: "bell.badge.fill",
+                        color: .green
+                    ) {
+                        // Navigation handled by NavigationLink
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
                 
                 SupportOptionCard(
                     title: "Community Forum",

@@ -21,95 +21,97 @@ struct ProfileView: View {
     // @State private var isShowingEditView = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: isIPad ? 32 : 24) {
-                // Top Card: Avatar, Name, Email
-                topProfileCard
-                // Edit Profile Button
-                HStack(spacing: isIPad ? 16 : 12) {
-                    Button(action: { isShowingEditView = true }) {
-                        HStack(spacing: isIPad ? 10 : 8) {
-                            Image(systemName: "person.crop.circle")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
-                                .foregroundColor(.purple)
-                            Text("Edit Profile")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                                .foregroundColor(.purple)
+        ZStack {
+            ScrollView {
+                VStack(spacing: isIPad ? 32 : 24) {
+                    // Top Card: Avatar, Name, Email
+                    topProfileCard
+                    // Edit Profile Button
+                    HStack(spacing: isIPad ? 16 : 12) {
+                        Button(action: { isShowingEditView = true }) {
+                            HStack(spacing: isIPad ? 10 : 8) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .medium))
+                                    .foregroundColor(.purple)
+                                Text("Edit Profile")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
+                                    .foregroundColor(.purple)
+                            }
+                            .padding(.vertical, isIPad ? 12 : 8)
+                            .padding(.horizontal, isIPad ? 14 : 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.purple.opacity(0.08))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
                         }
-                        .padding(.vertical, isIPad ? 12 : 8)
-                        .padding(.horizontal, isIPad ? 14 : 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.purple.opacity(0.08))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-                                )
-                        )
+                        
+                        // Help Button
+                        NavigationLink(destination: HelpView()) {
+                            HStack(spacing: isIPad ? 10 : 8) {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .medium))
+                                    .foregroundColor(.cyan)
+                                Text("Help")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
+                                    .foregroundColor(.cyan)
+                            }
+                            .padding(.vertical, isIPad ? 12 : 8)
+                            .padding(.horizontal, isIPad ? 14 : 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.cyan.opacity(0.08))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        
+                        // Settings Button
+                        NavigationLink(destination: SettingsView()) {
+                            HStack(spacing: isIPad ? 10 : 8) {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .medium))
+                                    .foregroundColor(.purple)
+                                Text("Settings")
+                                    .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
+                                    .foregroundColor(.purple)
+                            }
+                            .padding(.vertical, isIPad ? 12 : 8)
+                            .padding(.horizontal, isIPad ? 14 : 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.purple.opacity(0.08))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                    )
+                            )
+                        }
                     }
-                    
-                    // Help Button
-                    NavigationLink(destination: HelpView()) {
-                        HStack(spacing: isIPad ? 10 : 8) {
-                            Image(systemName: "questionmark.circle")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
-                                .foregroundColor(.cyan)
-                            Text("Help")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                                .foregroundColor(.cyan)
+                    .padding(.horizontal, isIPad ? 24 : 16)
+                    // About Card
+                    if let profile = viewModel.profile {
+                        aboutCard(profile: profile)
+                        if let fontPrefs = profile.fontPreferences {
+                            fontPreferencesCard(fontPrefs: fontPrefs)
                         }
-                        .padding(.vertical, isIPad ? 12 : 8)
-                        .padding(.horizontal, isIPad ? 14 : 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.cyan.opacity(0.08))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                    }
-                    
-                    // Settings Button
-                    NavigationLink(destination: SettingsView()) {
-                        HStack(spacing: isIPad ? 10 : 8) {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .medium))
-                                .foregroundColor(.purple)
-                            Text("Settings")
-                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                                .foregroundColor(.purple)
-                        }
-                        .padding(.vertical, isIPad ? 12 : 8)
-                        .padding(.horizontal, isIPad ? 14 : 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.purple.opacity(0.08))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-                                )
-                        )
+                        accountDetailsCard(profile: profile)
+                    } else if let errorMessage = viewModel.errorMessage {
+                        errorCard(message: errorMessage)
+                    } else {
+                        loadingCard
                     }
                 }
                 .padding(.horizontal, isIPad ? 24 : 16)
-                // About Card
-                if let profile = viewModel.profile {
-                    aboutCard(profile: profile)
-                    if let fontPrefs = profile.fontPreferences {
-                        fontPreferencesCard(fontPrefs: fontPrefs)
-                    }
-                    accountDetailsCard(profile: profile)
-                } else if let errorMessage = viewModel.errorMessage {
-                    errorCard(message: errorMessage)
-                } else {
-                    loadingCard
-                }
+                .padding(.top, isIPad ? 32 : 24)
+                
+                Spacer(minLength: isIPad ? 80 : 100)
             }
-            .padding(.horizontal, isIPad ? 24 : 16)
-            .padding(.top, isIPad ? 32 : 24)
-            
-            Spacer(minLength: isIPad ? 80 : 100)
         }
         .background(
                    LinearGradient(

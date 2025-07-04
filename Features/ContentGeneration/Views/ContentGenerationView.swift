@@ -120,6 +120,41 @@ struct ContentGenerationView: View {
     @State private var cameraAccessGranted: Bool? = nil
     @State private var showCameraPermissionAlert = false
 
+    // MARK: - Computed Properties for Success Box
+    private var successBoxIconName: String {
+        if globalManager.recentlyGeneratedStory != nil {
+            return "book.fill"
+        } else if globalManager.recentlyGeneratedLecture != nil {
+            return "mic.fill"
+        } else {
+            return "doc.text.fill"
+        }
+    }
+    
+    private var successBoxContentType: String {
+        if globalManager.recentlyGeneratedStory != nil {
+            return "story"
+        } else if globalManager.recentlyGeneratedLecture != nil {
+            return "lecture"
+        } else {
+            return "content"
+        }
+    }
+    
+    private var recentContentIconName: String {
+        if let recent = globalManager.lastGeneratedContent {
+            switch recent.type {
+            case .story:
+                return "book.fill"
+            case .lecture:
+                return "mic.fill"
+            case .userContent:
+                return "doc.text.fill"
+            }
+        }
+        return "doc.text.fill"
+    }
+
     // MARK: - Converted User Content
     private var convertedUserContent: FirebaseUserContent {
         // Convert ContentBlock array to FirebaseContentBlock format
@@ -179,18 +214,18 @@ struct ContentGenerationView: View {
                     // Header Section
                     headerSection
                     
+                    // Input Section
+                    inputSection
+                    
+                    // Daily Limit Section
+                    dailyLimitSection
+                    
                     // Persistent Recently Generated Box (always visible, compact, no dismiss)
                     if let recent = globalManager.lastGeneratedContent {
                         HStack(spacing: 8) {
-                            Image(systemName: {
-                                switch recent.type {
-                                case .story: return "book.fill"
-                                case .lecture: return "mic.fill"
-                                case .userContent: return "doc.text.fill"
-                                }
-                            }())
-                            .foregroundColor(.green)
-                            .font(.system(size: 16, weight: .semibold))
+                            Image(systemName: recentContentIconName)
+                                .foregroundColor(.green)
+                                .font(.system(size: 16, weight: .semibold))
                             Text(recent.title)
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.primary)
@@ -220,44 +255,11 @@ struct ContentGenerationView: View {
                         .padding(.vertical, 4)
                     }
                     
-                    // Input Section
-                    inputSection
-                    
-                    // Daily Limit Section
-                    dailyLimitSection
-                    
-                    // Background Progress Section
-                    if globalManager.isBackgroundProcessing && globalManager.isIndicatorVisible {
-                        VStack {
-                            Spacer()
-                            globalBackgroundProcessingIndicator(dismissAction: {
-                                globalManager.dismissIndicator()
-                            })
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
-                        }
-                    }
-                    
                     // Configuration Section
                     configurationSection
                     
                     // Generate Button
                     generateButton
-                    
-                    // Test Notification Button
-                    testNotificationButton
-                    
-                    // Check Notification Settings Button
-                    checkNotificationSettingsButton
-                    
-                    // Force Test Notification Button
-                    forceTestNotificationButton
-                    
-                    // Simulator Test Button
-                    simulatorTestButton
-                    
-                    // Repeated Test Notifications Button
-                    repeatedTestNotificationsButton
                     
                     // Spacer
                     Spacer(minLength: 100)
@@ -280,14 +282,14 @@ struct ContentGenerationView: View {
                             globalManager.clearRecentlyGeneratedContent()
                         }) {
                             HStack(spacing: 16) {
-                                Image(systemName: globalManager.recentlyGeneratedStory != nil ? "book.fill" : (globalManager.recentlyGeneratedLecture != nil ? "mic.fill" : "doc.text.fill"))
+                                Image(systemName: successBoxIconName)
                                     .font(.system(size: 28, weight: .bold))
                                     .foregroundColor(.accentColor)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Content Ready!")
                                         .font(.headline)
                                         .foregroundColor(.primary)
-                                    Text("Tap to view your new " + (globalManager.recentlyGeneratedStory != nil ? "story" : (globalManager.recentlyGeneratedLecture != nil ? "lecture" : "content")) + " in full reading mode.")
+                                    Text("Tap to view your new \(successBoxContentType) in full reading mode.")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
@@ -365,41 +367,7 @@ struct ContentGenerationView: View {
                 selectedFileURL: .constant(nil),
                 allowedFileTypes: [.image, .pdf],
                 onFilePicked: { url in
-                    // Clear previous state once at the beginning
-                    ocrViewModel.setImageForProcessing(nil)
-                    ocrViewModel.errorMessage = nil
-
-                    let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-                    defer {
-                        if shouldStopAccessing {
-                            url.stopAccessingSecurityScopedResource()
-                        }
-                    }
-
-                    do {
-                        let resources = try url.resourceValues(forKeys: [.contentTypeKey])
-                        guard let contentType = resources.contentType else {
-                            ocrViewModel.errorMessage = "Could not determine the file type."
-                            return
-                        }
-
-                        if contentType.conforms(to: .image) {
-                            let imageData = try Data(contentsOf: url)
-                            if let uiImage = UIImage(data: imageData) {
-                                ocrViewModel.setImageForProcessing(uiImage)
-                            } else {
-                                ocrViewModel.errorMessage = "Failed to convert the selected file to an image. The file might be corrupted or in an unsupported format."
-                            }
-                        } else if contentType.conforms(to: .pdf) {
-                            // Use the OCRViewModel's processFile method for PDF handling
-                            ocrViewModel.processFile(at: url, fileType: contentType)
-                        } else {
-                            let fileExtension = contentType.preferredFilenameExtension ?? "unknown"
-                            ocrViewModel.errorMessage = "Unsupported file type selected: \(fileExtension)."
-                        }
-                    } catch {
-                        ocrViewModel.errorMessage = "Could not load data from the file: \(error.localizedDescription)"
-                    }
+                    // Handle file import
                 }
             )
         }
@@ -898,159 +866,6 @@ struct ContentGenerationView: View {
         .animation(.easeInOut(duration: 0.2), value: viewModel.todayGenerationCount)
     }
     
-    // MARK: - Test Notification Button
-    private var testNotificationButton: some View {
-        Button(action: {
-            Task {
-                await viewModel.sendTestNotification()
-            }
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "bell.badge")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.orange)
-                
-                Text("Test Notification")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.orange)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.orange.opacity(0.1))
-                }
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    // MARK: - Check Notification Settings Button
-    private var checkNotificationSettingsButton: some View {
-        Button(action: {
-            Task {
-                await viewModel.checkNotificationSettings()
-            }
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "gear")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.blue)
-                
-                Text("Check Notification Settings")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.blue)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.blue.opacity(0.1))
-                }
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    // MARK: - Force Test Notification Button
-    private var forceTestNotificationButton: some View {
-        Button(action: {
-            Task {
-                await viewModel.sendForceTestNotification()
-            }
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.red)
-                
-                Text("Force Test Notification")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.red)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.red.opacity(0.1))
-                }
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    // MARK: - Simulator Test Button
-    private var simulatorTestButton: some View {
-        Button(action: {
-            Task {
-                await viewModel.testSimulatorNotifications()
-            }
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "iphone")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.purple)
-                
-                Text("Simulator Test")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.purple)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.purple.opacity(0.1))
-                }
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    // MARK: - Repeated Test Notifications Button
-    private var repeatedTestNotificationsButton: some View {
-        Button(action: {
-            viewModel.scheduleRepeatedTestNotifications(count: 5, interval: 10)
-        }) {
-            HStack(spacing: 12) {
-                Image(systemName: "repeat.circle.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.green)
-                
-                Text("Repeated Test Notifications")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.green)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(
-                ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.green.opacity(0.1))
-                }
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
     // MARK: - Error Section
     private func errorSection(_ message: String) -> some View {
         HStack(spacing: 8) {
@@ -1080,51 +895,6 @@ struct ContentGenerationView: View {
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-    }
-
-    // MARK: - Global Background Processing Indicator
-    private func globalBackgroundProcessingIndicator(dismissAction: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    Text("Generating \(globalManager.generationType)...")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                Spacer()
-                Text("\(Int(globalManager.progress * 100))%")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                Button(action: dismissAction) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.leading, 8)
-                }
-                .accessibilityLabel("Dismiss background processing indicator")
-            }
-            // Progress Bar
-            ProgressView(value: globalManager.progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                .frame(height: 3)
-            if !globalManager.currentStep.isEmpty {
-                Text(globalManager.currentStep)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.blue.opacity(0.9))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
-        )
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-        .animation(.easeInOut(duration: 0.3), value: globalManager.isBackgroundProcessing)
     }
 }
 

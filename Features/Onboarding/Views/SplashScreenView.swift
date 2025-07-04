@@ -72,8 +72,19 @@ struct SplashScreenView: View {
             }
         }
         .onDisappear {
+            // Stop the video player
             player?.pause()
+            player = nil
+            
+            // Clear any loop observers
             clearVideoLoopObserver()
+            
+            // Deactivate audio session to stop music player from appearing
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                print("SplashScreenView: Failed to deactivate audio session: \(error.localizedDescription)")
+            }
         }
         .fullScreenCover(isPresented: $isActive) {
             if authViewModel.isAuthenticated {
@@ -105,7 +116,9 @@ struct SplashScreenView: View {
                 }
                 self.player = newPlayer
                 self.player?.play()
-                setupVideoLoopObserver(for: newPlayer)
+                // Don't loop the video - let it play once
+                // Set action at item end to pause to prevent looping
+                self.player?.actionAtItemEnd = .pause
                 return // Successfully setup with "Media" path
             }
             
@@ -122,20 +135,14 @@ struct SplashScreenView: View {
         }
         self.player = newPlayer
         self.player?.play()
-        setupVideoLoopObserver(for: newPlayer)
+        // Don't loop the video - let it play once
+        // Set action at item end to pause to prevent looping
+        self.player?.actionAtItemEnd = .pause
     }
     
     private func setupVideoLoopObserver(for playerToLoop: AVPlayer) {
+        // Remove this function - we don't want the video to loop
         clearVideoLoopObserver()
-        
-        loopObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerToLoop.currentItem,
-            queue: .main
-        ) { [weak playerToLoop] _ in
-            playerToLoop?.seek(to: .zero)
-            playerToLoop?.play()
-        }
     }
     
     private func clearVideoLoopObserver() {
