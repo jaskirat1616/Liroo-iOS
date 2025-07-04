@@ -6,7 +6,7 @@ import UserNotifications
 import BackgroundTasks
 
 @MainActor
-class ContentGenerationViewModel: ObservableObject {
+class ContentGenerationViewModel: NSObject, ObservableObject, URLSessionDelegate, URLSessionTaskDelegate, URLSessionDataDelegate {
     @Published var inputText = ""
     @Published var selectedLevel: ReadingLevel = .standard
     @Published var selectedSummarizationTier: SummarizationTier = .quickSummary
@@ -41,8 +41,19 @@ class ContentGenerationViewModel: ObservableObject {
         return URLSession(configuration: config)
     }()
     
+    // Add background session property
+    private lazy var backgroundSession: URLSession = {
+        let config = URLSessionConfiguration.background(withIdentifier: "com.liroo.contentgeneration.bg")
+        config.timeoutIntervalForRequest = 600  // 10 minutes
+        config.timeoutIntervalForResource = 1800  // 30 minutes
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
+    
+    // Add a property to accumulate data for background tasks
+    private var backgroundTaskData: [Int: Data] = [:]
+    
     // MARK: - Notification Setup
-    init() {
+    override init() {
         // Notifications are now handled automatically by NotificationManager
         // No manual setup needed
     }
@@ -1178,6 +1189,144 @@ class ContentGenerationViewModel: ObservableObject {
     // MARK: - Notification Settings Management
     // All notification functionality is now handled automatically by NotificationManager
     // No manual notification methods needed
+    
+    // MARK: - URLSessionDelegate Methods
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let taskId = dataTask.taskIdentifier
+        if backgroundTaskData[taskId] != nil {
+            backgroundTaskData[taskId]?.append(data)
+        } else {
+            backgroundTaskData[taskId] = data
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        let taskId = task.taskIdentifier
+        defer { backgroundTaskData.removeValue(forKey: taskId) }
+        if let error = error {
+            DispatchQueue.main.async {
+                self.errorMessage = "Background content generation failed: \(error.localizedDescription)"
+                self.isLoading = false
+            }
+            return
+        }
+        guard let data = backgroundTaskData[taskId], let response = (task as? URLSessionDataTask)?.response as? HTTPURLResponse else {
+            DispatchQueue.main.async {
+                self.errorMessage = "Background content generation failed: No data or response."
+                self.isLoading = false
+            }
+            return
+        }
+        guard response.statusCode == 200 else {
+            let errorMsg = String(data: data, encoding: .utf8) ?? "Unknown server error"
+            DispatchQueue.main.async {
+                self.errorMessage = "Server error (background): \(response.statusCode) - \(errorMsg)"
+                self.isLoading = false
+            }
+            return
+        }
+        // Try to decode as Response (story, lecture, or blocks)
+        if let decoded = try? JSONDecoder().decode(Response.self, from: data) {
+            DispatchQueue.main.async {
+                if let story = decoded.story {
+                    self.currentStory = story
+                    self.statusMessage = "Background story generation completed."
+                    self.sendBackgroundCompletionNotification(type: "Story")
+                } else if let lecture = decoded.lecture {
+                    self.currentLecture = lecture
+                    self.statusMessage = "Background lecture generation completed."
+                    self.sendBackgroundCompletionNotification(type: "Lecture")
+                } else if let blocks = decoded.blocks {
+                    self.blocks = blocks
+                    self.statusMessage = "Background content generation completed."
+                    self.sendBackgroundCompletionNotification(type: "Content")
+                } else if let error = decoded.error {
+                    self.errorMessage = "Background generation error: \(error)"
+                } else {
+                    self.statusMessage = "Background generation completed (no content)."
+                }
+                self.isLoading = false
+            }
+        } else {
+            let raw = String(data: data, encoding: .utf8) ?? "<non-UTF8 data>"
+            DispatchQueue.main.async {
+                self.errorMessage = "Failed to decode background response: \(raw)"
+                self.isLoading = false
+            }
+        }
+    }
+    
+    // Local notification for background completion
+    private func sendBackgroundCompletionNotification(type: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Liroo: \(type) Generation Complete"
+        content.body = "Your \(type.lowercased()) is ready!"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+    
+    // MARK: - Background lecture generation method using uploadTask
+    func generateLectureWithProgressInBackground() {
+        globalManager.updateProgress(step: "Generating lecture content... (background)", stepNumber: 1, totalSteps: 3)
+        let requestBody: [String: Any] = [
+            "text": inputText,
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.displayName
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            DispatchQueue.main.async { self.errorMessage = "Failed to encode request body." }
+            return
+        }
+        let fileName = "lecture_upload_\(UUID().uuidString).json"
+        guard let fileURL = try? writeDataToTempFile(data, fileName: fileName) else {
+            DispatchQueue.main.async { self.errorMessage = "Failed to write request body to file." }
+            return
+        }
+        let url = URL(string: "\(backendURL)/generate_lecture")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let task = backgroundSession.uploadTask(with: request, fromFile: fileURL)
+        task.resume()
+    }
+
+    // MARK: - Background regular content generation method using uploadTask
+    func generateRegularContentWithProgressInBackground() {
+        globalManager.updateProgress(step: "Generating content... (background)", stepNumber: 1, totalSteps: 3)
+        let requestBody: [String: Any] = [
+            "input_text": inputText,
+            "level": selectedLevel.rawValue,
+            "summarization_tier": selectedSummarizationTier.rawValue,
+            "profile": [
+                "studentLevel": selectedLevel.rawValue,
+                "topicsOfInterest": []
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            DispatchQueue.main.async { self.errorMessage = "Failed to encode request body." }
+            return
+        }
+        let fileName = "content_upload_\(UUID().uuidString).json"
+        guard let fileURL = try? writeDataToTempFile(data, fileName: fileName) else {
+            DispatchQueue.main.async { self.errorMessage = "Failed to write request body to file." }
+            return
+        }
+        let url = URL(string: "\(backendURL)/process")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let task = backgroundSession.uploadTask(with: request, fromFile: fileURL)
+        task.resume()
+    }
+
+    // Helper to write Data to a temp file and return the URL
+    private func writeDataToTempFile(_ data: Data, fileName: String) throws -> URL {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(fileName)
+        try data.write(to: fileURL)
+        return fileURL
+    }
 }
 
 // MARK: - Supporting Types
