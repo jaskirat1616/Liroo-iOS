@@ -9,7 +9,7 @@ import FirebaseCrashlytics
 @MainActor
 class ContentGenerationViewModel: ObservableObject {
     @Published var inputText = ""
-    @Published var selectedLevel: ReadingLevel = .standard
+    @Published var selectedLevel: ReadingLevel = .moderate
     @Published var selectedSummarizationTier: SummarizationTier = .quickSummary
     @Published var selectedGenre: StoryGenre = .adventure
     @Published var mainCharacter = ""
@@ -1527,11 +1527,9 @@ class ContentGenerationViewModel: ObservableObject {
 // MARK: - Supporting Types
 
 enum ReadingLevel: String, Codable, CaseIterable {
-    case kid = "Kid"
-    case preTeen = "PreTeen"
-    case teen = "Teen"
-    case university = "University"
-    case standard = "Standard"
+    case beginner = "beginner"
+    case moderate = "moderate"
+    case intermediate = "intermediate"
 }
 
 enum SummarizationTier: String, Codable, CaseIterable {
@@ -1663,8 +1661,8 @@ struct Story: Identifiable, Codable, Equatable {
         do {
             self.level = try container.decode(ReadingLevel.self, forKey: .level)
         } catch {
-            print("[Story.decoder] Warning: Story 'level' missing or invalid in JSON. Defaulting to .standard. Error: \(error)")
-            self.level = .standard // Default if level is missing or unparsable
+            print("[Story.decoder] Warning: Story 'level' missing or invalid in JSON. Defaulting to .moderate. Error: \(error)")
+            self.level = .moderate // Default if level is missing or unparsable
         }
 
         self.chapters = try container.decodeIfPresent([StoryChapter].self, forKey: .chapters) ?? []

@@ -27,11 +27,9 @@ extension SummarizationTier {
 extension ReadingLevel {
     var displayName: String {
         switch self {
-        case .kid: return "Kid"
-        case .preTeen: return "PreTeen"
-        case .teen: return "Teen"
-        case .university: return "Univ."
-        case .standard: return "Std."
+        case .beginner: return "Beginner"
+        case .moderate: return "Moderate"
+        case .intermediate: return "Intermediate"
         }
     }
 }

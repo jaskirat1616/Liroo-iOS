@@ -400,7 +400,7 @@ struct LectureDestinationView: View {
                         id: UUID(uuidString: firebaseLecture.id ?? "") ?? UUID(),
                         title: firebaseLecture.title,
                         sections: sections,
-                        level: ReadingLevel(rawValue: firebaseLecture.level) ?? .standard,
+                        level: ReadingLevel(rawValue: firebaseLecture.level) ?? .moderate,
                         imageStyle: firebaseLecture.imageStyle
                     )
                     let audioFiles = (firebaseLecture.audioFiles ?? []).map { audio in

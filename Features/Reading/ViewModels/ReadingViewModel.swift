@@ -58,7 +58,7 @@ class FullReadingViewModel: ObservableObject {
 
     // User profile and level - these would be fetched or passed in
     // For now, let's use placeholders. These are crucial for the backend.
-    var currentUserLevel: String = "Teen" // Example
+    var currentUserLevel: String = "moderate" // Example
     var currentUserProfile: [String: Any] = ["studentLevel": "High School", "topicsOfInterest": ["history", "science"]] // Example
 
     init(itemID: String, collectionName: String) {

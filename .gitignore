@@ -1,0 +1,26 @@
+# Documentation files
+Documentation/
+*.md
+*.txt
+*.sh
+*.log
+dump_syms.bin
+
+# Build artifacts
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdata
+
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Crashlytics
+.crashlytics/

@@ -955,7 +955,7 @@ struct LectureView_Previews: PreviewProvider {
                         order: 1
                     )
                 ],
-                level: .teen,
+                level: .moderate,
                 imageStyle: "Studio Ghibli"
             ), audioFiles: [], dismissAction: nil)
         }
