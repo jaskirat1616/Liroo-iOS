@@ -15,8 +15,6 @@ struct BlurView: UIViewRepresentable {
 extension SummarizationTier {
     var displayName: String {
         switch self {
-        case .keyTakeaways: return "Key"
-        case .quickSummary: return "Quick"
         case .detailedExplanation: return "Detailed"
         case .story: return "Story"
         case .lecture: return "Lecture"

@@ -10,7 +10,7 @@ import FirebaseCrashlytics
 class ContentGenerationViewModel: ObservableObject {
     @Published var inputText = ""
     @Published var selectedLevel: ReadingLevel = .moderate
-    @Published var selectedSummarizationTier: SummarizationTier = .quickSummary
+    @Published var selectedSummarizationTier: SummarizationTier = .detailedExplanation
     @Published var selectedGenre: StoryGenre = .adventure
     @Published var mainCharacter = ""
     @Published var selectedImageStyle: ImageStyle = .ghibli
@@ -1533,8 +1533,6 @@ enum ReadingLevel: String, Codable, CaseIterable {
 }
 
 enum SummarizationTier: String, Codable, CaseIterable {
-    case keyTakeaways = "Key Takeaways"
-    case quickSummary = "Quick Summary"
     case detailedExplanation = "Detailed Explanation"
     case story = "Story"
     case lecture = "Lecture"
