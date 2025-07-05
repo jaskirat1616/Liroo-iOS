@@ -92,7 +92,7 @@ struct PersistenceController {
     }
 
     // MARK: - CoreData Migration Utility
-    /// Call this once after adding the `isArchived` attribute to Book to ensure all existing books are visible to the dashboard.
+    /// Call this once after adding the `isArchived` attribute to Book to ensure all existing books are properly configured.
     func migrateBooksSetIsArchivedAndLastReadDateIfNeeded() {
         let context = container.viewContext
         let fetchRequest: NSFetchRequest<Book> = Book.fetchRequest()

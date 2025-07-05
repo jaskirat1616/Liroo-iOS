@@ -1,9 +1,5 @@
 import SwiftUI
 
-extension Notification.Name {
-    static let dashboardNeedsRefresh = Notification.Name("dashboardNeedsRefresh")
-}
-
 struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = "" // For the TextField in the sheet

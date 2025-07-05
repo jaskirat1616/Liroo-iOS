@@ -99,13 +99,12 @@ class FullReadingViewModel: ObservableObject {
             
             try context.save()
             print("[Reading] Updated/Created Book: firestoreID=\(book.firestoreID ?? "nil"), title=\(book.title ?? "nil"), progress=\(book.progress), author=\(book.author ?? "nil"), lastReadDate=\(String(describing: book.lastReadDate)), isArchived=\(book.isArchived), collectionName=\(book.collectionName ?? "nil")")
-            NotificationCenter.default.post(name: .dashboardNeedsRefresh, object: nil)
         } catch {
             print("Failed to update or create Book: \(error)")
         }
     }
 
-    /// Log a reading session to CoreData for dashboard stats and charts
+    /// Log a reading session to CoreData for reading statistics
     private func logReadingSession(bookId: UUID?, date: Date = Date(), duration: TimeInterval, wordsRead: Int, wordsPerMinute: Int) {
         let context = PersistenceController.shared.container.viewContext
         let log = ReadingLog(context: context)

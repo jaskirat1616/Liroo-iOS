@@ -1000,7 +1000,7 @@ class ContentGenerationViewModel: ObservableObject {
             let documentId = try await firestoreService.create(firebaseStory, in: "stories", documentId: story.id.uuidString)
             print("[Story][Save] ✅ Successfully saved story to Firestore with document ID: \(documentId)")
             
-            // Track story generation for dashboard engagement metrics
+            // Track story generation for engagement metrics
             await MainActor.run {
                 let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
                 UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")
@@ -1113,7 +1113,7 @@ class ContentGenerationViewModel: ObservableObject {
             let documentId = try await firestoreService.create(firebaseContent, in: "userGeneratedContent")
             print("[Content][Save] Successfully saved content to Firestore with document ID: \(documentId)")
             
-            // Track content generation for dashboard engagement metrics
+            // Track content generation for engagement metrics
             await MainActor.run {
                 let currentCount = UserDefaults.standard.integer(forKey: "contentGenerationCount")
                 UserDefaults.standard.set(currentCount + 1, forKey: "contentGenerationCount")

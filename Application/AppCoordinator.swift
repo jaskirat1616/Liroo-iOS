@@ -1,10 +1,9 @@
 import SwiftUI
 
 class AppCoordinator: ObservableObject {
-    @Published var currentTab: Tab = .dashboard
+    @Published var currentTab: Tab = .generation
     
     enum Tab: Hashable, CaseIterable, Identifiable {
-        case dashboard
         case reading
         case history
         case profile
@@ -16,7 +15,6 @@ class AppCoordinator: ObservableObject {
         
         var rawValue: String {
             switch self {
-            case .dashboard: return "dashboard"
             case .reading: return "reading"
             case .history: return "history"
             case .profile: return "profile"
@@ -28,7 +26,6 @@ class AppCoordinator: ObservableObject {
         
         var title: String {
             switch self {
-            case .dashboard: return "Dashboard"
             case .reading: return "Reading"
             case .history: return "History"
             case .profile: return "Profile"
@@ -40,7 +37,6 @@ class AppCoordinator: ObservableObject {
         
         var icon: String {
             switch self {
-            case .dashboard: return "square.grid.2x2.fill"
             case .reading: return "book.fill"
             case .history: return "list.bullet.rectangle.portrait"
             case .profile: return "person.fill"

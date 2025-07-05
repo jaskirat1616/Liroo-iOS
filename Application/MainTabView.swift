@@ -8,7 +8,7 @@ struct MainTabView: View {
     @StateObject private var globalManager = GlobalBackgroundProcessingManager.shared
     
     private let tabBarItems: [AppCoordinator.Tab] = [
-        .dashboard, .generation, .history, .profile
+        .generation, .history, .profile
     ]
     
     var isPad: Bool {
@@ -22,16 +22,6 @@ struct MainTabView: View {
                 ZStack {
                     // Main content area
                     TabView(selection: $coordinator.currentTab) {
-                        NavigationStack {
-                            DashboardView()
-                                .navigationTitle("Dashboard")
-                                .navigationBarTitleDisplayMode(.large)
-                        }
-                        .tabItem {
-                            Label("Dashboard", systemImage: "square.grid.2x2.fill")
-                        }
-                        .tag(AppCoordinator.Tab.dashboard)
-                        
                         NavigationStack {
                             ContentGenerationView()
                                 .navigationTitle("Generate")
@@ -90,8 +80,6 @@ struct MainTabView: View {
                     // Main content area - NO bottom padding so it can scroll behind tab bar
                     Group {
                         switch coordinator.currentTab {
-                        case .dashboard:
-                            NavigationStack { DashboardView() }
                         case .generation:
                             NavigationStack { ContentGenerationView() }
                         case .history:
@@ -99,7 +87,7 @@ struct MainTabView: View {
                         case .profile:
                             NavigationStack { ProfileView() }
                         default:
-                            NavigationStack { DashboardView() }
+                            NavigationStack { ContentGenerationView() }
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
