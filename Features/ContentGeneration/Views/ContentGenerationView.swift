@@ -645,6 +645,7 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 
                 // Content Type Selection
@@ -659,6 +660,7 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 
                 // Story-specific options
@@ -700,7 +702,7 @@ struct ContentGenerationView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                                 .background(Color(.systemGray6))
-                                .cornerRadius(6)
+                                .cornerRadius(12)
                             }
                         }
                         
@@ -714,7 +716,7 @@ struct ContentGenerationView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                                 .background(Color(.systemGray6))
-                                .cornerRadius(6)
+                                .cornerRadius(12)
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundColor(.primary)
                         }
@@ -752,7 +754,7 @@ struct ContentGenerationView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                                 .background(Color(.systemGray6))
-                                .cornerRadius(6)
+                                .cornerRadius(12)
                             }
                         }
                     }
@@ -798,7 +800,7 @@ struct ContentGenerationView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
                                 .background(Color(.systemGray6))
-                                .cornerRadius(6)
+                                .cornerRadius(12)
                             }
                         }
                     }
@@ -808,7 +810,7 @@ struct ContentGenerationView: View {
         }
         .padding(isIPad ? 20 : 14)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(14)
+        .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
     
