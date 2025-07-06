@@ -22,39 +22,41 @@ class BackgroundTaskCompletionService: ObservableObject {
     }
     
     // MARK: - Background Task Model
-    struct BackgroundTask: Codable, Identifiable {
+    struct BackgroundTask: Identifiable {
         let id: String
         let status: String
         let createdAt: Date
         let completedAt: Date?
         let resultData: [String: Any]?
         let errorMessage: String?
-        
-        enum CodingKeys: String, CodingKey {
-            case id
-            case status
-            case createdAt = "created_at"
-            case completedAt = "completed_at"
-            case resultData = "result_data"
-            case errorMessage = "error_message"
-        }
-        
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            id = try container.decode(String.self, forKey: .id)
-            status = try container.decode(String.self, forKey: .status)
-            
-            let createdAtString = try container.decode(String.self, forKey: .createdAt)
-            createdAt = ISO8601DateFormatter().date(from: createdAtString) ?? Date()
-            
-            if let completedAtString = try container.decodeIfPresent(String.self, forKey: .completedAt) {
-                completedAt = ISO8601DateFormatter().date(from: completedAtString)
+
+        // Manual initializer for Firestore data
+        init(id: String, data: [String: Any]) {
+            self.id = id
+            self.status = data["status"] as? String ?? "unknown"
+            if let createdAtString = data["created_at"] as? String,
+               let date = ISO8601DateFormatter().date(from: createdAtString) {
+                self.createdAt = date
             } else {
-                completedAt = nil
+                self.createdAt = Date()
             }
-            
-            resultData = try container.decodeIfPresent([String: Any].self, forKey: .resultData)
-            errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+            if let completedAtString = data["completed_at"] as? String {
+                self.completedAt = ISO8601DateFormatter().date(from: completedAtString)
+            } else {
+                self.completedAt = nil
+            }
+            self.resultData = data["result_data"] as? [String: Any]
+            self.errorMessage = data["error_message"] as? String
+        }
+
+        // Convenience initializer for local creation
+        init(id: String, status: String, createdAt: Date, completedAt: Date?, resultData: [String: Any]?, errorMessage: String?) {
+            self.id = id
+            self.status = status
+            self.createdAt = createdAt
+            self.completedAt = completedAt
+            self.resultData = resultData
+            self.errorMessage = errorMessage
         }
     }
     
