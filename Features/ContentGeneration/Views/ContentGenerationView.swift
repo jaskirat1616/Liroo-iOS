@@ -161,14 +161,11 @@ struct ContentGenerationView: View {
                     // Header Section
                     headerSection
                     
-                    // Input Section
+                    // Input Section (now includes daily limit)
                     inputSection
                     
                     // Configuration Section
                     configurationSection
-                    
-                    // Daily Limit Section (moved here and made more compact)
-                    dailyLimitSection
                     
                     // Persistent Recently Generated Box (always visible, compact, no dismiss)
                     if let recent = globalManager.lastGeneratedContent {
@@ -506,38 +503,48 @@ struct ContentGenerationView: View {
                 }
             }
             
-            // OCR Buttons
-            HStack(spacing: isIPad ? 16 : 10) {
+            // Compact OCR Buttons (matching profile screen style)
+            HStack(spacing: isIPad ? 12 : 8) {
                 Button(action: { showingPhotosPicker = true }) {
-                    Text("Photos")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
-                        .padding(.horizontal, 8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(.systemGray4), lineWidth: 1)
-                        )
+                    HStack(spacing: isIPad ? 8 : 6) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
+                            .foregroundColor(.cyan)
+                        Text("Photos")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                            .foregroundColor(.cyan)
+                    }
+                    .padding(.vertical, isIPad ? 8 : 6)
+                    .padding(.horizontal, isIPad ? 12 : 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.cyan.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
+                            )
+                    )
                 }
                 
                 Button(action: { showingFileImporter = true }) {
-                    Text("File Import")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
-                        .padding(.horizontal, 8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(.systemGray4), lineWidth: 1)
-                        )
+                    HStack(spacing: isIPad ? 8 : 6) {
+                        Image(systemName: "doc.badge.plus")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
+                            .foregroundColor(.purple)
+                        Text("File Import")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                            .foregroundColor(.purple)
+                    }
+                    .padding(.vertical, isIPad ? 8 : 6)
+                    .padding(.horizontal, isIPad ? 12 : 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.purple.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                            )
+                    )
                 }
                 
                 Button(action: {
@@ -552,21 +559,64 @@ struct ContentGenerationView: View {
                         }
                     }
                 }) {
-                    Text("Camera")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 36, maxHeight: 36)
-                        .padding(.horizontal, 8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(.systemGray4), lineWidth: 1)
-                        )
+                    HStack(spacing: isIPad ? 8 : 6) {
+                        Image(systemName: "camera")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
+                            .foregroundColor(.orange)
+                        Text("Camera")
+                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.vertical, isIPad ? 8 : 6)
+                    .padding(.horizontal, isIPad ? 12 : 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                            )
+                    )
                 }
             }
+            
+            // Compact Daily Limit Section (moved here)
+            let used = viewModel.todayGenerationCount
+            let limit = 12
+            let atLimit = used >= limit
+            let progress = Double(used) / Double(limit)
+            
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Daily Limit")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(used)/\(limit)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(atLimit ? .red : .primary)
+                    }
+                    
+                    // Progress Bar
+                    ProgressView(value: progress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
+                        .frame(height: 2)
+                }
+                
+                if atLimit {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(8)
+            .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(.systemGray4), lineWidth: 0.5)
+            )
             
             // OCR Status
             if ocrViewModel.isProcessing {
@@ -720,49 +770,6 @@ struct ContentGenerationView: View {
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-    }
-    
-    // MARK: - Daily Limit Section
-    private var dailyLimitSection: some View {
-        let used = viewModel.todayGenerationCount
-        let limit = 12
-        let atLimit = used >= limit
-        let progress = Double(used) / Double(limit)
-        
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Daily Generation Limit")
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Text("\(used)/\(limit)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(atLimit ? .red : .primary)
-            }
-            
-            // Progress Bar
-            ProgressView(value: progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
-                .frame(height: 3)
-            
-            if atLimit {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.red)
-                    Text("Daily limit reached. Try again tomorrow!")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.red)
-                }
-            } else {
-                Text("\(limit - used) generations remaining today")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
     }
     
     // MARK: - Generate Button
