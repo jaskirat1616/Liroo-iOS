@@ -505,6 +505,7 @@ struct ContentGenerationView: View {
             
             // Compact OCR Buttons (matching profile screen style)
             HStack(spacing: isIPad ? 12 : 8) {
+                Spacer()
                 Button(action: { showingPhotosPicker = true }) {
                     Text("Photos")
                         .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
@@ -563,6 +564,7 @@ struct ContentGenerationView: View {
                                 )
                         )
                 }
+                Spacer()
             }
             
             // Compact Daily Limit Section (moved here)
@@ -662,6 +664,14 @@ struct ContentGenerationView: View {
                     }
                     .pickerStyle(.segmented)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray6))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.systemGray4), lineWidth: 0.5)
+                    )
                 }
                 
                 // Content Type Selection
@@ -677,55 +687,127 @@ struct ContentGenerationView: View {
                     }
                     .pickerStyle(.segmented)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray6))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.systemGray4), lineWidth: 0.5)
+                    )
                 }
                 
                 // Story-specific options
                 if viewModel.selectedSummarizationTier == .story {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 24) {
                         Divider()
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 8)
                         
                         // Genre Selection
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Genre")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
-                            Picker("Genre", selection: $viewModel.selectedGenre) {
-                                ForEach(StoryGenre.allCases, id: \ .self) { genre in
-                                    Text(genre.rawValue).tag(genre)
+                            
+                            Menu {
+                                ForEach(StoryGenre.allCases, id: \.self) { genre in
+                                    Button(action: {
+                                        viewModel.selectedGenre = genre
+                                    }) {
+                                        HStack {
+                                            Text(genre.rawValue)
+                                            if viewModel.selectedGenre == genre {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                        }
+                                    }
                                 }
+                            } label: {
+                                HStack {
+                                    Text(viewModel.selectedGenre.rawValue)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(.systemGray6))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                )
                             }
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         
                         // Main Character Input
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Main Character (Optional)")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
+                            
                             TextField("Enter character name", text: $viewModel.mainCharacter)
-#if swift(>=5.8)
-                                .textFieldStyle(.roundedBorder)
-#else
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-#endif
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(.systemGray6))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                )
                                 .font(.system(size: 16, weight: .regular))
                                 .foregroundColor(.primary)
                         }
                         
                         // Image Style Selection
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Image Style")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
-                            Picker("Image Style", selection: $viewModel.selectedImageStyle) {
-                                ForEach(ImageStyle.allCases, id: \ .self) { style in
-                                    Text(style.displayName).tag(style)
+                            
+                            Menu {
+                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                    Button(action: {
+                                        viewModel.selectedImageStyle = style
+                                    }) {
+                                        HStack {
+                                            Text(style.displayName)
+                                            if viewModel.selectedImageStyle == style {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                        }
+                                    }
                                 }
+                            } label: {
+                                HStack {
+                                    Text(viewModel.selectedImageStyle.displayName)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(.systemGray6))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                )
                             }
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(.top, 8)
@@ -733,22 +815,51 @@ struct ContentGenerationView: View {
                 
                 // Lecture-specific options
                 if viewModel.selectedSummarizationTier == .lecture {
-                    VStack(spacing: 20) {
+                    VStack(spacing: 24) {
                         Divider()
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 8)
                         
                         // Image Style Selection for Lecture
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Image Style")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
-                            Picker("Image Style", selection: $viewModel.selectedImageStyle) {
-                                ForEach(ImageStyle.allCases, id: \ .self) { style in
-                                    Text(style.displayName).tag(style)
+                            
+                            Menu {
+                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                    Button(action: {
+                                        viewModel.selectedImageStyle = style
+                                    }) {
+                                        HStack {
+                                            Text(style.displayName)
+                                            if viewModel.selectedImageStyle == style {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                        }
+                                    }
                                 }
+                            } label: {
+                                HStack {
+                                    Text(viewModel.selectedImageStyle.displayName)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(Color(.systemGray6))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                )
                             }
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(.top, 8)
