@@ -698,7 +698,7 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func generateLectureWithProgress() async throws {
-        globalManager.updateProgress(step: "Generating lecture content...", stepNumber: 1, totalSteps: 3)
+        globalManager.updateProgress(step: "Generating lecture content...", stepNumber: 1, totalSteps: 2)
         
         print("[Lecture] Starting lecture generation process")
         
@@ -788,32 +788,51 @@ class ContentGenerationViewModel: ObservableObject {
                 
                 if let lecture = apiResponse.lecture {
                     print("[Lecture] Successfully received lecture from backend")
-                    print("[Lecture] Lecture ID: \(lecture.id.uuidString)")
-                    print("[Lecture] Lecture Title: \(lecture.title)")
-                    print("[Lecture] Number of sections: \(lecture.sections.count)")
+                    
+                    // Convert BackendLecture to Lecture with proper ID
+                    let lectureId = UUID()
+                    let convertedLecture = Lecture(
+                        id: lectureId,
+                        title: lecture.title,
+                        sections: lecture.sections.enumerated().map { index, section in
+                            LectureSection(
+                                id: UUID(),
+                                title: section.title,
+                                script: section.script,
+                                imagePrompt: section.image_prompt,
+                                imageUrl: section.image_url,
+                                order: index + 1
+                            )
+                        },
+                        level: selectedLevel,
+                        imageStyle: selectedImageStyle.displayName
+                    )
+                    
+                    print("[Lecture] Converted to Lecture - ID: \(convertedLecture.id.uuidString)")
+                    print("[Lecture] Lecture Title: \(convertedLecture.title)")
+                    print("[Lecture] Number of sections: \(convertedLecture.sections.count)")
+                    
+                    // Convert audio files from backend response
+                    let audioFiles = apiResponse.audio_files ?? []
+                    print("[Lecture] Received \(audioFiles.count) audio files from backend")
                     
                     await MainActor.run {
-                        self.currentLecture = lecture
+                        self.currentLecture = convertedLecture
                         print("[Lecture] Updated UI with lecture object")
-                        globalManager.setLastGeneratedContent(type: .lecture, id: lecture.id.uuidString, title: lecture.title)
+                        globalManager.setLastGeneratedContent(type: .lecture, id: convertedLecture.id.uuidString, title: convertedLecture.title)
                     }
                     
-                    globalManager.updateProgress(step: "Generating audio narration...", stepNumber: 2, totalSteps: 3)
+                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 2, totalSteps: 2)
                     
                     if let currentUser = Auth.auth().currentUser {
-                        print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with audio generation and Firebase save for lecture ID \(lecture.id.uuidString)")
-                        await generateAudioForLectureWithProgress(lecture: lecture)
+                        print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with Firebase save for lecture ID \(convertedLecture.id.uuidString)")
                         
-                        globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+                        // Save lecture to Firebase with audio files
+                        await saveLectureToFirebase(convertedLecture, audioFiles: audioFiles, userId: currentUser.uid)
                         
-                        // Show full screen view AFTER everything is saved
-                        // await MainActor.run {
-                        //     self.isShowingFullScreenLecture = true
-                        //     print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
-                        // }
                         print("[Lecture] Lecture content and audio processing completed.")
                     } else {
-                        print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save or generate audio.")
+                        print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save.")
                         throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
                     }
                 } else if let error = apiResponse.error {
@@ -1980,56 +1999,6 @@ class ContentGenerationViewModel: ObservableObject {
     // No manual notification methods needed
     
     // MARK: - Missing Helper Methods
-    private func generateAudioForLectureWithProgress(lecture: Lecture) async {
-        print("[Lecture][Audio] Starting audio generation for lecture: \(lecture.title)")
-        
-        // Enhanced progress tracking for lecture audio generation
-        let totalSections = lecture.sections.count
-        let totalAudioFiles = totalSections * 2 + 1 // Each section has title + script, plus main title
-        var processedAudioFiles = 0
-        
-        print("[Lecture][Audio] Total sections: \(totalSections)")
-        print("[Lecture][Audio] Expected audio files: \(totalAudioFiles)")
-        
-        // Simulate audio generation with detailed progress
-        for (sectionIndex, section) in lecture.sections.enumerated() {
-            // Generate audio for section title
-            processedAudioFiles += 1
-            let progressStep = 2 * 100 + processedAudioFiles // Step 2 (audio generation)
-            globalManager.updateProgress(
-                step: "Generating audio for section \(sectionIndex + 1) title...",
-                stepNumber: progressStep,
-                totalSteps: totalAudioFiles
-            )
-            
-            // Simulate processing time
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            
-            // Generate audio for section script
-            processedAudioFiles += 1
-            let progressStep2 = 2 * 100 + processedAudioFiles
-            globalManager.updateProgress(
-                step: "Generating audio for section \(sectionIndex + 1) content...",
-                stepNumber: progressStep2,
-                totalSteps: totalAudioFiles
-            )
-            
-            // Simulate processing time
-            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-        }
-        
-        // Final step: Save to Firebase
-        globalManager.updateProgress(
-            step: "Saving lecture to cloud...",
-            stepNumber: 3 * 100, // Step 3 (saving)
-            totalSteps: 3
-        )
-        
-        // Save lecture to Firebase
-        await saveLectureToFirebase(lecture, audioFiles: [], userId: Auth.auth().currentUser?.uid ?? "")
-        
-        print("[Lecture][Audio] Audio generation and saving completed")
-    }
     
     private func uploadImageToFirebase(imageData: Data, fileName: String, userId: String) async throws -> URL {
         let imagePath = "content/\(userId)/\(fileName)"
