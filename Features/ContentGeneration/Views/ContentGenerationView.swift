@@ -645,16 +645,16 @@ struct ContentGenerationView: View {
     
     // MARK: - Configuration Section
     private var configurationSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Configuration")
-                .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
+                .font(.system(size: isIPad ? 18 : 16, weight: .semibold))
                 .foregroundColor(.primary)
             
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 // Reading Level Selection
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Reading Level")
-                        .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                         .foregroundColor(.primary)
                     
                     Picker("Reading Level", selection: $viewModel.selectedLevel) {
@@ -663,21 +663,21 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(Color(.systemGray6))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8)
                             .stroke(Color(.systemGray4), lineWidth: 0.5)
                     )
                 }
                 
                 // Content Type Selection
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Content Type")
-                        .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                         .foregroundColor(.primary)
                     
                     Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
@@ -686,27 +686,27 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(Color(.systemGray6))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: 8)
                             .stroke(Color(.systemGray4), lineWidth: 0.5)
                     )
                 }
                 
                 // Story-specific options
                 if viewModel.selectedSummarizationTier == .story {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) {
                         Divider()
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 2)
                         
                         // Genre Selection
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("Genre")
-                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                                 .foregroundColor(.primary)
                             
                             Menu {
@@ -730,47 +730,47 @@ struct ContentGenerationView: View {
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 11, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                         
                         // Main Character Input
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("Main Character (Optional)")
-                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                                 .foregroundColor(.primary)
                             
                             TextField("Enter character name", text: $viewModel.mainCharacter)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
-                                .font(.system(size: 16, weight: .regular))
+                                .font(.system(size: 15, weight: .regular))
                                 .foregroundColor(.primary)
                         }
                         
                         // Image Style Selection
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("Image Style")
-                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                                 .foregroundColor(.primary)
                             
                             Menu {
@@ -794,35 +794,35 @@ struct ContentGenerationView: View {
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 11, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 }
                 
                 // Lecture-specific options
                 if viewModel.selectedSummarizationTier == .lecture {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) {
                         Divider()
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 2)
                         
                         // Image Style Selection for Lecture
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("Image Style")
-                                .font(.system(size: isIPad ? 16 : 15, weight: .medium))
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
                                 .foregroundColor(.primary)
                             
                             Menu {
@@ -846,30 +846,30 @@ struct ContentGenerationView: View {
                                         .foregroundColor(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(.system(size: 11, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: 6)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 2)
                 }
             }
         }
-        .padding(isIPad ? 24 : 16)
+        .padding(isIPad ? 20 : 14)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .cornerRadius(14)
+        .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
     
     // MARK: - Generate Button
@@ -879,29 +879,29 @@ struct ContentGenerationView: View {
                 await viewModel.generateContent()
             }
         }) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 if viewModel.isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .primary))
-                        .scaleEffect(0.8)
+                        .scaleEffect(0.7)
                 } else {
                     Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.primary)
                 }
                 
                 Text(viewModel.isLoading ? "Generating..." : "Generate Content")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
             .background(
                 ZStack {
                     BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    RoundedRectangle(cornerRadius: 12)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    RoundedRectangle(cornerRadius: 10)
                         .fill(Color.accentColor.opacity(0.06))
                 }
             )
