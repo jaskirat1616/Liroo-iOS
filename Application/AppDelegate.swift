@@ -3,8 +3,9 @@ import UserNotifications
 import BackgroundTasks
 import FirebaseCrashlytics
 import FirebaseAuth
+import FirebaseMessaging
 
-class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     
     // This dictionary will hold the completion handlers for each session identifier.
     var backgroundSessionCompletionHandlers: [String: () -> Void] = [:]
@@ -41,6 +42,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         
         // Test crash function (uncomment to test - REMOVE AFTER TESTING)
         // testCrashlyticsIntegration()
+        
+        // Initialize Firebase Messaging
+        Messaging.messaging().delegate = self
+        
+        // Request notification permissions
+        UNUserNotificationCenter.current().delegate = self
+        let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: authOptions,
+            completionHandler: { _, _ in }
+        )
+        application.registerForRemoteNotifications()
         
         // Set up uncaught exception handler
         setupUncaughtExceptionHandler()
@@ -223,5 +236,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         )
         
         print("Crashlytics test completed - check Firebase Console")
+    }
+    
+    // MARK: - Firebase Messaging Delegate
+    
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        print("Firebase registration token: \(String(describing: fcmToken))")
+        
+        let dataDict: [String: String] = ["token": fcmToken ?? ""]
+        NotificationCenter.default.post(
+            name: Notification.Name("FCMToken"),
+            object: nil,
+            userInfo: dataDict
+        )
     }
 }

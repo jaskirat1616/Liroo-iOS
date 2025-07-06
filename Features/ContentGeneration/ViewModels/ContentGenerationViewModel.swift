@@ -5,6 +5,7 @@ import FirebaseStorage
 import UserNotifications
 import BackgroundTasks
 import FirebaseCrashlytics
+import FirebaseMessaging
 
 @MainActor
 class ContentGenerationViewModel: ObservableObject {
@@ -34,6 +35,7 @@ class ContentGenerationViewModel: ObservableObject {
     
     private let globalManager = GlobalBackgroundProcessingManager.shared
     private let firestoreService = FirestoreService.shared
+    private let backgroundTaskService = BackgroundTaskCompletionService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
     
     // Custom URLSession for regular, foreground tasks
@@ -73,6 +75,10 @@ class ContentGenerationViewModel: ObservableObject {
                     try await Task.sleep(nanoseconds: 1_000_000_000) // Poll every 1 second
                 } catch {
                     print("[Progress] Polling error: \(error)")
+                    // If polling fails, add task to background monitoring
+                    await MainActor.run {
+                        backgroundTaskService.addPendingTask(requestId)
+                    }
                     break
                 }
             }
@@ -311,37 +317,52 @@ class ContentGenerationViewModel: ObservableObject {
         Original Text:
         \(effectiveInputText)
         """
-        let requestBody: [String: Any] = [
-            "text": storyPrompt,
-            "level": selectedLevel.rawValue,
-            "genre": selectedGenre.rawValue.lowercased(),
-            "image_style": selectedImageStyle.displayName
-        ]
-        startBackgroundTask(with: requestBody, endpoint: "/generate_story", type: "Story")
+        
+        Task {
+            let userToken = await getFCMToken()
+            let requestBody: [String: Any] = [
+                "text": storyPrompt,
+                "level": selectedLevel.rawValue,
+                "genre": selectedGenre.rawValue.lowercased(),
+                "image_style": selectedImageStyle.displayName,
+                "user_token": userToken ?? ""
+            ]
+            startBackgroundTask(with: requestBody, endpoint: "/generate_story", type: "Story")
+        }
     }
 
     func generateLectureWithProgressInBackground() {
         globalManager.updateProgress(step: "Generating lecture content... (background)", stepNumber: 1, totalSteps: 3)
-        let requestBody: [String: Any] = [
-            "text": inputText,
-            "level": selectedLevel.rawValue,
-            "image_style": selectedImageStyle.displayName
-        ]
-        startBackgroundTask(with: requestBody, endpoint: "/generate_lecture", type: "Lecture")
+        
+        Task {
+            let userToken = await getFCMToken()
+            let requestBody: [String: Any] = [
+                "text": inputText,
+                "level": selectedLevel.rawValue,
+                "image_style": selectedImageStyle.displayName,
+                "user_token": userToken ?? ""
+            ]
+            startBackgroundTask(with: requestBody, endpoint: "/generate_lecture", type: "Lecture")
+        }
     }
 
     func generateRegularContentWithProgressInBackground() {
         globalManager.updateProgress(step: "Generating content... (background)", stepNumber: 1, totalSteps: 3)
-        let requestBody: [String: Any] = [
-            "input_text": inputText,
-            "level": selectedLevel.rawValue,
-            "summarization_tier": selectedSummarizationTier.rawValue,
-            "profile": [
-                "studentLevel": selectedLevel.rawValue,
-                "topicsOfInterest": []
+        
+        Task {
+            let userToken = await getFCMToken()
+            let requestBody: [String: Any] = [
+                "input_text": inputText,
+                "level": selectedLevel.rawValue,
+                "summarization_tier": selectedSummarizationTier.rawValue,
+                "profile": [
+                    "studentLevel": selectedLevel.rawValue,
+                    "topicsOfInterest": []
+                ],
+                "user_token": userToken ?? ""
             ]
-        ]
-        startBackgroundTask(with: requestBody, endpoint: "/process", type: "Content")
+            startBackgroundTask(with: requestBody, endpoint: "/process", type: "Content")
+        }
     }
     
     // Generic method to start any background task via the manager
@@ -391,6 +412,19 @@ class ContentGenerationViewModel: ObservableObject {
     }
 
     // MARK: - Helper Methods
+    
+    /// Gets the user's FCM token for push notifications
+    private func getFCMToken() async -> String? {
+        do {
+            // Get the FCM token from Firebase Messaging
+            let token = try await Messaging.messaging().token()
+            print("[Content] FCM token retrieved: \(token.prefix(20))...")
+            return token
+        } catch {
+            print("[Content] Failed to get FCM token: \(error.localizedDescription)")
+            return nil
+        }
+    }
     
     /// Attempts to wake up the backend service if it's hibernating
     private func wakeUpBackend() async -> Bool {
@@ -458,12 +492,16 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Story] Selected genre: \(selectedGenre.rawValue)")
         print("[Story] Selected image style for prompt (displayName): \(selectedImageStyle.displayName)")
         
+        // Get user's FCM token for notifications
+        let userToken = await getFCMToken()
+        
         let requestBody: [String: Any] = [
             "text": storyPrompt,
             "level": selectedLevel.rawValue,
             "genre": selectedGenre.rawValue.lowercased(),
             // MODIFICATION 2: Use displayName for image_style to match backend's expected keys
-            "image_style": selectedImageStyle.displayName 
+            "image_style": selectedImageStyle.displayName,
+            "user_token": userToken ?? ""
         ]
         
         let url = URL(string: "\(backendURL)/generate_story")!
@@ -717,10 +755,14 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Lecture] Selected level: \(selectedLevel.rawValue)")
         print("[Lecture] Selected image style: \(selectedImageStyle.displayName)")
         
+        // Get user's FCM token for notifications
+        let userToken = await getFCMToken()
+        
         let requestBody: [String: Any] = [
             "text": inputText,
             "level": selectedLevel.rawValue,
-            "image_style": selectedImageStyle.displayName
+            "image_style": selectedImageStyle.displayName,
+            "user_token": userToken ?? ""
         ]
         
         let url = URL(string: "\(backendURL)/generate_lecture")!
@@ -891,6 +933,9 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Content] Selected tier: \(selectedSummarizationTier.rawValue)")
         print("[Content] Selected image style: \(selectedImageStyle.displayName)")
         
+        // Get user's FCM token for notifications
+        let userToken = await getFCMToken()
+        
         let requestBody: [String: Any] = [
             "input_text": inputText,
             "level": selectedLevel.rawValue,
@@ -898,7 +943,8 @@ class ContentGenerationViewModel: ObservableObject {
             "profile": [
                 "studentLevel": selectedLevel.rawValue,
                 "topicsOfInterest": []
-            ]
+            ],
+            "user_token": userToken ?? ""
         ]
         
         let url = URL(string: "\(backendURL)/process")!
@@ -965,171 +1011,79 @@ class ContentGenerationViewModel: ObservableObject {
                     startProgressPollingFallback()
                 }
                 
-                if let blocksFromResponse = apiResponse.blocks {
-                    print("[Content] Received \(blocksFromResponse.count) blocks from backend")
-                    print("[Content] Processing blocks for image generation...")
+                if let blocks = apiResponse.blocks {
+                    print("[Content] ✅ Successfully received content blocks from backend")
+                    print("[Content] Number of blocks received: \(blocks.count)")
                     
-                    globalManager.updateProgress(step: "Generating images...", stepNumber: 2, totalSteps: 3)
+                    // Update UI with blocks immediately
+                    await MainActor.run {
+                        self.blocks = blocks
+                        print("[Content] Updated UI with received blocks")
+                    }
                     
-                    // Process images for blocks before saving
-                    var updatedBlocks = blocksFromResponse
-                    let totalBlocks = blocksFromResponse.count
-                    let imageBlocks = blocksFromResponse.filter { $0.type == .image }
-                    let totalImageBlocks = imageBlocks.count
+                    globalManager.updateProgress(step: "Processing images...", stepNumber: 2, totalSteps: 3)
                     
-                    print("[Content] Found \(totalImageBlocks) image blocks out of \(totalBlocks) total blocks")
+                    // Process images for blocks that have URLs
+                    var updatedBlocks = blocks
+                    let imageBlocks = blocks.enumerated().filter { $0.element.type == .image }
                     
-                    // Enhanced progress tracking for content blocks
-                    let baseStepNumber = 2 // We're in step 2 (image generation)
-                    let totalSubSteps = totalImageBlocks * 3 // Each image block has 3 sub-steps: check, process, upload
-                    
-                    var processedImageBlocks = 0
-                    
-                    for (index, block) in blocksFromResponse.enumerated() {
-                        if block.type == .image {
+                    if !imageBlocks.isEmpty {
+                        print("[Content] Processing \(imageBlocks.count) image blocks")
+                        
+                        let baseStepNumber = 2
+                        let totalSubSteps = imageBlocks.count * 3 // 3 sub-steps per image: download, convert, upload
+                        var processedImageBlocks = 0
+                        
+                        for (index, block) in imageBlocks {
                             processedImageBlocks += 1
-                            print("[Content] Processing image block \(processedImageBlocks)/\(totalImageBlocks)")
-                            print("[Content] Block ID: \(block.id.uuidString)")
-                            print("[Content] Block type: \(block.type.rawValue)")
-                            print("[Content] Block content: \(block.content ?? "No content")")
-                            print("[Content] Block alt: \(block.alt ?? "No alt text")")
-                            print("[Content] Block URL from backend: \(block.url ?? "No URL")")
                             
-                            // Sub-step 1: Check for existing image
-                            let subStep1 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 1
-                            globalManager.updateProgress(
-                                step: "Checking block \(processedImageBlocks) for existing image...",
-                                stepNumber: subStep1,
-                                totalSteps: totalSubSteps
-                            )
-                            
-                            // ✅ CHECK: Does this block already have an image URL from the backend?
-                            if let existingImageUrl = block.url {
-                                print("[Content] ✅ Block \(processedImageBlocks) already has image from backend: \(existingImageUrl)")
+                            if let imageUrlString = block.url,
+                               let imageUrl = URL(string: imageUrlString) {
                                 
-                                // Sub-step 2: Download existing image
-                                let subStep2 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 2
+                                print("[Content] Processing image block \(processedImageBlocks): \(imageUrlString)")
+                                
+                                // Sub-step 1: Download image
+                                let subStep1 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 1
                                 globalManager.updateProgress(
                                     step: "Downloading image for block \(processedImageBlocks)...",
-                                    stepNumber: subStep2,
+                                    stepNumber: subStep1,
                                     totalSteps: totalSubSteps
                                 )
                                 
-                                // Download the existing image and upload to Firebase
                                 do {
-                                    print("[Content] 📥 Downloading existing image from backend URL...")
-                                    if let imageUrl = URL(string: existingImageUrl) {
-                                        let (imageData, imageResponse) = try await session.data(from: imageUrl)
-                                        
-                                        guard let httpImageResponse = imageResponse as? HTTPURLResponse,
-                                              httpImageResponse.statusCode == 200 else {
-                                            print("[Content] ❌ ERROR: Failed to download existing image from backend URL")
-                                            throw NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download existing image"])
-                                        }
-                                        
-                                        print("[Content] ✅ Successfully downloaded existing image: \(imageData.count) bytes")
-                                        
-                                        if let image = UIImage(data: imageData),
-                                           let userId = Auth.auth().currentUser?.uid {
-                                            print("[Content] ✅ Converted existing image to UIImage. Size: \(image.size)")
-                                            
-                                            if let imageData = image.jpegData(compressionQuality: 0.8) {
-                                                let fileName = "content_\(block.id.uuidString).jpg"
-                                                print("[Content] 📁 Uploading existing image to Firebase Storage path: \(fileName)")
-                                                
-                                                // Sub-step 3: Upload to Firebase
-                                                let subStep3 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 3
-                                                globalManager.updateProgress(
-                                                    step: "Uploading image for block \(processedImageBlocks) to cloud...",
-                                                    stepNumber: subStep3,
-                                                    totalSteps: totalSubSteps
-                                                )
-                                                
-                                                let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
-                                                print("[Content] ✅ Successfully uploaded existing image to Firebase Storage.")
-                                                print("[Content] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
-                                                
-                                                updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
-                                                
-                                                await MainActor.run {
-                                                    self.blocks = updatedBlocks
-                                                    print("[Content] ✅ UI updated with existing image Firebase URL for block \(processedImageBlocks).")
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch {
-                                    print("[Content] ❌ ERROR processing existing image for block \(processedImageBlocks): \(error.localizedDescription)")
-                                    print("[Content] 🔄 Falling back to generate new image...")
-                                    // Fall through to generate new image if existing one fails
-                                }
-                            } else {
-                                print("[Content] 📝 Block \(processedImageBlocks) has no existing image, generating new one...")
-                                
-                                // Sub-step 2: Generate new image
-                                let subStep2 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 2
-                                globalManager.updateProgress(
-                                    step: "Generating new image for block \(processedImageBlocks)...",
-                                    stepNumber: subStep2,
-                                    totalSteps: totalSubSteps
-                                )
-                                
-                                // Use alt text if content is empty
-                                let imagePrompt = block.content ?? block.alt
-                                
-                                // Skip if both content and alt are empty
-                                guard let prompt = imagePrompt, !prompt.isEmpty else {
-                                    print("[Content] WARNING: Both block content and alt text are empty, skipping image generation")
-                                    continue
-                                }
-                                
-                                print("[Content] Generating image for block using prompt: \(prompt)")
-                                if let image = await fetchImageForBlock(block: block) {
-                                    print("[Content] Successfully generated image for block ID: \(block.id.uuidString)")
-                                    print("[Content] Image size: \(image.size)")
+                                    let (imageData, _) = try await session.data(from: imageUrl)
+                                    print("[Content] ✅ Successfully downloaded image data. Size: \(imageData.count) bytes")
                                     
-                                    if let imageData = image.jpegData(compressionQuality: 0.8),
+                                    if let image = UIImage(data: imageData),
                                        let userId = Auth.auth().currentUser?.uid {
-                                        print("[Content] Image data size: \(imageData.count) bytes")
+                                        print("[Content] ✅ Converted existing image to UIImage. Size: \(image.size)")
                                         
-                                        if imageData.count == 0 {
-                                            print("[Content] ERROR: Image data is empty for block ID: \(block.id.uuidString)")
-                                            continue
-                                        }
-                                        
-                                        do {
+                                        if let imageData = image.jpegData(compressionQuality: 0.8) {
                                             let fileName = "content_\(block.id.uuidString).jpg"
+                                            print("[Content] 📁 Uploading existing image to Firebase Storage path: \(fileName)")
                                             
                                             // Sub-step 3: Upload to Firebase
                                             let subStep3 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 3
                                             globalManager.updateProgress(
-                                                step: "Uploading new image for block \(processedImageBlocks) to cloud...",
+                                                step: "Uploading image for block \(processedImageBlocks) to cloud...",
                                                 stepNumber: subStep3,
                                                 totalSteps: totalSubSteps
                                             )
                                             
                                             let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
-                                            print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
-                                            print("[Content] Download URL: \(downloadURL.absoluteString)")
+                                            print("[Content] ✅ Successfully uploaded existing image to Firebase Storage.")
+                                            print("[Content] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                             
                                             updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
                                             
-                                            await MainActor.run {
-                                                self.blocks = updatedBlocks
-                                                print("[Content] Updated UI with new block image URL")
-                                            }
-                                        } catch {
-                                            print("[Content] ERROR uploading image for block ID \(block.id.uuidString)")
-                                            print("[Content] Error type: \(type(of: error))")
-                                            print("[Content] Error description: \(error.localizedDescription)")
-                                            print("[Content] Full error details: \(error)")
+                                        } else {
+                                            print("[Content] ❌ Failed to convert image to JPEG data")
                                         }
                                     } else {
-                                        print("[Content] ERROR: Failed to convert image to JPEG data or get user ID")
-                                        print("[Content] User ID available: \(Auth.auth().currentUser?.uid != nil)")
+                                        print("[Content] ❌ Failed to convert image data to UIImage or get user ID")
                                     }
-                                } else {
-                                    print("[Content] WARNING: Failed to generate image for block ID: \(block.id.uuidString)")
+                                } catch {
+                                    print("[Content] ❌ Error downloading image: \(error.localizedDescription)")
                                 }
                             }
                         }
