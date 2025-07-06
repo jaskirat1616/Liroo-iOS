@@ -315,10 +315,45 @@ class ContentGenerationViewModel: ObservableObject {
 
     // MARK: - Helper Methods
     
+    /// Attempts to wake up the backend service if it's hibernating
+    private func wakeUpBackend() async -> Bool {
+        print("[Backend] Attempting to wake up backend service...")
+        
+        let healthURL = URL(string: "\(backendURL)/health")!
+        var request = URLRequest(url: healthURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10 // 10 second timeout for health check
+        
+        do {
+            let (_, response) = try await session.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("[Backend] Health check response: \(httpResponse.statusCode)")
+                return httpResponse.statusCode == 200
+            }
+        } catch {
+            print("[Backend] Health check failed: \(error.localizedDescription)")
+        }
+        
+        return false
+    }
+    
     private func generateStoryWithProgress() async throws {
         globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 4)
         
         print("[Story] Starting story generation process")
+        
+        // Try to wake up the backend first
+        await MainActor.run {
+            self.statusMessage = "Checking backend status..."
+        }
+        let backendReady = await wakeUpBackend()
+        if !backendReady {
+            print("[Story] Backend health check failed, proceeding anyway...")
+        } else {
+            print("[Story] Backend is ready")
+        }
+        
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         print("[Story] Trimmed main character for prompt: '\(trimmedMainCharacter)'")
 
@@ -364,187 +399,234 @@ class ContentGenerationViewModel: ObservableObject {
         // print("[Story] URL: \(url.absoluteString)")
         // print("[Story] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")")
         
-        do {
-            let (data, response) = try await session.data(for: request)
+        // Add retry logic for 503 errors (backend hibernation)
+        let maxRetries = 3
+        var attempt = 0
+        
+        repeat {
+            attempt += 1
+            print("[Story] Attempt \(attempt) of \(maxRetries)")
             
-            guard let httpResponse = response as? HTTPURLResponse else {
-                let error = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+            do {
+                let (data, response) = try await session.data(for: request)
                 
-                CrashlyticsManager.shared.logNetworkError(
-                    error: error,
-                    endpoint: "/generate_story",
-                    method: "POST",
-                    requestBody: requestBody
-                )
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    let error = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
+                    
+                    CrashlyticsManager.shared.logNetworkError(
+                        error: error,
+                        endpoint: "/generate_story",
+                        method: "POST",
+                        requestBody: requestBody
+                    )
+                    
+                    print("[Story] ERROR: Invalid server response (not HTTPURLResponse)")
+                    throw error
+                }
                 
-                print("[Story] ERROR: Invalid server response (not HTTPURLResponse)")
-                throw error
-            }
-            
-            print("[Story] Received response with status code: \(httpResponse.statusCode)")
-            
-            guard httpResponse.statusCode == 200 else {
-                print("[Story] ERROR: Server returned status code \(httpResponse.statusCode)")
-                if let errorResponse = String(data: data, encoding: .utf8) {
-                    print("[Story] Error response from server: \(errorResponse)")
-                    // Try to decode a simple error message if backend sends one
-                    struct BackendError: Codable { let error: String? }
-                    if let decodedError = try? JSONDecoder().decode(BackendError.self, from: data), let message = decodedError.error {
-                        let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(message) (Status \(httpResponse.statusCode))"])
+                print("[Story] Received response with status code: \(httpResponse.statusCode)")
+                
+                // Handle 503 errors (backend hibernation) with retry
+                if httpResponse.statusCode == 503 {
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        print("[Story] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
+                        }
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        print("[Story] Backend hibernation retry limit reached")
+                        let hibernationError = NSError(domain: "BackendHibernation", code: 503, userInfo: [NSLocalizedDescriptionKey: "Backend is starting up. Please try again in a few moments."])
+                        throw hibernationError
+                    }
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    print("[Story] ERROR: Server returned status code \(httpResponse.statusCode)")
+                    if let errorResponse = String(data: data, encoding: .utf8) {
+                        print("[Story] Error response from server: \(errorResponse)")
+                        // Try to decode a simple error message if backend sends one
+                        struct BackendError: Codable { let error: String? }
+                        if let decodedError = try? JSONDecoder().decode(BackendError.self, from: data), let message = decodedError.error {
+                            let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(message) (Status \(httpResponse.statusCode))"])
+                            
+                            CrashlyticsManager.shared.logNetworkError(
+                                error: serverError,
+                                endpoint: "/generate_story",
+                                method: "POST",
+                                statusCode: httpResponse.statusCode,
+                                requestBody: requestBody
+                            )
+                            
+                            throw serverError
+                        }
+                    }
+                    
+                    let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                    
+                    CrashlyticsManager.shared.logNetworkError(
+                        error: serverError,
+                        endpoint: "/generate_story",
+                        method: "POST",
+                        statusCode: httpResponse.statusCode,
+                        requestBody: requestBody
+                    )
+                    
+                    throw serverError
+                }
+                
+                print("[Story] Attempting to decode response into Response.self")
+                do {
+                    let apiResponse = try JSONDecoder().decode(Response.self, from: data)
+                    print("[Story] Successfully decoded Response.self")
+                
+                    if let story = apiResponse.story {
+                        print("[Story] Successfully received story object from backend.")
+                        print("[Story] Story ID: \(story.id.uuidString)")
+                        print("[Story] Story Title: \(story.title)")
+                        print("[Story] Story Level: \(story.level.rawValue)")
+                        print("[Story] Story ImageStyle: \(story.imageStyle ?? "N/A")")
+                        print("[Story] Number of chapters received: \(story.chapters.count)")
+                        for (idx, chap) in story.chapters.enumerated() {
+                            print("[Story] - Chapter \(idx+1): ID=\(chap.id.uuidString), Title='\(chap.title)', Order=\(chap.order), ImageStyle=\(chap.imageStyle ?? "N/A")")
+                        }
+                        
+                        await MainActor.run {
+                            self.currentStory = story
+                            print("[Story] Updated UI with story object")
+                        }
+                        
+                        globalManager.updateProgress(step: "Generating images for chapters...", stepNumber: 2, totalSteps: 4)
+                        
+                        if let currentUser = Auth.auth().currentUser {
+                            print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(story.id.uuidString)")
+                            await generateImagesForStoryWithProgress(newStory: story) // This will call fetchImageForChapter, which calls /generate_image
+                            // saveStoryToFirebase is called at the end of generateImagesForStory
+                            
+                            globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 4)
+                            
+                            // Show full screen view AFTER everything is saved
+                            // await MainActor.run {
+                            //     self.isShowingFullScreenStory = true
+                            //     print("[Story] Story fully saved to Firebase, now showing full screen")
+                            // }
+                            
+                            globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
+                            print("[Story] Story content and image processing completed.")
+                        } else {
+                            let authError = NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                            
+                            CrashlyticsManager.shared.logAuthenticationError(
+                                error: authError,
+                                operation: "story_generation"
+                            )
+                            
+                            print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
+                            throw authError
+                        }
+                    } else if let errorMsg = apiResponse.error { // Check our Response.error field
+                        print("[Story] ERROR: Backend returned error in JSON response: \(errorMsg)")
+                        
+                        let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
                         
                         CrashlyticsManager.shared.logNetworkError(
-                            error: serverError,
+                            error: backendError,
                             endpoint: "/generate_story",
                             method: "POST",
-                            statusCode: httpResponse.statusCode,
                             requestBody: requestBody
                         )
                         
-                        throw serverError
-                    }
-                }
-                
-                let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-                
-                CrashlyticsManager.shared.logNetworkError(
-                    error: serverError,
-                    endpoint: "/generate_story",
-                    method: "POST",
-                    statusCode: httpResponse.statusCode,
-                    requestBody: requestBody
-                )
-                
-                throw serverError
-            }
-            
-            print("[Story] Attempting to decode response into Response.self")
-            do {
-                let apiResponse = try JSONDecoder().decode(Response.self, from: data)
-                print("[Story] Successfully decoded Response.self")
-            
-                if let story = apiResponse.story {
-                    print("[Story] Successfully received story object from backend.")
-                    print("[Story] Story ID: \(story.id.uuidString)")
-                    print("[Story] Story Title: \(story.title)")
-                    print("[Story] Story Level: \(story.level.rawValue)")
-                    print("[Story] Story ImageStyle: \(story.imageStyle ?? "N/A")")
-                    print("[Story] Number of chapters received: \(story.chapters.count)")
-                    for (idx, chap) in story.chapters.enumerated() {
-                        print("[Story] - Chapter \(idx+1): ID=\(chap.id.uuidString), Title='\(chap.title)', Order=\(chap.order), ImageStyle=\(chap.imageStyle ?? "N/A")")
-                    }
-                    
-                    await MainActor.run {
-                        self.currentStory = story
-                        print("[Story] Updated UI with story object")
-                    }
-                    
-                    globalManager.updateProgress(step: "Generating images for chapters...", stepNumber: 2, totalSteps: 4)
-                    
-                    if let currentUser = Auth.auth().currentUser {
-                        print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(story.id.uuidString)")
-                        await generateImagesForStoryWithProgress(newStory: story) // This will call fetchImageForChapter, which calls /generate_image
-                        // saveStoryToFirebase is called at the end of generateImagesForStory
-                        
-                        globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 4)
-                        
-                        // Show full screen view AFTER everything is saved
-                        // await MainActor.run {
-                        //     self.isShowingFullScreenStory = true
-                        //     print("[Story] Story fully saved to Firebase, now showing full screen")
-                        // }
-                        
-                        globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
-                        print("[Story] Story content and image processing completed.")
+                        throw backendError
                     } else {
-                        let authError = NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                        print("[Story] ERROR: Backend response did not contain a story or an error message")
                         
-                        CrashlyticsManager.shared.logAuthenticationError(
-                            error: authError,
-                            operation: "story_generation"
+                        let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
+                        
+                        CrashlyticsManager.shared.logNetworkError(
+                            error: backendError,
+                            endpoint: "/generate_story",
+                            method: "POST",
+                            requestBody: requestBody
                         )
                         
-                        print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
-                        throw authError
+                        throw backendError
                     }
-                } else if let errorMsg = apiResponse.error { // Check our Response.error field
-                    print("[Story] ERROR: Backend returned error in JSON response: \(errorMsg)")
+                } catch let decodingError {
+                    print("[Story] ERROR: Failed to decode response into Response.self")
+                    print("[Story] Decoding error: \(decodingError)")
+                    print("[Story] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
                     
-                    let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
-                    
-                    CrashlyticsManager.shared.logNetworkError(
-                        error: backendError,
-                        endpoint: "/generate_story",
-                        method: "POST",
-                        requestBody: requestBody
+                    CrashlyticsManager.shared.logCustomError(
+                        error: decodingError,
+                        context: "story_response_decoding",
+                        additionalData: [
+                            "endpoint": "/generate_story",
+                            "response_size": data.count,
+                            "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode"
+                        ]
                     )
                     
-                    throw backendError
-                } else {
-                    print("[Story] ERROR: Backend response did not contain a story or an error message")
-                    
-                    let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
-                    
-                    CrashlyticsManager.shared.logNetworkError(
-                        error: backendError,
-                        endpoint: "/generate_story",
-                        method: "POST",
-                        requestBody: requestBody
-                    )
-                    
-                    throw backendError
+                    throw decodingError
                 }
-            } catch let decodingError {
-                print("[Story] ERROR: Failed to decode response into Response.self")
-                print("[Story] Decoding error: \(decodingError)")
-                print("[Story] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
                 
-                CrashlyticsManager.shared.logCustomError(
-                    error: decodingError,
-                    context: "story_response_decoding",
-                    additionalData: [
-                        "endpoint": "/generate_story",
-                        "response_size": data.count,
-                        "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode"
-                    ]
-                )
+                // If we reach here, the request was successful, so break out of retry loop
+                break
                 
-                throw decodingError
+            } catch let error as NSError {
+                // If it's a 503 error and we haven't exhausted retries, continue the loop
+                if error.code == 503 && attempt < maxRetries {
+                    continue
+                }
+                
+                // For all other errors or if we've exhausted retries, throw the error
+                print("[Story] ERROR: Unexpected error during story generation process: \(error.localizedDescription)")
+                print("[Story] Error type: \(type(of: error))")
+                
+                // Log network errors specifically
+                if let urlError = error as? URLError {
+                    CrashlyticsManager.shared.logNetworkError(
+                        error: urlError,
+                        endpoint: "/generate_story",
+                        method: "POST",
+                        requestBody: requestBody
+                    )
+                } else {
+                    CrashlyticsManager.shared.logCustomError(
+                        error: error,
+                        context: "story_generation_unexpected",
+                        additionalData: [
+                            "endpoint": "/generate_story",
+                            "method": "POST"
+                        ]
+                    )
+                }
+                
+                // Ensure the errorMessage is updated on the main thread for UI
+                let finalErrorMessage = error.localizedDescription
+                await MainActor.run { self.errorMessage = finalErrorMessage }
+                throw error
             }
-        } catch { // Catch any other errors, including re-thrown decoding errors or errors from above
-            print("[Story] ERROR: Unexpected error during story generation process: \(error.localizedDescription)")
-            print("[Story] Error type: \(type(of: error))")
-            
-            // Log network errors specifically
-            if let urlError = error as? URLError {
-                CrashlyticsManager.shared.logNetworkError(
-                    error: urlError,
-                    endpoint: "/generate_story",
-                    method: "POST",
-                    requestBody: requestBody
-                )
-            } else {
-                CrashlyticsManager.shared.logCustomError(
-                    error: error,
-                    context: "story_generation_unexpected",
-                    additionalData: [
-                        "endpoint": "/generate_story",
-                        "method": "POST"
-                    ]
-                )
-            }
-            
-            // Ensure the errorMessage is updated on the main thread for UI
-            let finalErrorMessage = error.localizedDescription
-            await MainActor.run { self.errorMessage = finalErrorMessage }
-            // Do not re-throw here if you want generateContent to handle isLoading = false
-            // throw error // Or handle completion of isLoading within this catch
-        }
+        } while attempt < maxRetries
     }
     
     private func generateLectureWithProgress() async throws {
         globalManager.updateProgress(step: "Generating lecture content...", stepNumber: 1, totalSteps: 3)
         
         print("[Lecture] Starting lecture generation process")
+        
+        // Try to wake up the backend first
+        await MainActor.run {
+            self.statusMessage = "Checking backend status..."
+        }
+        let backendReady = await wakeUpBackend()
+        if !backendReady {
+            print("[Lecture] Backend health check failed, proceeding anyway...")
+        } else {
+            print("[Lecture] Backend is ready")
+        }
+        
         print("[Lecture] Input text length: \(inputText.count)")
         print("[Lecture] Selected level: \(selectedLevel.rawValue)")
         print("[Lecture] Selected image style: \(selectedImageStyle.displayName)")
@@ -563,80 +645,132 @@ class ContentGenerationViewModel: ObservableObject {
         
         print("[Lecture] Sending request to backend (/generate_lecture)")
         
-        do {
-            let (data, response) = try await session.data(for: request)
+        // Add retry logic for 503 errors (backend hibernation)
+        let maxRetries = 3
+        var attempt = 0
+        
+        repeat {
+            attempt += 1
+            print("[Lecture] Attempt \(attempt) of \(maxRetries)")
             
-            guard let httpResponse = response as? HTTPURLResponse else {
-                print("[Lecture] ERROR: Invalid server response")
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
-            }
-            
-            print("[Lecture] Received response with status code: \(httpResponse.statusCode)")
-            
-            guard httpResponse.statusCode == 200 else {
-                print("[Lecture] ERROR: Server returned status code \(httpResponse.statusCode)")
-                if let errorResponse = String(data: data, encoding: .utf8) {
-                    print("[Lecture] Error response from server: \(errorResponse)")
-                }
-                throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-            }
-            
-            let apiResponse = try JSONDecoder().decode(Response.self, from: data)
-            
-            if let lecture = apiResponse.lecture {
-                print("[Lecture] Successfully received lecture from backend")
-                print("[Lecture] Lecture ID: \(lecture.id.uuidString)")
-                print("[Lecture] Lecture Title: \(lecture.title)")
-                print("[Lecture] Number of sections: \(lecture.sections.count)")
+            do {
+                let (data, response) = try await session.data(for: request)
                 
-                await MainActor.run {
-                    self.currentLecture = lecture
-                    print("[Lecture] Updated UI with lecture object")
-                    globalManager.setLastGeneratedContent(type: .lecture, id: lecture.id.uuidString, title: lecture.title)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("[Lecture] ERROR: Invalid server response")
+                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
                 }
                 
-                globalManager.updateProgress(step: "Generating audio narration...", stepNumber: 2, totalSteps: 3)
+                print("[Lecture] Received response with status code: \(httpResponse.statusCode)")
                 
-                if let currentUser = Auth.auth().currentUser {
-                    print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with audio generation and Firebase save for lecture ID \(lecture.id.uuidString)")
-                    await generateAudioForLectureWithProgress(lecture: lecture)
+                // Handle 503 errors (backend hibernation) with retry
+                if httpResponse.statusCode == 503 {
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        print("[Lecture] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
+                        }
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        print("[Lecture] Backend hibernation retry limit reached")
+                        let hibernationError = NSError(domain: "BackendHibernation", code: 503, userInfo: [NSLocalizedDescriptionKey: "Backend is starting up. Please try again in a few moments."])
+                        throw hibernationError
+                    }
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    print("[Lecture] ERROR: Server returned status code \(httpResponse.statusCode)")
+                    if let errorResponse = String(data: data, encoding: .utf8) {
+                        print("[Lecture] Error response from server: \(errorResponse)")
+                    }
+                    throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                }
+                
+                let apiResponse = try JSONDecoder().decode(Response.self, from: data)
+                
+                if let lecture = apiResponse.lecture {
+                    print("[Lecture] Successfully received lecture from backend")
+                    print("[Lecture] Lecture ID: \(lecture.id.uuidString)")
+                    print("[Lecture] Lecture Title: \(lecture.title)")
+                    print("[Lecture] Number of sections: \(lecture.sections.count)")
                     
-                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+                    await MainActor.run {
+                        self.currentLecture = lecture
+                        print("[Lecture] Updated UI with lecture object")
+                        globalManager.setLastGeneratedContent(type: .lecture, id: lecture.id.uuidString, title: lecture.title)
+                    }
                     
-                    // Show full screen view AFTER everything is saved
-                    // await MainActor.run {
-                    //     self.isShowingFullScreenLecture = true
-                    //     print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
-                    // }
-                    print("[Lecture] Lecture content and audio processing completed.")
+                    globalManager.updateProgress(step: "Generating audio narration...", stepNumber: 2, totalSteps: 3)
+                    
+                    if let currentUser = Auth.auth().currentUser {
+                        print("[Lecture] User authenticated (\(currentUser.uid)), proceeding with audio generation and Firebase save for lecture ID \(lecture.id.uuidString)")
+                        await generateAudioForLectureWithProgress(lecture: lecture)
+                        
+                        globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+                        
+                        // Show full screen view AFTER everything is saved
+                        // await MainActor.run {
+                        //     self.isShowingFullScreenLecture = true
+                        //     print("[Lecture] Lecture fully saved to Firebase, now showing full screen")
+                        // }
+                        print("[Lecture] Lecture content and audio processing completed.")
+                    } else {
+                        print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save or generate audio.")
+                        throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                    }
+                } else if let error = apiResponse.error {
+                    print("[Lecture] ERROR: Backend returned error: \(error)")
+                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
+                }
+                
+                // If we reach here, the request was successful, so break out of retry loop
+                break
+                
+            } catch let error as NSError {
+                // If it's a 503 error and we haven't exhausted retries, continue the loop
+                if error.code == 503 && attempt < maxRetries {
+                    continue
+                }
+                
+                // For all other errors or if we've exhausted retries, throw the error
+                print("[Lecture] Network error occurred")
+                print("[Lecture] Error code: \(error.code)")
+                print("[Lecture] Error description: \(error.localizedDescription)")
+                
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .timedOut:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
+                    case .notConnectedToInternet:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
+                    default:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
+                    }
                 } else {
-                    print("[Lecture] ERROR: No authenticated user found after receiving lecture. Cannot save or generate audio.")
-                    throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+                    throw error
                 }
-            } else if let error = apiResponse.error {
-                print("[Lecture] ERROR: Backend returned error: \(error)")
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
             }
-        } catch let error as URLError {
-            print("[Lecture] Network error occurred")
-            print("[Lecture] Error code: \(error.code.rawValue)")
-            print("[Lecture] Error description: \(error.localizedDescription)")
-            
-            switch error.code {
-            case .timedOut:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
-            case .notConnectedToInternet:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
-            default:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
-            }
-        }
+        } while attempt < maxRetries
     }
     
     private func generateRegularContentWithProgress() async throws {
         globalManager.updateProgress(step: "Generating content...", stepNumber: 1, totalSteps: 3)
         
         print("[Content] Starting content generation")
+        
+        // Try to wake up the backend first
+        await MainActor.run {
+            self.statusMessage = "Checking backend status..."
+        }
+        let backendReady = await wakeUpBackend()
+        if !backendReady {
+            print("[Content] Backend health check failed, proceeding anyway...")
+        } else {
+            print("[Content] Backend is ready")
+        }
+        
         print("[Content] Input text length: \(inputText.count)")
         print("[Content] Selected level: \(selectedLevel.rawValue)")
         print("[Content] Selected tier: \(selectedSummarizationTier.rawValue)")
@@ -662,146 +796,186 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Content] URL: \(url.absoluteString)")
         print("[Content] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")")
         
-        do {
-            let (data, response) = try await session.data(for: request)
+        // Add retry logic for 503 errors (backend hibernation)
+        let maxRetries = 3
+        var attempt = 0
+        
+        repeat {
+            attempt += 1
+            print("[Content] Attempt \(attempt) of \(maxRetries)")
             
-            guard let httpResponse = response as? HTTPURLResponse else {
-                print("[Content] ERROR: Invalid server response")
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
-            }
-            
-            print("[Content] Received response with status code: \(httpResponse.statusCode)")
-            
-            guard httpResponse.statusCode == 200 else {
-                print("[Content] ERROR: Server returned status code \(httpResponse.statusCode)")
-                if let errorResponse = String(data: data, encoding: .utf8) {
-                    print("[Content] Error response from server: \(errorResponse)")
+            do {
+                let (data, response) = try await session.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("[Content] ERROR: Invalid server response")
+                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
                 }
-                throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-            }
-            
-            let apiResponse = try JSONDecoder().decode(Response.self, from: data)
-            
-            if let blocksFromResponse = apiResponse.blocks {
-                print("[Content] Received \(blocksFromResponse.count) blocks from backend")
-                print("[Content] Processing blocks for image generation...")
                 
-                globalManager.updateProgress(step: "Generating images...", stepNumber: 2, totalSteps: 3)
+                print("[Content] Received response with status code: \(httpResponse.statusCode)")
                 
-                // Process images for blocks before saving
-                var updatedBlocks = blocksFromResponse
-                for (index, block) in blocksFromResponse.enumerated() {
-                    if block.type == .image {
-                        print("[Content] Processing image block \(index + 1)/\(blocksFromResponse.count)")
-                        print("[Content] Block ID: \(block.id.uuidString)")
-                        print("[Content] Block type: \(block.type.rawValue)")
-                        print("[Content] Block content: \(block.content ?? "No content")")
-                        print("[Content] Block alt: \(block.alt ?? "No alt text")")
-                        
-                        // Use alt text if content is empty
-                        let imagePrompt = block.content ?? block.alt
-                        
-                        // Skip if both content and alt are empty
-                        guard let prompt = imagePrompt, !prompt.isEmpty else {
-                            print("[Content] WARNING: Both block content and alt text are empty, skipping image generation")
-                            continue
+                // Handle 503 errors (backend hibernation) with retry
+                if httpResponse.statusCode == 503 {
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        print("[Content] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
                         }
-                        
-                        print("[Content] Generating image for block using prompt: \(prompt)")
-                        if let image = await fetchImageForBlock(block: block) {
-                            print("[Content] Successfully generated image for block ID: \(block.id.uuidString)")
-                            print("[Content] Image size: \(image.size)")
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        print("[Content] Backend hibernation retry limit reached")
+                        let hibernationError = NSError(domain: "BackendHibernation", code: 503, userInfo: [NSLocalizedDescriptionKey: "Backend is starting up. Please try again in a few moments."])
+                        throw hibernationError
+                    }
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    print("[Content] ERROR: Server returned status code \(httpResponse.statusCode)")
+                    if let errorResponse = String(data: data, encoding: .utf8) {
+                        print("[Content] Error response from server: \(errorResponse)")
+                    }
+                    throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
+                }
+                
+                let apiResponse = try JSONDecoder().decode(Response.self, from: data)
+                
+                if let blocksFromResponse = apiResponse.blocks {
+                    print("[Content] Received \(blocksFromResponse.count) blocks from backend")
+                    print("[Content] Processing blocks for image generation...")
+                    
+                    globalManager.updateProgress(step: "Generating images...", stepNumber: 2, totalSteps: 3)
+                    
+                    // Process images for blocks before saving
+                    var updatedBlocks = blocksFromResponse
+                    for (index, block) in blocksFromResponse.enumerated() {
+                        if block.type == .image {
+                            print("[Content] Processing image block \(index + 1)/\(blocksFromResponse.count)")
+                            print("[Content] Block ID: \(block.id.uuidString)")
+                            print("[Content] Block type: \(block.type.rawValue)")
+                            print("[Content] Block content: \(block.content ?? "No content")")
+                            print("[Content] Block alt: \(block.alt ?? "No alt text")")
                             
-                            if let imageData = image.jpegData(compressionQuality: 0.8),
-                               let userId = Auth.auth().currentUser?.uid {
-                                print("[Content] Image data size: \(imageData.count) bytes")
+                            // Use alt text if content is empty
+                            let imagePrompt = block.content ?? block.alt
+                            
+                            // Skip if both content and alt are empty
+                            guard let prompt = imagePrompt, !prompt.isEmpty else {
+                                print("[Content] WARNING: Both block content and alt text are empty, skipping image generation")
+                                continue
+                            }
+                            
+                            print("[Content] Generating image for block using prompt: \(prompt)")
+                            if let image = await fetchImageForBlock(block: block) {
+                                print("[Content] Successfully generated image for block ID: \(block.id.uuidString)")
+                                print("[Content] Image size: \(image.size)")
                                 
-                                if imageData.count == 0 {
-                                    print("[Content] ERROR: Image data is empty for block ID: \(block.id.uuidString)")
-                                    continue
-                                }
-                                
-                                do {
-                                    let fileName = "content_\(block.id.uuidString).jpg"
-                                    let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
-                                    print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
-                                    print("[Content] Download URL: \(downloadURL.absoluteString)")
+                                if let imageData = image.jpegData(compressionQuality: 0.8),
+                                   let userId = Auth.auth().currentUser?.uid {
+                                    print("[Content] Image data size: \(imageData.count) bytes")
                                     
-                                    updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
-                                    
-                                    await MainActor.run {
-                                        self.blocks = updatedBlocks
-                                        print("[Content] Updated UI with new block image URL")
+                                    if imageData.count == 0 {
+                                        print("[Content] ERROR: Image data is empty for block ID: \(block.id.uuidString)")
+                                        continue
                                     }
-                                } catch {
-                                    print("[Content] ERROR uploading image for block ID \(block.id.uuidString)")
-                                    print("[Content] Error type: \(type(of: error))")
-                                    print("[Content] Error description: \(error.localizedDescription)")
-                                    print("[Content] Full error details: \(error)")
+                                    
+                                    do {
+                                        let fileName = "content_\(block.id.uuidString).jpg"
+                                        let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
+                                        print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
+                                        print("[Content] Download URL: \(downloadURL.absoluteString)")
+                                        
+                                        updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
+                                        
+                                        await MainActor.run {
+                                            self.blocks = updatedBlocks
+                                            print("[Content] Updated UI with new block image URL")
+                                        }
+                                    } catch {
+                                        print("[Content] ERROR uploading image for block ID \(block.id.uuidString)")
+                                        print("[Content] Error type: \(type(of: error))")
+                                        print("[Content] Error description: \(error.localizedDescription)")
+                                        print("[Content] Full error details: \(error)")
+                                    }
+                                } else {
+                                    print("[Content] ERROR: Failed to convert image to JPEG data or get user ID")
+                                    print("[Content] User ID available: \(Auth.auth().currentUser?.uid != nil)")
                                 }
                             } else {
-                                print("[Content] ERROR: Failed to convert image to JPEG data or get user ID")
-                                print("[Content] User ID available: \(Auth.auth().currentUser?.uid != nil)")
+                                print("[Content] WARNING: Failed to generate image for block ID: \(block.id.uuidString)")
                             }
-                        } else {
-                            print("[Content] WARNING: Failed to generate image for block ID: \(block.id.uuidString)")
                         }
                     }
-                }
-                
-                // Update UI with all blocks
-                await MainActor.run {
-                    self.blocks = updatedBlocks
-                    print("[Content] Updated UI with all processed blocks")
-                    if let firstBlock = updatedBlocks.first {
-                        let title = extractTopicTitle(from: inputText)
-                        globalManager.setLastGeneratedContent(type: .userContent, id: firstBlock.id.uuidString, title: title)
-                    }
-                }
-                
-                globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
-                
-                // Save to Firebase if user is authenticated BEFORE showing full screen
-                if let currentUser = Auth.auth().currentUser {
-                    print("[Content] Saving content to Firebase for user: \(currentUser.uid)")
-                    let documentId = await saveContentBlocksToFirebase(
-                        topic: extractTopicTitle(from: inputText),
-                        blocks: updatedBlocks,
-                        level: selectedLevel,
-                        summarizationTier: selectedSummarizationTier,
-                        userId: currentUser.uid
-                    )
                     
-                    // Store the saved document ID
+                    // Update UI with all blocks
                     await MainActor.run {
-                        self.savedContentDocumentId = documentId
-                        print("[Content] Content saved to Firebase with ID: \(documentId)")
+                        self.blocks = updatedBlocks
+                        print("[Content] Updated UI with all processed blocks")
+                        if let firstBlock = updatedBlocks.first {
+                            let title = extractTopicTitle(from: inputText)
+                            globalManager.setLastGeneratedContent(type: .userContent, id: firstBlock.id.uuidString, title: title)
+                        }
+                    }
+                    
+                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+                    
+                    // Save to Firebase if user is authenticated BEFORE showing full screen
+                    if let currentUser = Auth.auth().currentUser {
+                        print("[Content] Saving content to Firebase for user: \(currentUser.uid)")
+                        let documentId = await saveContentBlocksToFirebase(
+                            topic: extractTopicTitle(from: inputText),
+                            blocks: updatedBlocks,
+                            level: selectedLevel,
+                            summarizationTier: selectedSummarizationTier,
+                            userId: currentUser.uid
+                        )
+                        
+                        // Store the saved document ID
+                        await MainActor.run {
+                            self.savedContentDocumentId = documentId
+                            print("[Content] Content saved to Firebase with ID: \(documentId)")
+                        }
+                    } else {
+                        print("[Content] WARNING: No authenticated user found, skipping Firebase save")
+                        // Still show the content without saving
+                        await MainActor.run {
+                            self.isShowingFullScreenContent = false // Ensure we don't navigate
+                        }
+                    }
+                } else if let error = apiResponse.error {
+                    print("[Content] ERROR: Backend returned error: \(error)")
+                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
+                }
+                
+                // If we reach here, the request was successful, so break out of retry loop
+                break
+                
+            } catch let error as NSError {
+                // If it's a 503 error and we haven't exhausted retries, continue the loop
+                if error.code == 503 && attempt < maxRetries {
+                    continue
+                }
+                
+                // For all other errors or if we've exhausted retries, throw the error
+                print("[Content] Network error occurred")
+                print("[Content] Error code: \(error.code)")
+                print("[Content] Error description: \(error.localizedDescription)")
+                
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .timedOut:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
+                    case .notConnectedToInternet:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
+                    default:
+                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
                     }
                 } else {
-                    print("[Content] WARNING: No authenticated user found, skipping Firebase save")
-                    // Still show the content without saving
-                    await MainActor.run {
-                        self.isShowingFullScreenContent = false // Ensure we don't navigate
-                    }
+                    throw error
                 }
-            } else if let error = apiResponse.error {
-                print("[Content] ERROR: Backend returned error: \(error)")
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
             }
-        } catch let error as URLError {
-            print("[Content] Network error occurred")
-            print("[Content] Error code: \(error.code.rawValue)")
-            print("[Content] Error description: \(error.localizedDescription)")
-            
-            switch error.code {
-            case .timedOut:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
-            case .notConnectedToInternet:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
-            default:
-                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
-            }
-        }
+        } while attempt < maxRetries
     }
     
     // MARK: - Firebase Storage

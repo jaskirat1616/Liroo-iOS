@@ -32,55 +32,6 @@ extension ReadingLevel {
     }
 }
 
-struct CustomSegmentedControl<T: Hashable>: View {
-    @Binding var selection: T
-    var options: [T]
-    var pillColor: Color = Color(.systemGray6)
-    var textColor: Color = .secondary
-    var selectedTextColor: Color = .primary
-    var font: Font = .system(size: 15, weight: .semibold)
-    var displayName: (T) -> String
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(options, id: \.self) { option in
-                Button(action: { selection = option }) {
-                    Text(displayName(option))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(selection == option ? selectedTextColor : textColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            ZStack {
-                                if selection == option {
-                                    // Glassy effect for selected pill
-                                    BlurView(style: .systemUltraThinMaterial)
-                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(Color.purple.opacity(0.8))
-                                        
-                              
-                                } else {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(pillColor)
-                                }
-                            }
-                        )
-                        .animation(.interactiveSpring(response: 0.75, dampingFraction: 0.95), value: selection == option)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(pillColor.opacity(0.7))
-        )
-    }
-}
-
 extension ReadingLevel: CustomStringConvertible {
     var description: String { rawValue }
 }
@@ -213,7 +164,10 @@ struct ContentGenerationView: View {
                     // Input Section
                     inputSection
                     
-                    // Daily Limit Section
+                    // Configuration Section
+                    configurationSection
+                    
+                    // Daily Limit Section (moved here and made more compact)
                     dailyLimitSection
                     
                     // Persistent Recently Generated Box (always visible, compact, no dismiss)
@@ -250,9 +204,6 @@ struct ContentGenerationView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                     }
-                    
-                    // Configuration Section
-                    configurationSection
                     
                     // Generate Button
                     generateButton
@@ -655,49 +606,6 @@ struct ContentGenerationView: View {
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
-    // MARK: - Daily Limit Section
-    private var dailyLimitSection: some View {
-        let used = viewModel.todayGenerationCount
-        let limit = 12
-        let atLimit = used >= limit
-        let progress = Double(used) / Double(limit)
-        
-        return VStack(alignment: .leading, spacing: isIPad ? 16 : 12) {
-            HStack {
-                Text("Daily Generation Limit")
-                    .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
-                Spacer()
-                Text("\(used)/\(limit)")
-                    .font(.system(size: isIPad ? 20 : 18, weight: .bold))
-                    .foregroundColor(atLimit ? .red : .primary)
-            }
-            
-            // Progress Bar
-            ProgressView(value: progress)
-                .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
-                .frame(height: isIPad ? 6 : 4)
-            
-            if atLimit {
-                HStack(spacing: isIPad ? 8 : 6) {
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: isIPad ? 13 : 12, weight: .medium))
-                        .foregroundColor(.red)
-                    Text("Daily limit reached. Try again tomorrow!")
-                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                        .foregroundColor(.red)
-                }
-            } else {
-                Text("\(limit - used) generations remaining today")
-                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(isIPad ? 28 : 16)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-    }
-    
     // MARK: - Configuration Section
     private var configurationSection: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -711,15 +619,12 @@ struct ContentGenerationView: View {
                     Text("Reading Level")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
-                    CustomSegmentedControl(
-                        selection: $viewModel.selectedLevel,
-                        options: ReadingLevel.allCases,
-                        pillColor: Color(.systemGray6),
-                        textColor: .primary,
-                        selectedTextColor: .white,
-                        font: .system(size: 15, weight: .semibold),
-                        displayName: { $0.displayName }
-                    )
+                    Picker("Reading Level", selection: $viewModel.selectedLevel) {
+                        ForEach(ReadingLevel.allCases, id: \.self) { level in
+                            Text(level.displayName).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
                 
                 // Content Type Selection
@@ -727,15 +632,12 @@ struct ContentGenerationView: View {
                     Text("Content Type")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
-                    CustomSegmentedControl(
-                        selection: $viewModel.selectedSummarizationTier,
-                        options: SummarizationTier.allCases,
-                        pillColor: Color(.systemGray6),
-                        textColor: .primary,
-                        selectedTextColor: .white,
-                        font: .system(size: 15, weight: .semibold),
-                        displayName: { $0.displayName }
-                    )
+                    Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
+                        ForEach(SummarizationTier.allCases, id: \.self) { tier in
+                            Text(tier.displayName).tag(tier)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
                 
                 // Story-specific options
@@ -820,6 +722,49 @@ struct ContentGenerationView: View {
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
+    // MARK: - Daily Limit Section
+    private var dailyLimitSection: some View {
+        let used = viewModel.todayGenerationCount
+        let limit = 12
+        let atLimit = used >= limit
+        let progress = Double(used) / Double(limit)
+        
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Daily Generation Limit")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Text("\(used)/\(limit)")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(atLimit ? .red : .primary)
+            }
+            
+            // Progress Bar
+            ProgressView(value: progress)
+                .progressViewStyle(LinearProgressViewStyle(tint: atLimit ? .red : .orange))
+                .frame(height: 3)
+            
+            if atLimit {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red)
+                    Text("Daily limit reached. Try again tomorrow!")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            } else {
+                Text("\(limit - used) generations remaining today")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.04), radius: 4, x: 0, y: 1)
+    }
+    
     // MARK: - Generate Button
     private var generateButton: some View {
         Button(action: {
@@ -868,13 +813,28 @@ struct ContentGenerationView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.red)
-            Text(message)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.red)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                if message.contains("503") || message.contains("Backend is starting up") {
+                    Text("Backend Service Starting")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.orange)
+                    Text("The backend service is starting up. Please try again in a few moments.")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text(message)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.red)
+                }
+            }
         }
         .padding(16)
-        .background(Color.red.opacity(0.1))
-        .cornerRadius(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(message.contains("503") || message.contains("Backend is starting up") ? 
+                      Color.orange.opacity(0.1) : Color.red.opacity(0.1))
+        )
     }
     
     // MARK: - Generated Content Section
