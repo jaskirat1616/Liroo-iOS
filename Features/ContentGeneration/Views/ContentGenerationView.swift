@@ -645,14 +645,14 @@ struct ContentGenerationView: View {
     
     // MARK: - Configuration Section
     private var configurationSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Configuration")
                 .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
                 .foregroundColor(.primary)
             
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Reading Level Selection
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Reading Level")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
@@ -663,19 +663,19 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .fill(Color(.systemGray6))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color(.systemGray4), lineWidth: 0.5)
                     )
                 }
                 
                 // Content Type Selection
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Content Type")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
@@ -686,25 +686,25 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .fill(Color(.systemGray6))
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color(.systemGray4), lineWidth: 0.5)
                     )
                 }
                 
                 // Story-specific options
                 if viewModel.selectedSummarizationTier == .story {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 16) {
                         Divider()
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 4)
                         
                         // Genre Selection
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("Genre")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
@@ -733,34 +733,34 @@ struct ContentGenerationView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                         
                         // Main Character Input
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("Main Character (Optional)")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
                             
                             TextField("Enter character name", text: $viewModel.mainCharacter)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                                 .font(.system(size: 16, weight: .regular))
@@ -768,7 +768,7 @@ struct ContentGenerationView: View {
                         }
                         
                         // Image Style Selection
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("Image Style")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
@@ -797,30 +797,30 @@ struct ContentGenerationView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                 }
                 
                 // Lecture-specific options
                 if viewModel.selectedSummarizationTier == .lecture {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 16) {
                         Divider()
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 4)
                         
                         // Image Style Selection for Lecture
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("Image Style")
                                 .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                                 .foregroundColor(.primary)
@@ -849,24 +849,24 @@ struct ContentGenerationView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.secondary)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .fill(Color(.systemGray6))
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color(.systemGray4), lineWidth: 0.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, 4)
                 }
             }
         }
-        .padding(isIPad ? 28 : 16)
+        .padding(isIPad ? 24 : 16)
         .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
