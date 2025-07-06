@@ -849,18 +849,47 @@ class ContentGenerationViewModel: ObservableObject {
                     
                     // Process images for blocks before saving
                     var updatedBlocks = blocksFromResponse
+                    let totalBlocks = blocksFromResponse.count
+                    let imageBlocks = blocksFromResponse.filter { $0.type == .image }
+                    let totalImageBlocks = imageBlocks.count
+                    
+                    print("[Content] Found \(totalImageBlocks) image blocks out of \(totalBlocks) total blocks")
+                    
+                    // Enhanced progress tracking for content blocks
+                    let baseStepNumber = 2 // We're in step 2 (image generation)
+                    let totalSubSteps = totalImageBlocks * 3 // Each image block has 3 sub-steps: check, process, upload
+                    
+                    var processedImageBlocks = 0
+                    
                     for (index, block) in blocksFromResponse.enumerated() {
                         if block.type == .image {
-                            print("[Content] Processing image block \(index + 1)/\(blocksFromResponse.count)")
+                            processedImageBlocks += 1
+                            print("[Content] Processing image block \(processedImageBlocks)/\(totalImageBlocks)")
                             print("[Content] Block ID: \(block.id.uuidString)")
                             print("[Content] Block type: \(block.type.rawValue)")
                             print("[Content] Block content: \(block.content ?? "No content")")
                             print("[Content] Block alt: \(block.alt ?? "No alt text")")
                             print("[Content] Block URL from backend: \(block.url ?? "No URL")")
                             
+                            // Sub-step 1: Check for existing image
+                            let subStep1 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 1
+                            globalManager.updateProgress(
+                                step: "Checking block \(processedImageBlocks) for existing image...",
+                                stepNumber: subStep1,
+                                totalSteps: totalSubSteps
+                            )
+                            
                             // ✅ CHECK: Does this block already have an image URL from the backend?
                             if let existingImageUrl = block.url {
-                                print("[Content] ✅ Block \(index + 1) already has image from backend: \(existingImageUrl)")
+                                print("[Content] ✅ Block \(processedImageBlocks) already has image from backend: \(existingImageUrl)")
+                                
+                                // Sub-step 2: Download existing image
+                                let subStep2 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 2
+                                globalManager.updateProgress(
+                                    step: "Downloading image for block \(processedImageBlocks)...",
+                                    stepNumber: subStep2,
+                                    totalSteps: totalSubSteps
+                                )
                                 
                                 // Download the existing image and upload to Firebase
                                 do {
@@ -884,6 +913,14 @@ class ContentGenerationViewModel: ObservableObject {
                                                 let fileName = "content_\(block.id.uuidString).jpg"
                                                 print("[Content] 📁 Uploading existing image to Firebase Storage path: \(fileName)")
                                                 
+                                                // Sub-step 3: Upload to Firebase
+                                                let subStep3 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 3
+                                                globalManager.updateProgress(
+                                                    step: "Uploading image for block \(processedImageBlocks) to cloud...",
+                                                    stepNumber: subStep3,
+                                                    totalSteps: totalSubSteps
+                                                )
+                                                
                                                 let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
                                                 print("[Content] ✅ Successfully uploaded existing image to Firebase Storage.")
                                                 print("[Content] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
@@ -892,18 +929,26 @@ class ContentGenerationViewModel: ObservableObject {
                                                 
                                                 await MainActor.run {
                                                     self.blocks = updatedBlocks
-                                                    print("[Content] ✅ UI updated with existing image Firebase URL for block \(index + 1).")
+                                                    print("[Content] ✅ UI updated with existing image Firebase URL for block \(processedImageBlocks).")
                                                 }
                                             }
                                         }
                                     }
                                 } catch {
-                                    print("[Content] ❌ ERROR processing existing image for block \(index + 1): \(error.localizedDescription)")
+                                    print("[Content] ❌ ERROR processing existing image for block \(processedImageBlocks): \(error.localizedDescription)")
                                     print("[Content] 🔄 Falling back to generate new image...")
                                     // Fall through to generate new image if existing one fails
                                 }
                             } else {
-                                print("[Content] 📝 Block \(index + 1) has no existing image, generating new one...")
+                                print("[Content] 📝 Block \(processedImageBlocks) has no existing image, generating new one...")
+                                
+                                // Sub-step 2: Generate new image
+                                let subStep2 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 2
+                                globalManager.updateProgress(
+                                    step: "Generating new image for block \(processedImageBlocks)...",
+                                    stepNumber: subStep2,
+                                    totalSteps: totalSubSteps
+                                )
                                 
                                 // Use alt text if content is empty
                                 let imagePrompt = block.content ?? block.alt
@@ -930,6 +975,15 @@ class ContentGenerationViewModel: ObservableObject {
                                         
                                         do {
                                             let fileName = "content_\(block.id.uuidString).jpg"
+                                            
+                                            // Sub-step 3: Upload to Firebase
+                                            let subStep3 = baseStepNumber * 100 + (processedImageBlocks - 1) * 3 + 3
+                                            globalManager.updateProgress(
+                                                step: "Uploading new image for block \(processedImageBlocks) to cloud...",
+                                                stepNumber: subStep3,
+                                                totalSteps: totalSubSteps
+                                            )
+                                            
                                             let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
                                             print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
                                             print("[Content] Download URL: \(downloadURL.absoluteString)")
@@ -1033,21 +1087,41 @@ class ContentGenerationViewModel: ObservableObject {
         let imageSize = CGSize(width: 800, height: 600) // This size is for the prompt, backend controls actual generation size.
         var updatedChapters = newStory.chapters
         let maxRetries = 3
+        let totalChapters = newStory.chapters.count
         
         print("[Story][ImageGen] Starting image generation for story: \(newStory.title)")
         print("[Story][ImageGen] Story ID: \(newStory.id.uuidString)")
-        print("[Story][ImageGen] Number of chapters: \(newStory.chapters.count)")
+        print("[Story][ImageGen] Number of chapters: \(totalChapters)")
         print("[Story][ImageGen] Backend URL: \(backendURL)")
-        // print("[Story][ImageGen] Desired image prompt size guide: \(imageSize)") // Informational
-
+        
+        // Enhanced progress tracking with sub-steps
+        let baseStepNumber = 2 // We're in step 2 (image generation)
+        let totalSubSteps = totalChapters * 3 // Each chapter has 3 sub-steps: check, process, upload
+        
         for (index, chapter) in newStory.chapters.enumerated() {
             print("[Story][ImageGen] ========================================")
-            print("[Story][ImageGen] Processing chapter \(index + 1)/\(newStory.chapters.count): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
+            print("[Story][ImageGen] Processing chapter \(index + 1)/\(totalChapters): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
             print("[Story][ImageGen] Chapter content length: \(chapter.content.count) characters")
+            
+            // Sub-step 1: Check for existing image
+            let subStep1 = baseStepNumber * 100 + (index * 3) + 1
+            globalManager.updateProgress(
+                step: "Checking chapter \(index + 1) for existing image...",
+                stepNumber: subStep1,
+                totalSteps: totalSubSteps
+            )
             
             // ✅ CHECK: Does this chapter already have an image from the backend?
             if let existingImageUrl = chapter.imageUrl {
                 print("[Story][ImageGen] ✅ Chapter \(index + 1) already has image from backend: \(existingImageUrl)")
+                
+                // Sub-step 2: Download existing image
+                let subStep2 = baseStepNumber * 100 + (index * 3) + 2
+                globalManager.updateProgress(
+                    step: "Downloading image for chapter \(index + 1)...",
+                    stepNumber: subStep2,
+                    totalSteps: totalSubSteps
+                )
                 
                 // Download the existing image and upload to Firebase
                 do {
@@ -1070,6 +1144,14 @@ class ContentGenerationViewModel: ObservableObject {
                             if let imageData = image.jpegData(compressionQuality: 0.8) {
                                 let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
                                 print("[Story][ImageGen] 📁 Uploading existing image to Firebase Storage path: \(imagePath)")
+                                
+                                // Sub-step 3: Upload to Firebase
+                                let subStep3 = baseStepNumber * 100 + (index * 3) + 3
+                                globalManager.updateProgress(
+                                    step: "Uploading image for chapter \(index + 1) to cloud...",
+                                    stepNumber: subStep3,
+                                    totalSteps: totalSubSteps
+                                )
                                 
                                 let metadata = StorageMetadata()
                                 metadata.contentType = "image/jpeg"
@@ -1105,6 +1187,14 @@ class ContentGenerationViewModel: ObservableObject {
             } else {
                 print("[Story][ImageGen] 📝 Chapter \(index + 1) has no existing image, generating new one...")
                 
+                // Sub-step 2: Generate new image
+                let subStep2 = baseStepNumber * 100 + (index * 3) + 2
+                globalManager.updateProgress(
+                    step: "Generating new image for chapter \(index + 1)...",
+                    stepNumber: subStep2,
+                    totalSteps: totalSubSteps
+                )
+                
                 var retryCount = 0
                 var success = false
                 
@@ -1127,6 +1217,14 @@ class ContentGenerationViewModel: ObservableObject {
                                 
                                 let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
                                 print("[Story][ImageGen] 📁 Preparing to upload image to Firebase Storage path: \(imagePath)")
+                                
+                                // Sub-step 3: Upload to Firebase
+                                let subStep3 = baseStepNumber * 100 + (index * 3) + 3
+                                globalManager.updateProgress(
+                                    step: "Uploading new image for chapter \(index + 1) to cloud...",
+                                    stepNumber: subStep3,
+                                    totalSteps: totalSubSteps
+                                )
                                 
                                 let metadata = StorageMetadata()
                                 metadata.contentType = "image/jpeg"
@@ -1778,15 +1876,54 @@ class ContentGenerationViewModel: ObservableObject {
     
     // MARK: - Missing Helper Methods
     private func generateAudioForLectureWithProgress(lecture: Lecture) async {
-        // This would contain the audio generation logic
-        // For now, we'll just simulate the process
         print("[Lecture][Audio] Starting audio generation for lecture: \(lecture.title)")
         
-        // Simulate audio generation time
-        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        // Enhanced progress tracking for lecture audio generation
+        let totalSections = lecture.sections.count
+        let totalAudioFiles = totalSections * 2 + 1 // Each section has title + script, plus main title
+        var processedAudioFiles = 0
+        
+        print("[Lecture][Audio] Total sections: \(totalSections)")
+        print("[Lecture][Audio] Expected audio files: \(totalAudioFiles)")
+        
+        // Simulate audio generation with detailed progress
+        for (sectionIndex, section) in lecture.sections.enumerated() {
+            // Generate audio for section title
+            processedAudioFiles += 1
+            let progressStep = 2 * 100 + processedAudioFiles // Step 2 (audio generation)
+            globalManager.updateProgress(
+                step: "Generating audio for section \(sectionIndex + 1) title...",
+                stepNumber: progressStep,
+                totalSteps: totalAudioFiles
+            )
+            
+            // Simulate processing time
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            
+            // Generate audio for section script
+            processedAudioFiles += 1
+            let progressStep2 = 2 * 100 + processedAudioFiles
+            globalManager.updateProgress(
+                step: "Generating audio for section \(sectionIndex + 1) content...",
+                stepNumber: progressStep2,
+                totalSteps: totalAudioFiles
+            )
+            
+            // Simulate processing time
+            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+        }
+        
+        // Final step: Save to Firebase
+        globalManager.updateProgress(
+            step: "Saving lecture to cloud...",
+            stepNumber: 3 * 100, // Step 3 (saving)
+            totalSteps: 3
+        )
         
         // Save lecture to Firebase
         await saveLectureToFirebase(lecture, audioFiles: [], userId: Auth.auth().currentUser?.uid ?? "")
+        
+        print("[Lecture][Audio] Audio generation and saving completed")
     }
     
     private func uploadImageToFirebase(imageData: Data, fileName: String, userId: String) async throws -> URL {

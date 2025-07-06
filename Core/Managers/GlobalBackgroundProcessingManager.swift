@@ -117,7 +117,29 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         currentStep = step
         currentStepNumber = stepNumber
         self.totalSteps = totalSteps
-        progress = Double(stepNumber) / Double(totalSteps)
+        
+        // Calculate progress based on step number and total steps
+        // Handle both regular steps (1, 2, 3, 4) and granular sub-steps (201, 202, 203, etc.)
+        if stepNumber > 100 {
+            // This is a granular sub-step (e.g., 201, 202, 203)
+            // Extract the base step and sub-step for better progress calculation
+            let baseStep = stepNumber / 100
+            let subStep = stepNumber % 100
+            let subStepsPerMainStep = totalSteps / baseStep
+            
+            // Calculate progress: base step progress + sub-step progress within that step
+            let baseProgress = Double(baseStep - 1) / Double(4) // Assuming 4 main steps
+            let subProgress = Double(subStep) / Double(subStepsPerMainStep) / Double(4)
+            progress = min(baseProgress + subProgress, 1.0)
+        } else {
+            // This is a regular main step
+            progress = Double(stepNumber) / Double(totalSteps)
+        }
+        
+        // Ensure progress doesn't exceed 100%
+        progress = min(progress, 1.0)
+        
+        print("[Progress] Updated: \(Int(progress * 100))% - Step \(stepNumber)/\(totalSteps) - \(step)")
         
         // Update Live Activity
         Task { @MainActor in
