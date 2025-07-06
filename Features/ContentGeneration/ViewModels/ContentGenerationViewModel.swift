@@ -28,6 +28,10 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var statusMessage: String? = nil
     @Published var savedContentDocumentId: String?
     
+    // Progress tracking properties
+    @Published var currentRequestId: String?
+    private var progressPollingTask: Task<Void, Never>?
+    
     private let globalManager = GlobalBackgroundProcessingManager.shared
     private let firestoreService = FirestoreService.shared
     private let backendURL = "https://backend-orasync-test.onrender.com"
@@ -40,10 +44,77 @@ class ContentGenerationViewModel: ObservableObject {
         return URLSession(configuration: config)
     }()
     
+    // Progress response model
+    struct ProgressResponse: Codable {
+        let step: String
+        let step_number: Int
+        let total_steps: Int
+        let details: String
+        let last_updated: String
+        let progress_percentage: Double
+    }
+    
     // init() is no longer an override
     init() {
         // Notifications are now handled automatically by NotificationManager
         // No manual setup needed
+    }
+    
+    // MARK: - Progress Polling
+    
+    private func startProgressPolling(requestId: String) {
+        // Cancel any existing polling task
+        progressPollingTask?.cancel()
+        
+        progressPollingTask = Task {
+            while !Task.isCancelled {
+                do {
+                    try await pollProgress(requestId: requestId)
+                    try await Task.sleep(nanoseconds: 1_000_000_000) // Poll every 1 second
+                } catch {
+                    print("[Progress] Polling error: \(error)")
+                    break
+                }
+            }
+        }
+    }
+    
+    private func startProgressPollingFallback() {
+        // Fallback for when backend doesn't return request_id (backward compatibility)
+        // This will use the existing progress tracking without polling
+        print("[Progress] Using fallback progress tracking (no request_id)")
+    }
+    
+    private func stopProgressPolling() {
+        progressPollingTask?.cancel()
+        progressPollingTask = nil
+    }
+    
+    private func pollProgress(requestId: String) async throws {
+        let url = URL(string: "\(backendURL)/progress/\(requestId)")!
+        let (data, response) = try await session.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw NSError(domain: "ProgressPolling", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to fetch progress"])
+        }
+        
+        let progress = try JSONDecoder().decode(ProgressResponse.self, from: data)
+        
+        await MainActor.run {
+            self.globalManager.updateProgress(
+                step: progress.step,
+                stepNumber: progress.step_number,
+                totalSteps: progress.total_steps
+            )
+            
+            // Update status message with details
+            if !progress.details.isEmpty {
+                self.statusMessage = "\(progress.step): \(progress.details)"
+            } else {
+                self.statusMessage = progress.step
+            }
+        }
     }
     
     // The original, async generateContent() method remains for foreground operations
@@ -169,6 +240,8 @@ class ContentGenerationViewModel: ObservableObject {
                 
                 statusMessage = nil
                 isLoading = false
+                stopProgressPolling() // Stop progress polling
+                currentRequestId = nil
                 globalManager.endBackgroundTask()
                 return
                 
@@ -204,6 +277,8 @@ class ContentGenerationViewModel: ObservableObject {
                         self.statusMessage = nil
                     }
                     isLoading = false
+                    stopProgressPolling() // Stop progress polling
+                    currentRequestId = nil
                     globalManager.endBackgroundTaskWithError(errorMessage: error.localizedDescription)
                     return
                 }
@@ -212,6 +287,8 @@ class ContentGenerationViewModel: ObservableObject {
         
         isLoading = false
         statusMessage = nil
+        stopProgressPolling() // Stop progress polling
+        currentRequestId = nil
         globalManager.endBackgroundTask()
         if let lastError = lastError {
             errorMessage = lastError.localizedDescription
@@ -482,6 +559,15 @@ class ContentGenerationViewModel: ObservableObject {
                     let apiResponse = try JSONDecoder().decode(Response.self, from: data)
                     print("[Story] Successfully decoded Response.self")
                 
+                    // Start progress polling if we received a request_id
+                    if let requestId = apiResponse.request_id {
+                        print("[Story] Received request_id: \(requestId), starting progress polling")
+                        currentRequestId = requestId
+                        startProgressPolling(requestId: requestId)
+                    } else {
+                        startProgressPollingFallback()
+                    }
+                
                     if let story = apiResponse.story {
                         print("[Story] Successfully received story object from backend.")
                         print("[Story] Story ID: \(story.id.uuidString)")
@@ -688,7 +774,17 @@ class ContentGenerationViewModel: ObservableObject {
                     throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
                 }
                 
-                let apiResponse = try JSONDecoder().decode(Response.self, from: data)
+                let apiResponse = try JSONDecoder().decode(LectureResponse.self, from: data)
+                print("[Lecture] Successfully decoded LectureResponse.self")
+                
+                // Start progress polling if we received a request_id
+                if let requestId = apiResponse.request_id {
+                    print("[Lecture] Received request_id: \(requestId), starting progress polling")
+                    currentRequestId = requestId
+                    startProgressPolling(requestId: requestId)
+                } else {
+                    startProgressPollingFallback()
+                }
                 
                 if let lecture = apiResponse.lecture {
                     print("[Lecture] Successfully received lecture from backend")
@@ -840,6 +936,15 @@ class ContentGenerationViewModel: ObservableObject {
                 }
                 
                 let apiResponse = try JSONDecoder().decode(Response.self, from: data)
+                
+                // Start progress polling if we received a request_id
+                if let requestId = apiResponse.request_id {
+                    print("[Content] Received request_id: \(requestId), starting progress polling")
+                    currentRequestId = requestId
+                    startProgressPolling(requestId: requestId)
+                } else {
+                    startProgressPollingFallback()
+                }
                 
                 if let blocksFromResponse = apiResponse.blocks {
                     print("[Content] Received \(blocksFromResponse.count) blocks from backend")
@@ -1999,6 +2104,7 @@ struct Response: Codable {
     let lecture: Lecture?
     let blocks: [ContentBlock]?
     let error: String?
+    let request_id: String?
 }
 
 // MARK: - Lecture Response Models
@@ -2007,6 +2113,7 @@ struct LectureResponse: Codable {
     let audio_files: [BackendAudioFile]?
     let lecture_id: String
     let error: String?
+    let request_id: String?
 }
 
 struct BackendLecture: Codable {
