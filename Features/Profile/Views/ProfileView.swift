@@ -49,28 +49,6 @@ struct ProfileView: View {
                             )
                         }
                         
-                        // Help Button
-                        NavigationLink(destination: HelpView()) {
-                            HStack(spacing: isIPad ? 10 : 8) {
-                                Image(systemName: "questionmark.circle")
-                                    .font(.system(size: isIPad ? 16 : 14, weight: .medium))
-                                    .foregroundColor(.cyan)
-                                Text("Help")
-                                    .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                                    .foregroundColor(.cyan)
-                            }
-                            .padding(.vertical, isIPad ? 12 : 8)
-                            .padding(.horizontal, isIPad ? 14 : 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.cyan.opacity(0.08))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
-                                    )
-                            )
-                        }
-                        
                         // Settings Button
                         NavigationLink(destination: SettingsView()) {
                             HStack(spacing: isIPad ? 10 : 8) {

@@ -9,7 +9,6 @@ class AppCoordinator: ObservableObject {
         case profile
         case generation
         case settings
-        case help
         
         var id: String { self.rawValue }
         
@@ -20,7 +19,6 @@ class AppCoordinator: ObservableObject {
             case .profile: return "profile"
             case .generation: return "generation"
             case .settings: return "settings"
-            case .help: return "help"
             }
         }
         
@@ -31,7 +29,6 @@ class AppCoordinator: ObservableObject {
             case .profile: return "Profile"
             case .generation: return "Generate"
             case .settings: return "Settings"
-            case .help: return "Help"
             }
         }
         
@@ -42,7 +39,6 @@ class AppCoordinator: ObservableObject {
             case .profile: return "person.fill"
             case .generation: return "wand.and.stars"
             case .settings: return "gearshape.fill"
-            case .help: return "questionmark.circle.fill"
             }
         }
     }

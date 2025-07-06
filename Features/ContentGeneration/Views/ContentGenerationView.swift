@@ -646,16 +646,32 @@ struct ContentGenerationView: View {
     // MARK: - Configuration Section
     private var configurationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Configuration")
-                .font(.system(size: isIPad ? 18 : 16, weight: .semibold))
-                .foregroundColor(.primary)
+            HStack {
+                Text("Configuration")
+                    .font(.system(size: isIPad ? 18 : 16, weight: .bold))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                // Playful sparkle icon
+                Image(systemName: "sparkles")
+                    .font(.system(size: isIPad ? 16 : 14, weight: .medium))
+                    .foregroundColor(.orange)
+                    .rotationEffect(.degrees(45))
+                    .scaleEffect(1.2)
+            }
             
             VStack(spacing: 12) {
                 // Reading Level Selection
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Reading Level")
-                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                        .foregroundColor(.primary)
+                    HStack {
+                        Image(systemName: "book.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.blue)
+                        Text("Reading Level")
+                            .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                    }
                     
                     Picker("Reading Level", selection: $viewModel.selectedLevel) {
                         ForEach(ReadingLevel.allCases, id: \.self) { level in
@@ -663,22 +679,40 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray6))
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.1), Color.cyan.opacity(0.1)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(.systemGray4), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.3), Color.cyan.opacity(0.3)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ),
+                                lineWidth: 1.5
+                            )
                     )
                 }
                 
                 // Content Type Selection
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Content Type")
-                        .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                        .foregroundColor(.primary)
+                    HStack {
+                        Image(systemName: "wand.and.stars.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.purple)
+                        Text("Content Type")
+                            .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                    }
                     
                     Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
                         ForEach(SummarizationTier.allCases, id: \.self) { tier in
@@ -686,28 +720,74 @@ struct ContentGenerationView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray6))
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.purple.opacity(0.1), Color.pink.opacity(0.1)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(.systemGray4), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.purple.opacity(0.3), Color.pink.opacity(0.3)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ),
+                                lineWidth: 1.5
+                            )
                     )
                 }
                 
                 // Story-specific options
                 if viewModel.selectedSummarizationTier == .story {
                     VStack(spacing: 12) {
-                        Divider()
-                            .padding(.vertical, 2)
+                        // Playful divider
+                        HStack {
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.orange, Color.yellow, Color.orange],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 2)
+                                .cornerRadius(1)
+                            
+                            Image(systemName: "book.closed.fill")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.orange)
+                                .padding(.horizontal, 8)
+                            
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.orange, Color.yellow, Color.orange],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 2)
+                                .cornerRadius(1)
+                        }
+                        .padding(.vertical, 4)
                         
                         // Genre Selection
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Genre")
-                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                .foregroundColor(.primary)
+                            HStack {
+                                Image(systemName: "theatermasks.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.green)
+                                Text("Genre")
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
                             
                             Menu {
                                 ForEach(StoryGenre.allCases, id: \.self) { genre in
@@ -718,8 +798,8 @@ struct ContentGenerationView: View {
                                             Text(genre.rawValue)
                                             if viewModel.selectedGenre == genre {
                                                 Spacer()
-                                                Image(systemName: "checkmark")
-                                                    .foregroundColor(.accentColor)
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.green)
                                             }
                                         }
                                     }
@@ -729,39 +809,56 @@ struct ContentGenerationView: View {
                                     Text(viewModel.selectedGenre.rawValue)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.secondary)
+                                    Image(systemName: "chevron.down.circle.fill")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.green)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.systemGray6))
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.green.opacity(0.1), Color.mint.opacity(0.1)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.green.opacity(0.3), lineWidth: 1.5)
                                 )
                             }
                         }
                         
                         // Main Character Input
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Main Character (Optional)")
-                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                .foregroundColor(.primary)
+                            HStack {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.indigo)
+                                Text("Main Character (Optional)")
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
                             
                             TextField("Enter character name", text: $viewModel.mainCharacter)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.systemGray6))
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.indigo.opacity(0.1), Color.blue.opacity(0.1)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.indigo.opacity(0.3), lineWidth: 1.5)
                                 )
                                 .font(.system(size: 15, weight: .regular))
                                 .foregroundColor(.primary)
@@ -769,9 +866,14 @@ struct ContentGenerationView: View {
                         
                         // Image Style Selection
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Image Style")
-                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                .foregroundColor(.primary)
+                            HStack {
+                                Image(systemName: "paintbrush.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.pink)
+                                Text("Image Style")
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
                             
                             Menu {
                                 ForEach(ImageStyle.allCases, id: \.self) { style in
@@ -782,8 +884,8 @@ struct ContentGenerationView: View {
                                             Text(style.displayName)
                                             if viewModel.selectedImageStyle == style {
                                                 Spacer()
-                                                Image(systemName: "checkmark")
-                                                    .foregroundColor(.accentColor)
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.pink)
                                             }
                                         }
                                     }
@@ -793,37 +895,76 @@ struct ContentGenerationView: View {
                                     Text(viewModel.selectedImageStyle.displayName)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.secondary)
+                                    Image(systemName: "chevron.down.circle.fill")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.pink)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.systemGray6))
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.pink.opacity(0.1), Color.red.opacity(0.1)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.pink.opacity(0.3), lineWidth: 1.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
                 
                 // Lecture-specific options
                 if viewModel.selectedSummarizationTier == .lecture {
                     VStack(spacing: 12) {
-                        Divider()
-                            .padding(.vertical, 2)
+                        // Playful divider
+                        HStack {
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.cyan, Color.blue, Color.cyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 2)
+                                .cornerRadius(1)
+                            
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.cyan)
+                                .padding(.horizontal, 8)
+                            
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.cyan, Color.blue, Color.cyan],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 2)
+                                .cornerRadius(1)
+                        }
+                        .padding(.vertical, 4)
                         
                         // Image Style Selection for Lecture
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Image Style")
-                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                .foregroundColor(.primary)
+                            HStack {
+                                Image(systemName: "paintbrush.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.cyan)
+                                Text("Image Style")
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
                             
                             Menu {
                                 ForEach(ImageStyle.allCases, id: \.self) { style in
@@ -834,8 +975,8 @@ struct ContentGenerationView: View {
                                             Text(style.displayName)
                                             if viewModel.selectedImageStyle == style {
                                                 Spacer()
-                                                Image(systemName: "checkmark")
-                                                    .foregroundColor(.accentColor)
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.cyan)
                                             }
                                         }
                                     }
@@ -845,31 +986,60 @@ struct ContentGenerationView: View {
                                     Text(viewModel.selectedImageStyle.displayName)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(.secondary)
+                                    Image(systemName: "chevron.down.circle.fill")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.cyan)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(.systemGray6))
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [Color.cyan.opacity(0.1), Color.blue.opacity(0.1)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
                                 )
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.cyan.opacity(0.3), lineWidth: 1.5)
                                 )
                             }
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 }
             }
         }
         .padding(isIPad ? 20 : 14)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(14)
-        .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(colorScheme == .dark ? 0.08 : 1),
+                            Color.cyan.opacity(0.02),
+                            Color.white.opacity(colorScheme == .dark ? 0.08 : 1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.cyan.opacity(0.2), Color.blue.opacity(0.1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
     }
     
     // MARK: - Generate Button
