@@ -506,45 +506,35 @@ struct ContentGenerationView: View {
             // Compact OCR Buttons (matching profile screen style)
             HStack(spacing: isIPad ? 12 : 8) {
                 Button(action: { showingPhotosPicker = true }) {
-                    HStack(spacing: isIPad ? 8 : 6) {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
-                            .foregroundColor(.cyan)
-                        Text("Photos")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
-                            .foregroundColor(.cyan)
-                    }
-                    .padding(.vertical, isIPad ? 8 : 6)
-                    .padding(.horizontal, isIPad ? 12 : 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cyan.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
-                            )
-                    )
+                    Text("Photos")
+                        .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                        .foregroundColor(.cyan)
+                        .padding(.vertical, isIPad ? 8 : 6)
+                        .padding(.horizontal, isIPad ? 12 : 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.cyan.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.cyan.opacity(0.2), lineWidth: 1)
+                                )
+                        )
                 }
                 
                 Button(action: { showingFileImporter = true }) {
-                    HStack(spacing: isIPad ? 8 : 6) {
-                        Image(systemName: "doc.badge.plus")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
-                            .foregroundColor(.purple)
-                        Text("File Import")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
-                            .foregroundColor(.purple)
-                    }
-                    .padding(.vertical, isIPad ? 8 : 6)
-                    .padding(.horizontal, isIPad ? 12 : 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.purple.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-                            )
-                    )
+                    Text("File Import")
+                        .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                        .foregroundColor(.purple)
+                        .padding(.vertical, isIPad ? 8 : 6)
+                        .padding(.horizontal, isIPad ? 12 : 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.purple.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+                                )
+                        )
                 }
                 
                 Button(action: {
@@ -559,24 +549,19 @@ struct ContentGenerationView: View {
                         }
                     }
                 }) {
-                    HStack(spacing: isIPad ? 8 : 6) {
-                        Image(systemName: "camera")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .medium))
-                            .foregroundColor(.orange)
-                        Text("Camera")
-                            .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
-                            .foregroundColor(.orange)
-                    }
-                    .padding(.vertical, isIPad ? 8 : 6)
-                    .padding(.horizontal, isIPad ? 12 : 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.orange.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.orange.opacity(0.2), lineWidth: 1)
-                            )
-                    )
+                    Text("Camera")
+                        .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                        .foregroundColor(.orange)
+                        .padding(.vertical, isIPad ? 8 : 6)
+                        .padding(.horizontal, isIPad ? 12 : 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.orange.opacity(0.08))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                                )
+                        )
                 }
             }
             
@@ -669,12 +654,32 @@ struct ContentGenerationView: View {
                     Text("Reading Level")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
-                    Picker("Reading Level", selection: $viewModel.selectedLevel) {
+                    
+                    // Custom Rounded Segmented Control
+                    HStack(spacing: 0) {
                         ForEach(ReadingLevel.allCases, id: \.self) { level in
-                            Text(level.displayName).tag(level)
+                            Button(action: {
+                                viewModel.selectedLevel = level
+                            }) {
+                                Text(level.displayName)
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                    .foregroundColor(viewModel.selectedLevel == level ? .white : .primary)
+                                    .padding(.vertical, isIPad ? 10 : 8)
+                                    .padding(.horizontal, isIPad ? 16 : 12)
+                                    .frame(maxWidth: .infinity)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(viewModel.selectedLevel == level ? Color.accentColor : Color.clear)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .padding(3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color(.systemGray6))
+                    )
                 }
                 
                 // Content Type Selection
@@ -682,12 +687,32 @@ struct ContentGenerationView: View {
                     Text("Content Type")
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
-                    Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
+                    
+                    // Custom Rounded Segmented Control
+                    HStack(spacing: 0) {
                         ForEach(SummarizationTier.allCases, id: \.self) { tier in
-                            Text(tier.displayName).tag(tier)
+                            Button(action: {
+                                viewModel.selectedSummarizationTier = tier
+                            }) {
+                                Text(tier.displayName)
+                                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                    .foregroundColor(viewModel.selectedSummarizationTier == tier ? .white : .primary)
+                                    .padding(.vertical, isIPad ? 10 : 8)
+                                    .padding(.horizontal, isIPad ? 16 : 12)
+                                    .frame(maxWidth: .infinity)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(viewModel.selectedSummarizationTier == tier ? Color.accentColor : Color.clear)
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .padding(3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 15)
+                            .fill(Color(.systemGray6))
+                    )
                 }
                 
                 // Story-specific options
