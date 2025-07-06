@@ -856,54 +856,103 @@ class ContentGenerationViewModel: ObservableObject {
                             print("[Content] Block type: \(block.type.rawValue)")
                             print("[Content] Block content: \(block.content ?? "No content")")
                             print("[Content] Block alt: \(block.alt ?? "No alt text")")
+                            print("[Content] Block URL from backend: \(block.url ?? "No URL")")
                             
-                            // Use alt text if content is empty
-                            let imagePrompt = block.content ?? block.alt
-                            
-                            // Skip if both content and alt are empty
-                            guard let prompt = imagePrompt, !prompt.isEmpty else {
-                                print("[Content] WARNING: Both block content and alt text are empty, skipping image generation")
-                                continue
-                            }
-                            
-                            print("[Content] Generating image for block using prompt: \(prompt)")
-                            if let image = await fetchImageForBlock(block: block) {
-                                print("[Content] Successfully generated image for block ID: \(block.id.uuidString)")
-                                print("[Content] Image size: \(image.size)")
+                            // ✅ CHECK: Does this block already have an image URL from the backend?
+                            if let existingImageUrl = block.url {
+                                print("[Content] ✅ Block \(index + 1) already has image from backend: \(existingImageUrl)")
                                 
-                                if let imageData = image.jpegData(compressionQuality: 0.8),
-                                   let userId = Auth.auth().currentUser?.uid {
-                                    print("[Content] Image data size: \(imageData.count) bytes")
-                                    
-                                    if imageData.count == 0 {
-                                        print("[Content] ERROR: Image data is empty for block ID: \(block.id.uuidString)")
-                                        continue
-                                    }
-                                    
-                                    do {
-                                        let fileName = "content_\(block.id.uuidString).jpg"
-                                        let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
-                                        print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
-                                        print("[Content] Download URL: \(downloadURL.absoluteString)")
+                                // Download the existing image and upload to Firebase
+                                do {
+                                    print("[Content] 📥 Downloading existing image from backend URL...")
+                                    if let imageUrl = URL(string: existingImageUrl) {
+                                        let (imageData, imageResponse) = try await session.data(from: imageUrl)
                                         
-                                        updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
-                                        
-                                        await MainActor.run {
-                                            self.blocks = updatedBlocks
-                                            print("[Content] Updated UI with new block image URL")
+                                        guard let httpImageResponse = imageResponse as? HTTPURLResponse,
+                                              httpImageResponse.statusCode == 200 else {
+                                            print("[Content] ❌ ERROR: Failed to download existing image from backend URL")
+                                            throw NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download existing image"])
                                         }
-                                    } catch {
-                                        print("[Content] ERROR uploading image for block ID \(block.id.uuidString)")
-                                        print("[Content] Error type: \(type(of: error))")
-                                        print("[Content] Error description: \(error.localizedDescription)")
-                                        print("[Content] Full error details: \(error)")
+                                        
+                                        print("[Content] ✅ Successfully downloaded existing image: \(imageData.count) bytes")
+                                        
+                                        if let image = UIImage(data: imageData),
+                                           let userId = Auth.auth().currentUser?.uid {
+                                            print("[Content] ✅ Converted existing image to UIImage. Size: \(image.size)")
+                                            
+                                            if let imageData = image.jpegData(compressionQuality: 0.8) {
+                                                let fileName = "content_\(block.id.uuidString).jpg"
+                                                print("[Content] 📁 Uploading existing image to Firebase Storage path: \(fileName)")
+                                                
+                                                let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
+                                                print("[Content] ✅ Successfully uploaded existing image to Firebase Storage.")
+                                                print("[Content] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
+                                                
+                                                updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
+                                                
+                                                await MainActor.run {
+                                                    self.blocks = updatedBlocks
+                                                    print("[Content] ✅ UI updated with existing image Firebase URL for block \(index + 1).")
+                                                }
+                                            }
+                                        }
                                     }
-                                } else {
-                                    print("[Content] ERROR: Failed to convert image to JPEG data or get user ID")
-                                    print("[Content] User ID available: \(Auth.auth().currentUser?.uid != nil)")
+                                } catch {
+                                    print("[Content] ❌ ERROR processing existing image for block \(index + 1): \(error.localizedDescription)")
+                                    print("[Content] 🔄 Falling back to generate new image...")
+                                    // Fall through to generate new image if existing one fails
                                 }
                             } else {
-                                print("[Content] WARNING: Failed to generate image for block ID: \(block.id.uuidString)")
+                                print("[Content] 📝 Block \(index + 1) has no existing image, generating new one...")
+                                
+                                // Use alt text if content is empty
+                                let imagePrompt = block.content ?? block.alt
+                                
+                                // Skip if both content and alt are empty
+                                guard let prompt = imagePrompt, !prompt.isEmpty else {
+                                    print("[Content] WARNING: Both block content and alt text are empty, skipping image generation")
+                                    continue
+                                }
+                                
+                                print("[Content] Generating image for block using prompt: \(prompt)")
+                                if let image = await fetchImageForBlock(block: block) {
+                                    print("[Content] Successfully generated image for block ID: \(block.id.uuidString)")
+                                    print("[Content] Image size: \(image.size)")
+                                    
+                                    if let imageData = image.jpegData(compressionQuality: 0.8),
+                                       let userId = Auth.auth().currentUser?.uid {
+                                        print("[Content] Image data size: \(imageData.count) bytes")
+                                        
+                                        if imageData.count == 0 {
+                                            print("[Content] ERROR: Image data is empty for block ID: \(block.id.uuidString)")
+                                            continue
+                                        }
+                                        
+                                        do {
+                                            let fileName = "content_\(block.id.uuidString).jpg"
+                                            let downloadURL = try await uploadImageToFirebase(imageData: imageData, fileName: fileName, userId: userId)
+                                            print("[Content] Successfully uploaded image for block ID \(block.id.uuidString) to Firebase Storage")
+                                            print("[Content] Download URL: \(downloadURL.absoluteString)")
+                                            
+                                            updatedBlocks[index].firebaseImageUrl = downloadURL.absoluteString
+                                            
+                                            await MainActor.run {
+                                                self.blocks = updatedBlocks
+                                                print("[Content] Updated UI with new block image URL")
+                                            }
+                                        } catch {
+                                            print("[Content] ERROR uploading image for block ID \(block.id.uuidString)")
+                                            print("[Content] Error type: \(type(of: error))")
+                                            print("[Content] Error description: \(error.localizedDescription)")
+                                            print("[Content] Full error details: \(error)")
+                                        }
+                                    } else {
+                                        print("[Content] ERROR: Failed to convert image to JPEG data or get user ID")
+                                        print("[Content] User ID available: \(Auth.auth().currentUser?.uid != nil)")
+                                    }
+                                } else {
+                                    print("[Content] WARNING: Failed to generate image for block ID: \(block.id.uuidString)")
+                                }
                             }
                         }
                     }
@@ -995,91 +1044,154 @@ class ContentGenerationViewModel: ObservableObject {
             print("[Story][ImageGen] ========================================")
             print("[Story][ImageGen] Processing chapter \(index + 1)/\(newStory.chapters.count): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
             print("[Story][ImageGen] Chapter content length: \(chapter.content.count) characters")
-            var retryCount = 0
-            var success = false
             
-            while retryCount < maxRetries && !success {
-                print("[Story][ImageGen] Attempt \(retryCount + 1) of \(maxRetries) for chapter \(index + 1)")
+            // ✅ CHECK: Does this chapter already have an image from the backend?
+            if let existingImageUrl = chapter.imageUrl {
+                print("[Story][ImageGen] ✅ Chapter \(index + 1) already has image from backend: \(existingImageUrl)")
+                
+                // Download the existing image and upload to Firebase
                 do {
-                    // fetchImageForChapter now correctly gets image data from GCS URL
-                    print("[Story][ImageGen] Calling fetchImageForChapter for chapter \(index + 1)...")
-                    if let image = await fetchImageForChapter(chapter: chapter, maxSize: imageSize) {
-                        print("[Story][ImageGen] ✅ Successfully fetched UIImage for chapter \(index + 1). Image size: \(image.size)")
+                    print("[Story][ImageGen] 📥 Downloading existing image from backend URL...")
+                    if let imageUrl = URL(string: existingImageUrl) {
+                        let (imageData, imageResponse) = try await session.data(from: imageUrl)
                         
-                        if let imageData = image.jpegData(compressionQuality: 0.8),
+                        guard let httpImageResponse = imageResponse as? HTTPURLResponse,
+                              httpImageResponse.statusCode == 200 else {
+                            print("[Story][ImageGen] ❌ ERROR: Failed to download existing image from backend URL")
+                            throw NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download existing image"])
+                        }
+                        
+                        print("[Story][ImageGen] ✅ Successfully downloaded existing image: \(imageData.count) bytes")
+                        
+                        if let image = UIImage(data: imageData),
                            let userId = Auth.auth().currentUser?.uid {
-                            print("[Story][ImageGen] ✅ Converted UIImage to JPEG data. Size: \(imageData.count) bytes for chapter \(index + 1). User ID: \(userId)")
+                            print("[Story][ImageGen] ✅ Converted existing image to UIImage. Size: \(image.size)")
                             
-                            if imageData.count == 0 {
-                                print("[Story][ImageGen] ❌ ERROR: Generated image data is empty for chapter \(index + 1).")
-                                throw NSError(domain: "ImageProcessingError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Generated image data is empty"])
-                            }
-                            
-                            let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
-                            print("[Story][ImageGen] 📁 Preparing to upload image to Firebase Storage path: \(imagePath)")
-                            
-                            let metadata = StorageMetadata()
-                            metadata.contentType = "image/jpeg"
-                            // Using unique keys for custom metadata to avoid any potential conflicts
-                            metadata.customMetadata = [
-                                "storyId": newStory.id.uuidString,
-                                "chapterId": chapter.id.uuidString,
-                                "chapterTitle": chapter.title ?? "Untitled",
-                                "uploadTimestamp": ISO8601DateFormatter().string(from: Date()) // Changed key from "uploadDate"
-                            ]
-                            
-                            print("[Story][ImageGen] Firebase Storage Metadata for chapter \(index + 1):")
-                            print("[Story][ImageGen] - ContentType: \(metadata.contentType ?? "Not set")")
-                            print("[Story][ImageGen] - CustomMetadata: \(metadata.customMetadata ?? [:])")
-                            
-                            // Assuming firestoreService.uploadImage is the corrected version from previous steps
-                            print("[Story][ImageGen] 🔄 Uploading image to Firebase Storage...")
-                            let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
-                            print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
-                            print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
-                            
-                            updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
-                            success = true
-                            
-                            await MainActor.run {
-                                if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
-                                    currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
-                                    self.currentStory = currentStory // Update the published property
-                                    print("[Story][ImageGen] ✅ UI updated with new firebaseImageUrl for chapter \(index + 1).")
-                                } else {
-                                    print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
+                            if let imageData = image.jpegData(compressionQuality: 0.8) {
+                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
+                                print("[Story][ImageGen] 📁 Uploading existing image to Firebase Storage path: \(imagePath)")
+                                
+                                let metadata = StorageMetadata()
+                                metadata.contentType = "image/jpeg"
+                                metadata.customMetadata = [
+                                    "storyId": newStory.id.uuidString,
+                                    "chapterId": chapter.id.uuidString,
+                                    "chapterTitle": chapter.title ?? "Untitled",
+                                    "uploadTimestamp": ISO8601DateFormatter().string(from: Date()),
+                                    "source": "backend_generated" // Mark as from backend
+                                ]
+                                
+                                let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
+                                print("[Story][ImageGen] ✅ Successfully uploaded existing image to Firebase Storage.")
+                                print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
+                                
+                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                
+                                await MainActor.run {
+                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
+                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                        self.currentStory = currentStory
+                                        print("[Story][ImageGen] ✅ UI updated with existing image Firebase URL for chapter \(index + 1).")
+                                    }
                                 }
                             }
-                        } else {
-                            let reason = Auth.auth().currentUser?.uid == nil ? "User ID is nil." : "Failed to convert UIImage to JPEG data."
-                            print("[Story][ImageGen] ❌ ERROR: \(reason) for chapter \(index + 1).")
-                            throw NSError(domain: "ImageProcessingError", code: 2, userInfo: [NSLocalizedDescriptionKey: reason])
                         }
-                    } else {
-                        print("[Story][ImageGen] ❌ ERROR: fetchImageForChapter returned nil (failed to generate/download image) for chapter \(index + 1).")
-                        throw NSError(domain: "ImageFetchingError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to generate or download image for chapter."])
                     }
                 } catch {
-                    retryCount += 1
-                    print("[Story][ImageGen] ❌ ERROR during attempt \(retryCount) for chapter \(index + 1): \(error.localizedDescription)")
-                    print("[Story][ImageGen] Error Type: \(type(of: error))")
-                    print("[Story][ImageGen] Full Error: \(error)")
-                    
-                    if retryCount >= maxRetries {
-                        let errorMessageText = "Failed to process image for chapter '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString)) after \(maxRetries) attempts: \(error.localizedDescription)"
-                        print("[Story][ImageGen] 🚨 FINAL ERROR: \(errorMessageText)")
-                        // Optionally update UI with this specific error
-                        // await MainActor.run { self.errorMessage = errorMessageText }
-                    } else {
-                        print("[Story][ImageGen] 🔄 Retrying in \(retryCount * 2) seconds...") // Increased retry delay
-                        try? await Task.sleep(nanoseconds: UInt64(2_000_000_000 * retryCount))
+                    print("[Story][ImageGen] ❌ ERROR processing existing image for chapter \(index + 1): \(error.localizedDescription)")
+                    print("[Story][ImageGen] 🔄 Falling back to generate new image...")
+                    // Fall through to generate new image if existing one fails
+                }
+            } else {
+                print("[Story][ImageGen] 📝 Chapter \(index + 1) has no existing image, generating new one...")
+                
+                var retryCount = 0
+                var success = false
+                
+                while retryCount < maxRetries && !success {
+                    print("[Story][ImageGen] Attempt \(retryCount + 1) of \(maxRetries) for chapter \(index + 1)")
+                    do {
+                        // fetchImageForChapter now correctly gets image data from GCS URL
+                        print("[Story][ImageGen] Calling fetchImageForChapter for chapter \(index + 1)...")
+                        if let image = await fetchImageForChapter(chapter: chapter, maxSize: imageSize) {
+                            print("[Story][ImageGen] ✅ Successfully fetched UIImage for chapter \(index + 1). Image size: \(image.size)")
+                            
+                            if let imageData = image.jpegData(compressionQuality: 0.8),
+                               let userId = Auth.auth().currentUser?.uid {
+                                print("[Story][ImageGen] ✅ Converted UIImage to JPEG data. Size: \(imageData.count) bytes for chapter \(index + 1). User ID: \(userId)")
+                                
+                                if imageData.count == 0 {
+                                    print("[Story][ImageGen] ❌ ERROR: Generated image data is empty for chapter \(index + 1).")
+                                    throw NSError(domain: "ImageProcessingError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Generated image data is empty"])
+                                }
+                                
+                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
+                                print("[Story][ImageGen] 📁 Preparing to upload image to Firebase Storage path: \(imagePath)")
+                                
+                                let metadata = StorageMetadata()
+                                metadata.contentType = "image/jpeg"
+                                // Using unique keys for custom metadata to avoid any potential conflicts
+                                metadata.customMetadata = [
+                                    "storyId": newStory.id.uuidString,
+                                    "chapterId": chapter.id.uuidString,
+                                    "chapterTitle": chapter.title ?? "Untitled",
+                                    "uploadTimestamp": ISO8601DateFormatter().string(from: Date()), // Changed key from "uploadDate"
+                                    "source": "frontend_generated" // Mark as from frontend
+                                ]
+                                
+                                print("[Story][ImageGen] Firebase Storage Metadata for chapter \(index + 1):")
+                                print("[Story][ImageGen] - ContentType: \(metadata.contentType ?? "Not set")")
+                                print("[Story][ImageGen] - CustomMetadata: \(metadata.customMetadata ?? [:])")
+                                
+                                // Assuming firestoreService.uploadImage is the corrected version from previous steps
+                                print("[Story][ImageGen] 🔄 Uploading image to Firebase Storage...")
+                                let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
+                                print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
+                                print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
+                                
+                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                success = true
+                                
+                                await MainActor.run {
+                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
+                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                        self.currentStory = currentStory // Update the published property
+                                        print("[Story][ImageGen] ✅ UI updated with new firebaseImageUrl for chapter \(index + 1).")
+                                    } else {
+                                        print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
+                                    }
+                                }
+                            } else {
+                                let reason = Auth.auth().currentUser?.uid == nil ? "User ID is nil." : "Failed to convert UIImage to JPEG data."
+                                print("[Story][ImageGen] ❌ ERROR: \(reason) for chapter \(index + 1).")
+                                throw NSError(domain: "ImageProcessingError", code: 2, userInfo: [NSLocalizedDescriptionKey: reason])
+                            }
+                        } else {
+                            print("[Story][ImageGen] ❌ ERROR: fetchImageForChapter returned nil (failed to generate/download image) for chapter \(index + 1).")
+                            throw NSError(domain: "ImageFetchingError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to generate or download image for chapter."])
+                        }
+                    } catch {
+                        retryCount += 1
+                        print("[Story][ImageGen] ❌ ERROR during attempt \(retryCount) for chapter \(index + 1): \(error.localizedDescription)")
+                        print("[Story][ImageGen] Error Type: \(type(of: error))")
+                        print("[Story][ImageGen] Full Error: \(error)")
+                        
+                        if retryCount >= maxRetries {
+                            let errorMessageText = "Failed to process image for chapter '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString)) after \(maxRetries) attempts: \(error.localizedDescription)"
+                            print("[Story][ImageGen] 🚨 FINAL ERROR: \(errorMessageText)")
+                            // Optionally update UI with this specific error
+                            // await MainActor.run { self.errorMessage = errorMessageText }
+                        } else {
+                            print("[Story][ImageGen] 🔄 Retrying in \(retryCount * 2) seconds...") // Increased retry delay
+                            try? await Task.sleep(nanoseconds: UInt64(2_000_000_000 * retryCount))
+                        }
                     }
                 }
-            }
-            if !success {
-                 print("[Story][ImageGen] ⚠️ WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title ?? "Untitled")') after all retries. It will not have an image.")
-            } else {
-                print("[Story][ImageGen] ✅ SUCCESS: Chapter \(index + 1) image processed successfully!")
+                if !success {
+                     print("[Story][ImageGen] ⚠️ WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title ?? "Untitled")') after all retries. It will not have an image.")
+                } else {
+                    print("[Story][ImageGen] ✅ SUCCESS: Chapter \(index + 1) image processed successfully!")
+                }
             }
             print("[Story][ImageGen] ========================================")
         }
@@ -1902,9 +2014,46 @@ struct ContentBlock: Identifiable, Codable {
     let content: String?
     let alt: String?
     var firebaseImageUrl: String?
+    let url: String? // Direct GCS URL that the Python backend adds for image blocks
     let options: [QuizOption]?
     let correctAnswerID: String?
     let explanation: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case content
+        case alt
+        case url // Key for the GCS URL added by Python backend
+        case options
+        case correctAnswerID
+        case explanation
+        // firebaseImageUrl is not decoded from this JSON
+    }
+    
+    // Custom decoder
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        if let idString = try container.decodeIfPresent(String.self, forKey: .id),
+           let parsedUUID = UUID(uuidString: idString) {
+            self.id = parsedUUID
+        } else {
+            print("[ContentBlock.decoder] Warning: Block 'id' missing or invalid in JSON. Generating new client-side UUID.")
+            self.id = UUID()
+        }
+        
+        self.type = try container.decode(BlockType.self, forKey: .type)
+        self.content = try container.decodeIfPresent(String.self, forKey: .content)
+        self.alt = try container.decodeIfPresent(String.self, forKey: .alt)
+        self.url = try container.decodeIfPresent(String.self, forKey: .url) // Catches the GCS URL
+        self.options = try container.decodeIfPresent([QuizOption].self, forKey: .options)
+        self.correctAnswerID = try container.decodeIfPresent(String.self, forKey: .correctAnswerID)
+        self.explanation = try container.decodeIfPresent(String.self, forKey: .explanation)
+        
+        // firebaseImageUrl is not set during this initial decoding from backend
+        self.firebaseImageUrl = nil
+    }
 }
 
 enum BlockType: String, Codable {
