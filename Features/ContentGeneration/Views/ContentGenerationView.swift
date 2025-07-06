@@ -655,31 +655,13 @@ struct ContentGenerationView: View {
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
                     
-                    // Custom Rounded Segmented Control
-                    HStack(spacing: 0) {
+                    Picker("Reading Level", selection: $viewModel.selectedLevel) {
                         ForEach(ReadingLevel.allCases, id: \.self) { level in
-                            Button(action: {
-                                viewModel.selectedLevel = level
-                            }) {
-                                Text(level.displayName)
-                                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                    .foregroundColor(viewModel.selectedLevel == level ? .white : .primary)
-                                    .padding(.vertical, isIPad ? 10 : 8)
-                                    .padding(.horizontal, isIPad ? 16 : 12)
-                                    .frame(maxWidth: .infinity)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(viewModel.selectedLevel == level ? Color.accentColor : Color.clear)
-                                    )
-                            }
-                            .buttonStyle(PlainButtonStyle())
+                            Text(level.displayName).tag(level)
                         }
                     }
-                    .padding(3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15)
-                            .fill(Color(.systemGray6))
-                    )
+                    .pickerStyle(.segmented)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 
                 // Content Type Selection
@@ -688,31 +670,13 @@ struct ContentGenerationView: View {
                         .font(.system(size: isIPad ? 16 : 15, weight: .medium))
                         .foregroundColor(.primary)
                     
-                    // Custom Rounded Segmented Control
-                    HStack(spacing: 0) {
+                    Picker("Content Type", selection: $viewModel.selectedSummarizationTier) {
                         ForEach(SummarizationTier.allCases, id: \.self) { tier in
-                            Button(action: {
-                                viewModel.selectedSummarizationTier = tier
-                            }) {
-                                Text(tier.displayName)
-                                    .font(.system(size: isIPad ? 14 : 13, weight: .medium))
-                                    .foregroundColor(viewModel.selectedSummarizationTier == tier ? .white : .primary)
-                                    .padding(.vertical, isIPad ? 10 : 8)
-                                    .padding(.horizontal, isIPad ? 16 : 12)
-                                    .frame(maxWidth: .infinity)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(viewModel.selectedSummarizationTier == tier ? Color.accentColor : Color.clear)
-                                    )
-                            }
-                            .buttonStyle(PlainButtonStyle())
+                            Text(tier.displayName).tag(tier)
                         }
                     }
-                    .padding(3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 15)
-                            .fill(Color(.systemGray6))
-                    )
+                    .pickerStyle(.segmented)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 
                 // Story-specific options
