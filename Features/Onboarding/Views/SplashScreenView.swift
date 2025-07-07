@@ -54,8 +54,32 @@ struct SplashScreenView: View {
                     .foregroundColor(.white)
                     .shadow(radius: 5)
                     .padding(.bottom, 50)
+                
+                Spacer()
+                
+                VStack(spacing: 16) {
+                    Button(action: {
+                        withAnimation {
+                            isActive = true
+                        }
+                    }) {
+                        Text("Get Started")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.black)
+                            .foregroundColor(.white)
+                            .cornerRadius(22)
+                            .padding(.horizontal, 40)
+                    }
+                    Text("By clicking Get Started you agree to our Terms of Service and Privacy Policy.")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                .padding(.bottom, 40)
             }
-            .opacity(videoOpacity)
         }
         .onAppear {
             print("SplashScreenView: onAppear called")
