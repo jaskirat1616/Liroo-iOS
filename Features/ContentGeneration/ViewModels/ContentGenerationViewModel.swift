@@ -7,6 +7,30 @@ import BackgroundTasks
 import FirebaseCrashlytics
 import FirebaseMessaging
 
+// MARK: - Content Generation Error Types
+enum ContentGenerationError: Error, LocalizedError {
+    case encodingFailed
+    case invalidResponse
+    case backendError(String)
+    case httpError(Int)
+    case parsingFailed
+    
+    var errorDescription: String? {
+        switch self {
+        case .encodingFailed:
+            return "Failed to encode request data"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .backendError(let message):
+            return "Backend error: \(message)"
+        case .httpError(let code):
+            return "HTTP error: \(code)"
+        case .parsingFailed:
+            return "Failed to parse response data"
+        }
+    }
+}
+
 @MainActor
 class ContentGenerationViewModel: ObservableObject {
     @Published var inputText = ""
@@ -532,12 +556,12 @@ class ContentGenerationViewModel: ObservableObject {
         }
         
         // Save to Firebase
-        if let userId = AuthViewModel.shared.currentUser?.uid {
-            await saveStoryToFirebase(story, userId: userId)
+        if let userId = Auth.auth().currentUser?.uid {
+            await saveStoryToFirebase(story: story, userId: userId)
         }
         
         await MainActor.run {
-            self.generatedStory = story
+            self.currentStory = story
             self.statusMessage = nil
         }
     }
@@ -985,7 +1009,7 @@ class ContentGenerationViewModel: ObservableObject {
         
         for (index, chapter) in newStory.chapters.enumerated() {
             print("[Story][ImageGen] ========================================")
-            print("[Story][ImageGen] Processing chapter \(index + 1)/\(totalChapters): '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString))")
+            print("[Story][ImageGen] Processing chapter \(index + 1)/\(totalChapters): '\(chapter.title)' (ID: \(chapter.id))")
             print("[Story][ImageGen] Chapter content length: \(chapter.content.count) characters")
             
             // Sub-step 1: Check for existing image
@@ -1027,7 +1051,7 @@ class ContentGenerationViewModel: ObservableObject {
                             print("[Story][ImageGen] ✅ Converted existing image to UIImage. Size: \(image.size)")
                             
                             if let imageData = image.jpegData(compressionQuality: 0.8) {
-                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
+                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id).jpg"
                                 print("[Story][ImageGen] 📁 Uploading existing image to Firebase Storage path: \(imagePath)")
                                 
                                 // Sub-step 3: Upload to Firebase
@@ -1042,8 +1066,8 @@ class ContentGenerationViewModel: ObservableObject {
                                 metadata.contentType = "image/jpeg"
                                 metadata.customMetadata = [
                                     "storyId": newStory.id.uuidString,
-                                    "chapterId": chapter.id.uuidString,
-                                    "chapterTitle": chapter.title ?? "Untitled",
+                                    "chapterId": chapter.id,
+                                    "chapterTitle": chapter.title,
                                     "uploadTimestamp": ISO8601DateFormatter().string(from: Date()),
                                     "source": "backend_generated" // Mark as from backend
                                 ]
@@ -1052,14 +1076,11 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded existing image to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                // Note: The new model structure doesn't have firebaseImageUrl, so we'll skip this update
+                                // The backend now provides all images directly
                                 
                                 await MainActor.run {
-                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
-                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
-                                        self.currentStory = currentStory
-                                        print("[Story][ImageGen] ✅ UI updated with existing image Firebase URL for chapter \(index + 1).")
-                                    }
+                                    print("[Story][ImageGen] ✅ Existing image processed for chapter \(index + 1).")
                                 }
                             }
                         }
@@ -1100,7 +1121,7 @@ class ContentGenerationViewModel: ObservableObject {
                                     throw NSError(domain: "ImageProcessingError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Generated image data is empty"])
                                 }
                                 
-                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id.uuidString).jpg"
+                                let imagePath = "stories/\(userId)/\(newStory.id.uuidString)/\(chapter.id).jpg"
                                 print("[Story][ImageGen] 📁 Preparing to upload image to Firebase Storage path: \(imagePath)")
                                 
                                 // Sub-step 3: Upload to Firebase
@@ -1116,8 +1137,8 @@ class ContentGenerationViewModel: ObservableObject {
                                 // Using unique keys for custom metadata to avoid any potential conflicts
                                 metadata.customMetadata = [
                                     "storyId": newStory.id.uuidString,
-                                    "chapterId": chapter.id.uuidString,
-                                    "chapterTitle": chapter.title ?? "Untitled",
+                                    "chapterId": chapter.id,
+                                    "chapterTitle": chapter.title,
                                     "uploadTimestamp": ISO8601DateFormatter().string(from: Date()), // Changed key from "uploadDate"
                                     "source": "frontend_generated" // Mark as from frontend
                                 ]
@@ -1132,17 +1153,12 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                // Note: The new model structure doesn't have firebaseImageUrl, so we'll skip this update
+                                // The backend now provides all images directly
                                 success = true
                                 
                                 await MainActor.run {
-                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
-                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
-                                        self.currentStory = currentStory // Update the published property
-                                        print("[Story][ImageGen] ✅ UI updated with new firebaseImageUrl for chapter \(index + 1).")
-                                    } else {
-                                        print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
-                                    }
+                                    print("[Story][ImageGen] ✅ New image processed for chapter \(index + 1).")
                                 }
                             } else {
                                 let reason = Auth.auth().currentUser?.uid == nil ? "User ID is nil." : "Failed to convert UIImage to JPEG data."
@@ -1160,7 +1176,7 @@ class ContentGenerationViewModel: ObservableObject {
                         print("[Story][ImageGen] Full Error: \(error)")
                         
                         if retryCount >= maxRetries {
-                            let errorMessageText = "Failed to process image for chapter '\(chapter.title ?? "Untitled")' (ID: \(chapter.id.uuidString)) after \(maxRetries) attempts: \(error.localizedDescription)"
+                            let errorMessageText = "Failed to process image for chapter '\(chapter.title)' (ID: \(chapter.id)) after \(maxRetries) attempts: \(error.localizedDescription)"
                             print("[Story][ImageGen] 🚨 FINAL ERROR: \(errorMessageText)")
                             // Optionally update UI with this specific error
                             // await MainActor.run { self.errorMessage = errorMessageText }
@@ -1171,7 +1187,7 @@ class ContentGenerationViewModel: ObservableObject {
                     }
                 }
                 if !success {
-                     print("[Story][ImageGen] ⚠️ WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title ?? "Untitled")') after all retries. It will not have an image.")
+                     print("[Story][ImageGen] ⚠️ WARNING: Failed to process image for chapter \(index + 1) ('\(chapter.title)') after all retries. It will not have an image.")
                 } else {
                     print("[Story][ImageGen] ✅ SUCCESS: Chapter \(index + 1) image processed successfully!")
                 }
