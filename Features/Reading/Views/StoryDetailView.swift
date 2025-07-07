@@ -43,6 +43,12 @@ struct StoryDetailView: View {
                     storyOverview(overview)
                         .padding(.bottom, 24)
                 }
+                
+                // Main Characters Section
+                if let characters = story.mainCharacters, !characters.isEmpty {
+                    charactersSection(characters)
+                        .padding(.bottom, 24)
+                }
 
                 // Chapters
                 if let chapters = story.chapters, !chapters.isEmpty {
@@ -58,9 +64,6 @@ struct StoryDetailView: View {
     private var isIPad: Bool {
         UIDevice.current.userInterfaceIdiom == .pad
     }
-        
-    
-       
     
     // MARK: - Story Header
     private var storyHeader: some View {
@@ -105,6 +108,29 @@ struct StoryDetailView: View {
         .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
+    // MARK: - Characters Section
+    private func charactersSection(_ characters: [FirebaseCharacter]) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Main Characters")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(primaryTextColor)
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
+                ForEach(characters) { character in
+                    CharacterCard(
+                        character: character,
+                        baseFontSize: baseFontSize,
+                        primaryTextColor: primaryTextColor,
+                        secondaryTextColor: secondaryTextColor
+                    )
+                }
+            }
+        }
+    }
+    
     // MARK: - Chapters Section
     private func chaptersSection(_ chapters: [FirebaseChapter]) -> some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -127,6 +153,75 @@ struct StoryDetailView: View {
                 )
             }
         }
+    }
+}
+
+// MARK: - Character Card
+struct CharacterCard: View {
+    let character: FirebaseCharacter
+    let baseFontSize: Double
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Character Image
+            if let imageUrl = character.imageUrl, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.gray)
+                        )
+                }
+                .frame(height: 120)
+                .clipped()
+                .cornerRadius(12)
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 120)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.gray)
+                    )
+                    .cornerRadius(12)
+            }
+            
+            // Character Info
+            VStack(alignment: .leading, spacing: 8) {
+                Text(character.name ?? "Unknown Character")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(primaryTextColor)
+                    .lineLimit(1)
+                
+                if let description = character.description, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 12))
+                        .foregroundColor(secondaryTextColor)
+                        .lineLimit(2)
+                }
+                
+                if let personality = character.personality, !personality.isEmpty {
+                    Text("Personality: \(personality)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(secondaryTextColor)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
 }
 
@@ -167,49 +262,136 @@ struct ReadingChapterView: View {
                     .foregroundColor(primaryTextColor)
             }
             
-            // Chapter Image
-            if let imageUrlString = chapter.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
-                        VStack {
+            // Chapter Main Image
+            if let imageUrl = chapter.firebaseImageUrl ?? chapter.imageUrl, !imageUrl.isEmpty {
+                AsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 200)
+                        .overlay(
                             ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading chapter image...")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(secondaryTextColor)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(1, contentMode: .fill)
-                            .frame(maxWidth: isIPad ? 400 : .infinity)
-                            .frame(height: isIPad ? 400 : 300)
-                            .clipped()
-                            .cornerRadius(12)
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundColor(.gray)
-                            Text("Failed to load chapter image")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.red)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    @unknown default:
-                        EmptyView()
-                    }
+                                .progressViewStyle(CircularProgressViewStyle())
+                        )
                 }
                 .frame(maxWidth: .infinity)
+                .cornerRadius(12)
+            }
+            
+            // Key Events Section
+            if let keyEvents = chapter.keyEvents, !keyEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Key Events")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(primaryTextColor)
+                    
+                    ForEach(keyEvents, id: \.self) { event in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.yellow)
+                                .padding(.top, 4)
+                            
+                            Text(event)
+                                .font(.system(size: 14))
+                                .foregroundColor(secondaryTextColor)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.yellow.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            // Key Event Image
+            if let keyEventImageUrl = chapter.keyEventImageUrl, !keyEventImageUrl.isEmpty {
+                AsyncImage(url: URL(string: keyEventImageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 150)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                        )
+                }
+                .frame(maxWidth: .infinity)
+                .cornerRadius(12)
+            }
+            
+            // Character Interactions Section
+            if let interactions = chapter.characterInteractions, !interactions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Character Interactions")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(primaryTextColor)
+                    
+                    ForEach(interactions, id: \.self) { interaction in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "message.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.blue)
+                                .padding(.top, 4)
+                            
+                            Text(interaction)
+                                .font(.system(size: 14))
+                                .foregroundColor(secondaryTextColor)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            // Emotional Moments Section
+            if let emotionalMoments = chapter.emotionalMoments, !emotionalMoments.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Emotional Moments")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(primaryTextColor)
+                    
+                    ForEach(emotionalMoments, id: \.self) { moment in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.red)
+                                .padding(.top, 4)
+                            
+                            Text(moment)
+                                .font(.system(size: 14))
+                                .foregroundColor(secondaryTextColor)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            // Emotional Moment Image
+            if let emotionalMomentImageUrl = chapter.emotionalMomentImageUrl, !emotionalMomentImageUrl.isEmpty {
+                AsyncImage(url: URL(string: emotionalMomentImageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 150)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                        )
+                }
+                .frame(maxWidth: .infinity)
+                .cornerRadius(12)
             }
             
             // Chapter Content

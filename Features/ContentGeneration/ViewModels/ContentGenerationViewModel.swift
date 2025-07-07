@@ -304,7 +304,7 @@ class ContentGenerationViewModel: ObservableObject {
     // MARK: - Background Generation Methods (Refactored to use Singleton)
 
     func generateStoryWithProgressInBackground() {
-        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 4)
+        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 25)
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         var effectiveInputText = inputText
         if !trimmedMainCharacter.isEmpty {
@@ -450,7 +450,7 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func generateStoryWithProgress() async throws {
-        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 4)
+        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 25)
         
         print("[Story] Starting story generation process")
         
@@ -466,273 +466,80 @@ class ContentGenerationViewModel: ObservableObject {
         }
         
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[Story] Trimmed main character for prompt: '\(trimmedMainCharacter)'")
-
-        // MODIFICATION 1: Integrate main character directly into the input text for the story LLM
         var effectiveInputText = inputText
         if !trimmedMainCharacter.isEmpty {
             effectiveInputText = "The main character of this story is \(trimmedMainCharacter).\n\n\(inputText)"
-            print("[Story] Effective input text for story model will include main character: \(effectiveInputText.prefix(100))...")
         }
-
-        // The "Main Character: \(trimmedMainCharacter)" line in storyPrompt is still useful
-        // for the backend to parse for chapter image generation prompts.
+        
         let storyPrompt = """
         [Level: \(selectedLevel.rawValue)]
-        Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story, maintaining the key information but presenting it in a narrative format.
+        Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story.
         Image Style to consider for tone and visuals: \(selectedImageStyle.displayName).
-        \(trimmedMainCharacter.isEmpty ? "" : "Main Character: \(trimmedMainCharacter)") 
         Original Text:
-        \(effectiveInputText) 
+        \(effectiveInputText)
         """
         
-        print("[Story] Generated story prompt for backend")
-        // print("[Story] Full prompt: \(storyPrompt)") // For debugging the exact prompt
-        print("[Story] Selected level: \(selectedLevel.rawValue)")
-        print("[Story] Selected genre: \(selectedGenre.rawValue)")
-        print("[Story] Selected image style for prompt (displayName): \(selectedImageStyle.displayName)")
+        await MainActor.run {
+            self.statusMessage = "Generating story content..."
+        }
         
-        // Get user's FCM token for notifications
         let userToken = await getFCMToken()
-        
         let requestBody: [String: Any] = [
             "text": storyPrompt,
             "level": selectedLevel.rawValue,
-            "genre": selectedGenre.rawValue.lowercased(),
-            // MODIFICATION 2: Use displayName for image_style to match backend's expected keys
             "image_style": selectedImageStyle.displayName,
             "user_token": userToken ?? ""
         ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else {
+            throw ContentGenerationError.encodingFailed
+        }
         
         let url = URL(string: "\(backendURL)/generate_story")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        request.httpBody = jsonData
         
-        print("[Story] Sending request to backend (/generate_story)")
-        // print("[Story] URL: \(url.absoluteString)")
-        // print("[Story] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")")
+        let (data, response) = try await URLSession.shared.data(for: request)
         
-        // Add retry logic for 503 errors (backend hibernation)
-        let maxRetries = 3
-        var attempt = 0
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ContentGenerationError.invalidResponse
+        }
         
-        repeat {
-            attempt += 1
-            print("[Story] Attempt \(attempt) of \(maxRetries)")
-            
-            do {
-                let (data, response) = try await session.data(for: request)
-                
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    let error = NSError(domain: "NetworkError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response type"])
-                    
-                    CrashlyticsManager.shared.logNetworkError(
-                        error: error,
-                        endpoint: "/generate_story",
-                        method: "POST",
-                        requestBody: requestBody
-                    )
-                    
-                    print("[Story] ERROR: Invalid server response (not HTTPURLResponse)")
-                    throw error
-                }
-                
-                print("[Story] Received response with status code: \(httpResponse.statusCode)")
-                
-                // Handle 503 errors (backend hibernation) with retry
-                if httpResponse.statusCode == 503 {
-                    if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
-                        print("[Story] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
-                        await MainActor.run {
-                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
-                        }
-                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
-                        continue
-                    } else {
-                        print("[Story] Backend hibernation retry limit reached")
-                        let hibernationError = NSError(domain: "BackendHibernation", code: 503, userInfo: [NSLocalizedDescriptionKey: "Backend is starting up. Please try again in a few moments."])
-                        throw hibernationError
-                    }
-                }
-                
-                guard httpResponse.statusCode == 200 else {
-                    print("[Story] ERROR: Server returned status code \(httpResponse.statusCode)")
-                    if let errorResponse = String(data: data, encoding: .utf8) {
-                        print("[Story] Error response from server: \(errorResponse)")
-                        // Try to decode a simple error message if backend sends one
-                        struct BackendError: Codable { let error: String? }
-                        if let decodedError = try? JSONDecoder().decode(BackendError.self, from: data), let message = decodedError.error {
-                            let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server error: \(message) (Status \(httpResponse.statusCode))"])
-                            
-                            CrashlyticsManager.shared.logNetworkError(
-                                error: serverError,
-                                endpoint: "/generate_story",
-                                method: "POST",
-                                statusCode: httpResponse.statusCode,
-                                requestBody: requestBody
-                            )
-                            
-                            throw serverError
-                        }
-                    }
-                    
-                    let serverError = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-                    
-                    CrashlyticsManager.shared.logNetworkError(
-                        error: serverError,
-                        endpoint: "/generate_story",
-                        method: "POST",
-                        statusCode: httpResponse.statusCode,
-                        requestBody: requestBody
-                    )
-                    
-                    throw serverError
-                }
-                
-                print("[Story] Attempting to decode response into Response.self")
-                do {
-                    let apiResponse = try JSONDecoder().decode(Response.self, from: data)
-                    print("[Story] Successfully decoded Response.self")
-                
-                    // Start progress polling if we received a request_id
-                    if let requestId = apiResponse.request_id {
-                        print("[Story] Received request_id: \(requestId), starting progress polling")
-                        currentRequestId = requestId
-                        startProgressPolling(requestId: requestId)
-                    } else {
-                        startProgressPollingFallback()
-                    }
-                
-                    if let story = apiResponse.story {
-                        print("[Story] Successfully received story object from backend.")
-                        print("[Story] Story ID: \(story.id.uuidString)")
-                        print("[Story] Story Title: \(story.title)")
-                        print("[Story] Story Level: \(story.level.rawValue)")
-                        print("[Story] Story ImageStyle: \(story.imageStyle ?? "N/A")")
-                        print("[Story] Number of chapters received: \(story.chapters.count)")
-                        for (idx, chap) in story.chapters.enumerated() {
-                            print("[Story] - Chapter \(idx+1): ID=\(chap.id.uuidString), Title='\(chap.title)', Order=\(chap.order), ImageStyle=\(chap.imageStyle ?? "N/A")")
-                        }
-                        
-                        await MainActor.run {
-                            self.currentStory = story
-                            print("[Story] Updated UI with story object")
-                        }
-                        
-                        globalManager.updateProgress(step: "Generating images for chapters...", stepNumber: 2, totalSteps: 4)
-                        
-                        if let currentUser = Auth.auth().currentUser {
-                            print("[Story] User authenticated (\(currentUser.uid)), proceeding with image generation and Firebase save for story ID \(story.id.uuidString)")
-                            await generateImagesForStoryWithProgress(newStory: story) // This will call fetchImageForChapter, which calls /generate_image
-                            // saveStoryToFirebase is called at the end of generateImagesForStory
-                            
-                            globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 4)
-                            
-                            // Show full screen view AFTER everything is saved
-                            // await MainActor.run {
-                            //     self.isShowingFullScreenStory = true
-                            //     print("[Story] Story fully saved to Firebase, now showing full screen")
-                            // }
-                            
-                            globalManager.updateProgress(step: "Complete!", stepNumber: 4, totalSteps: 4)
-                            print("[Story] Story content and image processing completed.")
-                        } else {
-                            let authError = NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
-                            
-                            CrashlyticsManager.shared.logAuthenticationError(
-                                error: authError,
-                                operation: "story_generation"
-                            )
-                            
-                            print("[Story] ERROR: No authenticated user found after receiving story. Cannot save or generate images.")
-                            throw authError
-                        }
-                    } else if let errorMsg = apiResponse.error { // Check our Response.error field
-                        print("[Story] ERROR: Backend returned error in JSON response: \(errorMsg)")
-                        
-                        let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
-                        
-                        CrashlyticsManager.shared.logNetworkError(
-                            error: backendError,
-                            endpoint: "/generate_story",
-                            method: "POST",
-                            requestBody: requestBody
-                        )
-                        
-                        throw backendError
-                    } else {
-                        print("[Story] ERROR: Backend response did not contain a story or an error message")
-                        
-                        let backendError = NSError(domain: "BackendLogicError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend response did not contain a story or an error message"])
-                        
-                        CrashlyticsManager.shared.logNetworkError(
-                            error: backendError,
-                            endpoint: "/generate_story",
-                            method: "POST",
-                            requestBody: requestBody
-                        )
-                        
-                        throw backendError
-                    }
-                } catch let decodingError {
-                    print("[Story] ERROR: Failed to decode response into Response.self")
-                    print("[Story] Decoding error: \(decodingError)")
-                    print("[Story] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
-                    
-                    CrashlyticsManager.shared.logCustomError(
-                        error: decodingError,
-                        context: "story_response_decoding",
-                        additionalData: [
-                            "endpoint": "/generate_story",
-                            "response_size": data.count,
-                            "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode"
-                        ]
-                    )
-                    
-                    throw decodingError
-                }
-                
-                // If we reach here, the request was successful, so break out of retry loop
-                break
-                
-            } catch let error as NSError {
-                // If it's a 503 error and we haven't exhausted retries, continue the loop
-                if error.code == 503 && attempt < maxRetries {
-                    continue
-                }
-                
-                // For all other errors or if we've exhausted retries, throw the error
-                print("[Story] ERROR: Unexpected error during story generation process: \(error.localizedDescription)")
-                print("[Story] Error type: \(type(of: error))")
-                
-                // Log network errors specifically
-                if let urlError = error as? URLError {
-                    CrashlyticsManager.shared.logNetworkError(
-                        error: urlError,
-                        endpoint: "/generate_story",
-                        method: "POST",
-                        requestBody: requestBody
-                    )
-                } else {
-                    CrashlyticsManager.shared.logCustomError(
-                        error: error,
-                        context: "story_generation_unexpected",
-                        additionalData: [
-                            "endpoint": "/generate_story",
-                            "method": "POST"
-                        ]
-                    )
-                }
-                
-                // Ensure the errorMessage is updated on the main thread for UI
-                let finalErrorMessage = error.localizedDescription
-                await MainActor.run { self.errorMessage = finalErrorMessage }
-                throw error
+        if httpResponse.statusCode != 200 {
+            print("[Story] HTTP Error: \(httpResponse.statusCode)")
+            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorMessage = errorJson["error"] as? String {
+                throw ContentGenerationError.backendError(errorMessage)
+            } else {
+                throw ContentGenerationError.httpError(httpResponse.statusCode)
             }
-        } while attempt < maxRetries
+        }
+        
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let storyData = json["story"] as? [String: Any] else {
+            throw ContentGenerationError.parsingFailed
+        }
+        
+        guard let storyJsonData = try? JSONSerialization.data(withJSONObject: storyData),
+              let story = try? JSONDecoder().decode(Story.self, from: storyJsonData) else {
+            throw ContentGenerationError.parsingFailed
+        }
+        
+        await MainActor.run {
+            self.statusMessage = "Saving story to cloud..."
+        }
+        
+        // Save to Firebase
+        if let userId = AuthViewModel.shared.currentUser?.uid {
+            await saveStoryToFirebase(story, userId: userId)
+        }
+        
+        await MainActor.run {
+            self.generatedStory = story
+            self.statusMessage = nil
+        }
     }
     
     private func generateLectureWithProgress() async throws {
@@ -1404,16 +1211,81 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Story][Save] Story ID: \(story.id.uuidString)")
         print("[Story][Save] User ID: \(userId)")
         print("[Story][Save] Number of chapters: \(story.chapters.count)")
+        print("[Story][Save] Number of main characters: \(story.mainCharacters?.count ?? 0)")
+        print("[Story][Save] Cover image URL: \(story.coverImageUrl ?? "NIL")")
+        print("[Story][Save] Summary image URL: \(story.summaryImageUrl ?? "NIL")")
         
         // Log chapter details before conversion
         print("[Story][Save] 📋 Chapter details before Firebase conversion:")
         for (index, chapter) in story.chapters.enumerated() {
             print("[Story][Save] - Chapter \(index + 1):")
-            print("[Story][Save]   - ID: \(chapter.id.uuidString)")
-            print("[Story][Save]   - Title: \(chapter.title ?? "N/A")")
+            print("[Story][Save]   - ID: \(chapter.id)")
+            print("[Story][Save]   - Title: \(chapter.title)")
             print("[Story][Save]   - Order: \(chapter.order)")
-            print("[Story][Save]   - firebaseImageUrl: \(chapter.firebaseImageUrl ?? "NIL")")
-            print("[Story][Save]   - imageStyle: \(chapter.imageStyle ?? "N/A")")
+            print("[Story][Save]   - Main image URL: \(chapter.imageUrl ?? "NIL")")
+            print("[Story][Save]   - Setting image URL: \(chapter.settingImageUrl ?? "NIL")")
+            print("[Story][Save]   - Action image URL: \(chapter.actionImageUrl ?? "NIL")")
+            print("[Story][Save]   - Key events: \(chapter.keyEvents?.count ?? 0)")
+            print("[Story][Save]   - Key event images: \(chapter.keyEventImages?.count ?? 0)")
+            print("[Story][Save]   - Character interactions: \(chapter.characterInteractions?.count ?? 0)")
+            print("[Story][Save]   - Character interaction images: \(chapter.characterInteractionImages?.count ?? 0)")
+            print("[Story][Save]   - Emotional moments: \(chapter.emotionalMoments?.count ?? 0)")
+            print("[Story][Save]   - Emotional moment images: \(chapter.emotionalMomentImages?.count ?? 0)")
+        }
+        
+        // Convert main characters to Firebase format
+        let firebaseCharacters = story.mainCharacters?.map { character in
+            FirebaseCharacter(
+                id: character.id.uuidString,
+                name: character.name,
+                description: character.description,
+                personality: character.personality,
+                imageUrl: character.imageUrl
+            )
+        }
+        
+        // Convert chapters to Firebase format with new image structure
+        let firebaseChapters = story.chapters.map { chapter in
+            // Convert event images to Firebase format
+            let firebaseKeyEventImages = chapter.keyEventImages?.map { eventImage in
+                FirebaseEventImage(
+                    id: eventImage.id,
+                    description: eventImage.description,
+                    imageUrl: eventImage.imageUrl
+                )
+            }
+            
+            let firebaseEmotionalMomentImages = chapter.emotionalMomentImages?.map { momentImage in
+                FirebaseEventImage(
+                    id: momentImage.id,
+                    description: momentImage.description,
+                    imageUrl: momentImage.imageUrl
+                )
+            }
+            
+            let firebaseCharacterInteractionImages = chapter.characterInteractionImages?.map { interactionImage in
+                FirebaseEventImage(
+                    id: interactionImage.id,
+                    description: interactionImage.description,
+                    imageUrl: interactionImage.imageUrl
+                )
+            }
+            
+            return FirebaseChapter(
+                id: chapter.id,
+                title: chapter.title,
+                content: chapter.content,
+                order: chapter.order,
+                imageUrl: chapter.imageUrl,
+                keyEvents: chapter.keyEvents,
+                characterInteractions: chapter.characterInteractions,
+                emotionalMoments: chapter.emotionalMoments,
+                keyEventImages: firebaseKeyEventImages,
+                emotionalMomentImages: firebaseEmotionalMomentImages,
+                characterInteractionImages: firebaseCharacterInteractionImages,
+                settingImageUrl: chapter.settingImageUrl,
+                actionImageUrl: chapter.actionImageUrl
+            )
         }
         
         // Convert to Firebase format using the correct models
@@ -1424,16 +1296,10 @@ class ContentGenerationViewModel: ObservableObject {
             overview: story.content,
             level: story.level.rawValue,
             imageStyle: story.imageStyle,
-            chapters: story.chapters.map { chapter in
-                FirebaseChapter(
-                    chapterId: chapter.id.uuidString,
-                    title: chapter.title,
-                    content: chapter.content,
-                    order: chapter.order,
-                    firebaseImageUrl: chapter.firebaseImageUrl,
-                    imageStyle: chapter.imageStyle
-                )
-            }
+            chapters: firebaseChapters,
+            mainCharacters: firebaseCharacters,
+            coverImageUrl: story.coverImageUrl,
+            summaryImageUrl: story.summaryImageUrl
         )
         
         // Log Firebase story details
@@ -1443,17 +1309,39 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Story][Save] - User ID: \(firebaseStory.userId)")
         print("[Story][Save] - Level: \(firebaseStory.level)")
         print("[Story][Save] - Image Style: \(firebaseStory.imageStyle ?? "N/A")")
+        print("[Story][Save] - Cover Image URL: \(firebaseStory.coverImageUrl ?? "NIL")")
+        print("[Story][Save] - Summary Image URL: \(firebaseStory.summaryImageUrl ?? "NIL")")
         print("[Story][Save] - Number of chapters: \(firebaseStory.chapters?.count ?? 0)")
+        print("[Story][Save] - Number of main characters: \(firebaseStory.mainCharacters?.count ?? 0)")
         
         if let chapters = firebaseStory.chapters {
             print("[Story][Save] 📋 Firebase chapter details:")
             for (index, chapter) in chapters.enumerated() {
                 print("[Story][Save] - Chapter \(index + 1):")
-                print("[Story][Save]   - chapterId: \(chapter.chapterId)")
-                print("[Story][Save]   - title: \(chapter.title ?? "N/A")")
-                print("[Story][Save]   - order: \(chapter.order ?? -1)")
-                print("[Story][Save]   - firebaseImageUrl: \(chapter.firebaseImageUrl ?? "NIL")")
-                print("[Story][Save]   - imageStyle: \(chapter.imageStyle ?? "N/A")")
+                print("[Story][Save]   - id: \(chapter.id)")
+                print("[Story][Save]   - title: \(chapter.title)")
+                print("[Story][Save]   - order: \(chapter.order)")
+                print("[Story][Save]   - main image URL: \(chapter.imageUrl ?? "NIL")")
+                print("[Story][Save]   - setting image URL: \(chapter.settingImageUrl ?? "NIL")")
+                print("[Story][Save]   - action image URL: \(chapter.actionImageUrl ?? "NIL")")
+                print("[Story][Save]   - key events: \(chapter.keyEvents?.count ?? 0)")
+                print("[Story][Save]   - key event images: \(chapter.keyEventImages?.count ?? 0)")
+                print("[Story][Save]   - character interactions: \(chapter.characterInteractions?.count ?? 0)")
+                print("[Story][Save]   - character interaction images: \(chapter.characterInteractionImages?.count ?? 0)")
+                print("[Story][Save]   - emotional moments: \(chapter.emotionalMoments?.count ?? 0)")
+                print("[Story][Save]   - emotional moment images: \(chapter.emotionalMomentImages?.count ?? 0)")
+            }
+        }
+        
+        if let characters = firebaseStory.mainCharacters {
+            print("[Story][Save] 📋 Firebase character details:")
+            for (index, character) in characters.enumerated() {
+                print("[Story][Save] - Character \(index + 1):")
+                print("[Story][Save]   - id: \(character.id)")
+                print("[Story][Save]   - name: \(character.name)")
+                print("[Story][Save]   - description: \(character.description)")
+                print("[Story][Save]   - personality: \(character.personality)")
+                print("[Story][Save]   - imageUrl: \(character.imageUrl ?? "NIL")")
             }
         }
         
@@ -2066,6 +1954,9 @@ struct Story: Identifiable, Codable, Equatable {
     let level: ReadingLevel
     var chapters: [StoryChapter]
     let imageStyle: String? // Overall story image style, hint from backend
+    let mainCharacters: [StoryCharacter]? // New: Main characters with descriptions
+    let coverImageUrl: String? // New: Story cover/hero image
+    let summaryImageUrl: String? // New: Story conclusion/summary image
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -2074,104 +1965,112 @@ struct Story: Identifiable, Codable, Equatable {
         case level
         case chapters
         case imageStyle // Ensure this matches the JSON key from the backend if it sends one for the story's overall style
+        case mainCharacters
+        case coverImageUrl
+        case summaryImageUrl
     }
 
-    // Standard initializer if needed elsewhere
-    init(id: UUID, title: String, content: String, level: ReadingLevel, chapters: [StoryChapter], imageStyle: String?) {
+    init(id: UUID = UUID(), title: String, content: String, level: ReadingLevel, chapters: [StoryChapter], imageStyle: String? = nil, mainCharacters: [StoryCharacter]? = nil, coverImageUrl: String? = nil, summaryImageUrl: String? = nil) {
         self.id = id
         self.title = title
         self.content = content
         self.level = level
         self.chapters = chapters
         self.imageStyle = imageStyle
-    }
-
-    // Custom decoder to handle potentially missing fields
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        // Attempt to decode 'id' as String, then convert to UUID; generate if missing/invalid
-        if let idString = try container.decodeIfPresent(String.self, forKey: .id),
-           let parsedUUID = UUID(uuidString: idString) {
-            self.id = parsedUUID
-        } else {
-            print("[Story.decoder] Warning: Story 'id' missing or invalid in JSON. Generating new client-side UUID.")
-            self.id = UUID() // Generate a new UUID if not present or invalid
-        }
-        
-        self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Story"
-        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No overview provided."
-        
-        // For 'level', if it can be missing or invalid, it's more complex.
-        // Assuming the backend IS sending 'level' as a valid string for ReadingLevel.rawValue.
-        // If 'level' itself is the "missing data", this line will fail.
-        // To make it more robust if 'level' can be missing:
-        // self.level = (try? container.decodeIfPresent(ReadingLevel.self, forKey: .level)) ?? .standard
-        // For now, keeping it as a direct decode, assuming backend provides it.
-        // The error "data couldn't be read because it is missing" might point to this if 'level' key is absent.
-        do {
-            self.level = try container.decode(ReadingLevel.self, forKey: .level)
-        } catch {
-            print("[Story.decoder] Warning: Story 'level' missing or invalid in JSON. Defaulting to .moderate. Error: \(error)")
-            self.level = .moderate // Default if level is missing or unparsable
-        }
-
-        self.chapters = try container.decodeIfPresent([StoryChapter].self, forKey: .chapters) ?? []
-        self.imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        self.mainCharacters = mainCharacters
+        self.coverImageUrl = coverImageUrl
+        self.summaryImageUrl = summaryImageUrl
     }
 }
 
 struct StoryChapter: Identifiable, Codable, Equatable {
-    let id: UUID
+    let id: String
     let title: String
     let content: String
     let order: Int
-    var firebaseImageUrl: String? // This will be populated client-side after Firebase upload
-    let imageStyle: String?      // Image style hint for this chapter from backend (if provided)
-    let imageUrl: String?        // Direct GCS URL that the Python backend adds
+    let imageUrl: String? // Main chapter image
+    let keyEvents: [String]? // Key events in this chapter
+    let characterInteractions: [String]? // Character interactions in this chapter
+    let emotionalMoments: [String]? // Emotional moments in this chapter
+    
+    // New: Multiple images for different aspects
+    let keyEventImages: [StoryEventImage]? // Multiple images for key events
+    let emotionalMomentImages: [StoryEventImage]? // Multiple images for emotional moments
+    let characterInteractionImages: [StoryEventImage]? // Multiple images for character interactions
+    let settingImageUrl: String? // Setting/background image
+    let actionImageUrl: String? // Action sequence image
 
     enum CodingKeys: String, CodingKey {
         case id
         case title
         case content
         case order
-        case imageStyle // Expected key from AI if it provides a style per chapter
-        case imageUrl   // Key for the GCS URL added by Python backend
-        // `firebaseImageUrl` is not decoded from this JSON
+        case imageUrl
+        case keyEvents
+        case characterInteractions
+        case emotionalMoments
+        case keyEventImages
+        case emotionalMomentImages
+        case characterInteractionImages
+        case settingImageUrl
+        case actionImageUrl
     }
 
-    // Standard initializer if needed
-    init(id: UUID, title: String, content: String, order: Int, firebaseImageUrl: String? = nil, imageStyle: String?, imageUrl: String? = nil) {
+    init(id: String = UUID().uuidString, title: String, content: String, order: Int, imageUrl: String? = nil, keyEvents: [String]? = nil, characterInteractions: [String]? = nil, emotionalMoments: [String]? = nil, keyEventImages: [StoryEventImage]? = nil, emotionalMomentImages: [StoryEventImage]? = nil, characterInteractionImages: [StoryEventImage]? = nil, settingImageUrl: String? = nil, actionImageUrl: String? = nil) {
         self.id = id
         self.title = title
         self.content = content
         self.order = order
-        self.firebaseImageUrl = firebaseImageUrl
-        self.imageStyle = imageStyle
+        self.imageUrl = imageUrl
+        self.keyEvents = keyEvents
+        self.characterInteractions = characterInteractions
+        self.emotionalMoments = emotionalMoments
+        self.keyEventImages = keyEventImages
+        self.emotionalMomentImages = emotionalMomentImages
+        self.characterInteractionImages = characterInteractionImages
+        self.settingImageUrl = settingImageUrl
+        self.actionImageUrl = actionImageUrl
+    }
+}
+
+// New: Structure for event images with descriptions
+struct StoryEventImage: Identifiable, Codable, Equatable {
+    let id: String
+    let description: String // Event description or moment description
+    let imageUrl: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case description
+        case imageUrl
+    }
+    
+    // For key events
+    init(event: String, imageUrl: String) {
+        self.id = UUID().uuidString
+        self.description = event
         self.imageUrl = imageUrl
     }
-
-    // Custom decoder
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        if let idString = try container.decodeIfPresent(String.self, forKey: .id),
-           let parsedUUID = UUID(uuidString: idString) {
-            self.id = parsedUUID
-        } else {
-            print("[StoryChapter.decoder] Warning: Chapter 'id' missing or invalid in JSON. Generating new client-side UUID.")
-            self.id = UUID() // Generate a new UUID if not present or invalid
-        }
-        
-        self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Chapter"
-        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No content for this chapter."
-        self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0 // Default order if missing
-        
-        self.imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
-        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl) // Catches the GCS URL
-        
-        // firebaseImageUrl is not set during this initial decoding from backend
-        self.firebaseImageUrl = nil
+    
+    // For emotional moments
+    init(moment: String, imageUrl: String) {
+        self.id = UUID().uuidString
+        self.description = moment
+        self.imageUrl = imageUrl
+    }
+    
+    // For character interactions
+    init(interaction: String, imageUrl: String) {
+        self.id = UUID().uuidString
+        self.description = interaction
+        self.imageUrl = imageUrl
+    }
+    
+    // Custom initializer for decoding
+    init(id: String, description: String, imageUrl: String) {
+        self.id = id
+        self.description = description
+        self.imageUrl = imageUrl
     }
 }
 
@@ -2277,3 +2176,101 @@ extension ContentGenerationViewModel {
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 } 
+
+// Story Character model
+struct StoryCharacter: Identifiable, Codable, Equatable {
+    let id: UUID
+    let name: String
+    let description: String
+    let personality: String
+    let imageUrl: String? // Character portrait image
+    
+    enum CodingKeys: String, CodingKey {
+        case name
+        case description
+        case personality
+        case imageUrl
+    }
+    
+    init(name: String, description: String, personality: String, imageUrl: String? = nil) {
+        self.id = UUID()
+        self.name = name
+        self.description = description
+        self.personality = personality
+        self.imageUrl = imageUrl
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.id = UUID() // Generate new UUID for each character
+        self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown Character"
+        self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? "No description available"
+        self.personality = try container.decodeIfPresent(String.self, forKey: .personality) ?? "No personality traits described"
+        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+    }
+}
+
+// Custom decoders for Story and StoryChapter to handle the new image structure
+extension Story {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Attempt to decode 'id' as String, then convert to UUID; generate if missing/invalid
+        if let idString = try container.decodeIfPresent(String.self, forKey: .id),
+           let parsedUUID = UUID(uuidString: idString) {
+            self.id = parsedUUID
+        } else {
+            print("[Story.decoder] Warning: Story 'id' missing or invalid in JSON. Generating new client-side UUID.")
+            self.id = UUID() // Generate a new UUID if not present or invalid
+        }
+        
+        self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Story"
+        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No overview provided."
+        
+        // For 'level', if it can be missing or invalid, it's more complex.
+        do {
+            self.level = try container.decode(ReadingLevel.self, forKey: .level)
+        } catch {
+            print("[Story.decoder] Warning: Story 'level' missing or invalid in JSON. Defaulting to .moderate. Error: \(error)")
+            self.level = .moderate // Default if level is missing or unparsable
+        }
+
+        self.chapters = try container.decodeIfPresent([StoryChapter].self, forKey: .chapters) ?? []
+        self.imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        self.mainCharacters = try container.decodeIfPresent([StoryCharacter].self, forKey: .mainCharacters)
+        self.coverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
+        self.summaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
+    }
+}
+
+extension StoryChapter {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        if let idString = try container.decodeIfPresent(String.self, forKey: .id) {
+            self.id = idString
+        } else {
+            print("[StoryChapter.decoder] Warning: Chapter 'id' missing or invalid in JSON. Generating new client-side UUID.")
+            self.id = UUID().uuidString // Generate a new UUID if not present or invalid
+        }
+        
+        self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Chapter"
+        self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No content for this chapter."
+        self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0 // Default order if missing
+        
+        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        
+        // Decode additional story elements
+        self.keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
+        self.characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
+        self.emotionalMoments = try container.decodeIfPresent([String].self, forKey: .emotionalMoments)
+        
+        // Decode new image arrays
+        self.keyEventImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .keyEventImages)
+        self.emotionalMomentImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .emotionalMomentImages)
+        self.characterInteractionImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .characterInteractionImages)
+        self.settingImageUrl = try container.decodeIfPresent(String.self, forKey: .settingImageUrl)
+        self.actionImageUrl = try container.decodeIfPresent(String.self, forKey: .actionImageUrl)
+    }
+}

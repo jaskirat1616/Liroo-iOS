@@ -12,6 +12,9 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
     var level: String
     var imageStyle: String?
     var chapters: [FirebaseChapter]?
+    var mainCharacters: [FirebaseCharacter]? // New: Main characters
+    var coverImageUrl: String? // New: Story cover/hero image
+    var summaryImageUrl: String? // New: Story conclusion/summary image
     var createdAt: Timestamp? = Timestamp(date: Date())
 
     // Conform to Hashable
@@ -24,41 +27,107 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
     }
 
     // If you need to initialize with a specific ID for creation:
-    init(id: String? = nil, userId: String, title: String, overview: String?, level: String, imageStyle: String?, chapters: [FirebaseChapter]?) {
+    init(id: String? = nil, userId: String, title: String, overview: String?, level: String, imageStyle: String?, chapters: [FirebaseChapter]?, mainCharacters: [FirebaseCharacter]? = nil, coverImageUrl: String? = nil, summaryImageUrl: String? = nil, createdAt: Timestamp? = nil) {
+        self.id = id
         self.userId = userId
         self.title = title
         self.overview = overview
         self.level = level
         self.imageStyle = imageStyle
         self.chapters = chapters
+        self.mainCharacters = mainCharacters
+        self.coverImageUrl = coverImageUrl
+        self.summaryImageUrl = summaryImageUrl
+        self.createdAt = createdAt ?? Timestamp(date: Date())
     }
 }
 
 struct FirebaseChapter: Identifiable, Codable, Hashable {
-    var id: String { chapterId }
-    var chapterId: String
-    var title: String?
-    var content: String?
-    var order: Int?
-    var firebaseImageUrl: String?
-    var imageStyle: String?
+    var id: String
+    var title: String
+    var content: String
+    var order: Int
+    var imageUrl: String? // Main chapter image
+    var keyEvents: [String]? // Key events in this chapter
+    var characterInteractions: [String]? // Character interactions in this chapter
+    var emotionalMoments: [String]? // Emotional moments in this chapter
+    
+    // New: Multiple images for different aspects
+    var keyEventImages: [FirebaseEventImage]? // Multiple images for key events
+    var emotionalMomentImages: [FirebaseEventImage]? // Multiple images for emotional moments
+    var characterInteractionImages: [FirebaseEventImage]? // Multiple images for character interactions
+    var settingImageUrl: String? // Setting/background image
+    var actionImageUrl: String? // Action sequence image
 
     // Conform to Hashable
     func hash(into hasher: inout Hasher) {
-        hasher.combine(chapterId)
+        hasher.combine(id)
     }
 
     static func == (lhs: FirebaseChapter, rhs: FirebaseChapter) -> Bool {
-        lhs.chapterId == rhs.chapterId
+        lhs.id == rhs.id
+    }
+
+    init(id: String, title: String, content: String, order: Int, imageUrl: String? = nil, keyEvents: [String]? = nil, characterInteractions: [String]? = nil, emotionalMoments: [String]? = nil, keyEventImages: [FirebaseEventImage]? = nil, emotionalMomentImages: [FirebaseEventImage]? = nil, characterInteractionImages: [FirebaseEventImage]? = nil, settingImageUrl: String? = nil, actionImageUrl: String? = nil) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.order = order
+        self.imageUrl = imageUrl
+        self.keyEvents = keyEvents
+        self.characterInteractions = characterInteractions
+        self.emotionalMoments = emotionalMoments
+        self.keyEventImages = keyEventImages
+        self.emotionalMomentImages = emotionalMomentImages
+        self.characterInteractionImages = characterInteractionImages
+        self.settingImageUrl = settingImageUrl
+        self.actionImageUrl = actionImageUrl
+    }
+}
+
+// New: Firebase Event Image structure
+struct FirebaseEventImage: Identifiable, Codable, Hashable {
+    var id: String
+    var description: String // Event description or moment description
+    var imageUrl: String
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: FirebaseEventImage, rhs: FirebaseEventImage) -> Bool {
+        lhs.id == rhs.id
     }
     
-    enum CodingKeys: String, CodingKey {
-        case chapterId
-        case title
-        case content
-        case order
-        case firebaseImageUrl
-        case imageStyle
+    init(id: String, description: String, imageUrl: String) {
+        self.id = id
+        self.description = description
+        self.imageUrl = imageUrl
+    }
+}
+
+struct FirebaseCharacter: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var description: String
+    var personality: String
+    var imageUrl: String? // Character portrait image
+
+    // Conform to Hashable
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: FirebaseCharacter, rhs: FirebaseCharacter) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    init(id: String, name: String, description: String, personality: String, imageUrl: String? = nil) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.personality = personality
+        self.imageUrl = imageUrl
     }
 }
 
