@@ -47,14 +47,14 @@ struct SplashScreenView: View {
             }
             
             VStack {
-                Spacer()
+                // Move 'Liroo' to the top
                 Text("Liroo")
-                    .font(.custom("OpenDyslexic-Regular", size: 48))
+                    .font(.custom("OpenDyslexic-Regular", size: 28))
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                     .shadow(radius: 5)
-                    .padding(.bottom, 50)
-                
+                    .padding(.top, 60)
+                    .padding(.bottom, 20)
                 Spacer()
                 
                 VStack(spacing: 16) {
@@ -85,18 +85,6 @@ struct SplashScreenView: View {
             print("SplashScreenView: onAppear called")
             DispatchQueue.main.async {
                  setupVideo()
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + splashDuration) {
-                print("SplashScreenView: Starting fade out animation")
-                withAnimation(.easeInOut(duration: fadeOutDuration)) {
-                    videoOpacity = 0.0
-                }
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDuration) {
-                    print("SplashScreenView: Transitioning to main app")
-                    isActive = true
-                }
             }
         }
         .onDisappear {
