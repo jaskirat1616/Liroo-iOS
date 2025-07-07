@@ -1201,7 +1201,7 @@ class ContentGenerationViewModel: ObservableObject {
         
         print("[Story][ImageGen] 📊 Final image generation summary:")
         for (index, chapter) in finalStoryToSave.chapters.enumerated() {
-            print("[Story][ImageGen] - Chapter \(index + 1): \(chapter.firebaseImageUrl != nil ? "✅ Has image" : "❌ No image")")
+            print("[Story][ImageGen] - Chapter \(index + 1): \(chapter.imageUrl != nil ? "✅ Has image" : "❌ No image")")
         }
         
         await MainActor.run {
