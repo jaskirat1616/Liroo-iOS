@@ -147,15 +147,29 @@ struct SplashScreenView: View {
         self.player = newPlayer
         self.player?.play()
         
-        // Don't loop the video - let it play once
-        self.player?.actionAtItemEnd = .pause
+        // Enable video looping
+        self.player?.actionAtItemEnd = .none
+        
+        // Set up loop observer
+        setupVideoLoopObserver(for: newPlayer)
         
         print("SplashScreenView: Video player setup complete")
     }
     
     private func setupVideoLoopObserver(for playerToLoop: AVPlayer) {
-        // Remove this function - we don't want the video to loop
+        // Clear any existing observer first
         clearVideoLoopObserver()
+        
+        // Add observer to restart video when it ends
+        loopObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerToLoop.currentItem,
+            queue: .main
+        ) { _ in
+            // Restart the video from the beginning
+            playerToLoop.seek(to: .zero)
+            playerToLoop.play()
+        }
     }
     
     private func clearVideoLoopObserver() {
