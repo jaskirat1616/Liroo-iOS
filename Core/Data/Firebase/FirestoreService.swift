@@ -201,9 +201,8 @@ final class FirestoreService {
                     print("[FirestoreService] Error: \(decodingError)")
                     
                     // Log the raw document data for debugging
-                    if let data = document.data() {
-                        print("[FirestoreService] Raw document data: \(data)")
-                    }
+                    let data = document.data()
+                    print("[FirestoreService] Raw document data: \(data)")
                     
                     failedDocuments.append((document.documentID, decodingError))
                     
@@ -516,9 +515,8 @@ final class FirestoreService {
                     problematicDocumentIds.append(document.documentID)
                     print("[FirestoreService] Problematic document identified: \(document.documentID) in collection \(collection)")
                     print("[FirestoreService] Error: \(error)")
-                    if let data = document.data() {
-                        print("[FirestoreService] Document data: \(data)")
-                    }
+                    let data = document.data()
+                    print("[FirestoreService] Document data: \(data)")
                 }
             }
             

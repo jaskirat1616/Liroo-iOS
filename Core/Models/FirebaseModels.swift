@@ -217,6 +217,17 @@ struct FirebaseUserContent: Identifiable, Codable, Hashable {
         lhs.id == rhs.id
     }
     
+    // Regular initializer
+    init(id: String? = nil, userId: String?, topic: String?, level: String?, summarizationTier: String?, blocks: [FirebaseContentBlock]?, createdAt: Timestamp? = nil) {
+        self.id = id
+        self.userId = userId
+        self.topic = topic
+        self.level = level
+        self.summarizationTier = summarizationTier
+        self.blocks = blocks
+        self.createdAt = createdAt ?? Timestamp(date: Date())
+    }
+    
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -263,6 +274,17 @@ struct FirebaseContentBlock: Identifiable, Codable, Hashable {
         lhs.id == rhs.id && lhs.type == rhs.type && lhs.content == rhs.content && lhs.firebaseImageUrl == rhs.firebaseImageUrl
     }
     
+    // Regular initializer
+    init(type: String?, content: String?, alt: String?, firebaseImageUrl: String?, options: [FirebaseQuizOption]?, correctAnswerID: String?, explanation: String?) {
+        self.type = type
+        self.content = content
+        self.alt = alt
+        self.firebaseImageUrl = firebaseImageUrl
+        self.options = options
+        self.correctAnswerID = correctAnswerID
+        self.explanation = explanation
+    }
+    
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -303,6 +325,12 @@ struct FirebaseQuizOption: Identifiable, Codable, Hashable {
 
     static func == (lhs: FirebaseQuizOption, rhs: FirebaseQuizOption) -> Bool {
         lhs.id == rhs.id
+    }
+    
+    // Regular initializer
+    init(id: String?, text: String?) {
+        self.id = id
+        self.text = text
     }
 }
 
@@ -380,6 +408,16 @@ struct FirebaseLectureSection: Identifiable, Codable, Hashable {
         lhs.sectionId == rhs.sectionId
     }
     
+    // Regular initializer
+    init(sectionId: String, title: String?, script: String?, imagePrompt: String?, imageUrl: String?, order: Int?) {
+        self.sectionId = sectionId
+        self.title = title
+        self.script = script
+        self.imagePrompt = imagePrompt
+        self.imageUrl = imageUrl
+        self.order = order
+    }
+    
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -419,6 +457,15 @@ struct FirebaseAudioFile: Identifiable, Codable, Hashable {
 
     static func == (lhs: FirebaseAudioFile, rhs: FirebaseAudioFile) -> Bool {
         lhs.id == rhs.id && lhs.type == rhs.type && lhs.url == rhs.url
+    }
+    
+    // Regular initializer
+    init(type: String?, text: String?, url: String?, filename: String?, section: Int?) {
+        self.type = type
+        self.text = text
+        self.url = url
+        self.filename = filename
+        self.section = section
     }
     
     // Custom decoding to handle missing fields gracefully
