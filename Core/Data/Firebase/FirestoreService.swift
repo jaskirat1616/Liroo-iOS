@@ -188,9 +188,58 @@ final class FirestoreService {
                 .whereField(field, isEqualTo: value)
                 .getDocuments()
             
-            return try snapshot.documents.compactMap { document in
-                try document.data(as: T.self)
+            var results: [T] = []
+            var failedDocuments: [(documentId: String, error: Error)] = []
+            
+            for document in snapshot.documents {
+                do {
+                    let decodedItem = try document.data(as: T.self)
+                    results.append(decodedItem)
+                } catch let decodingError as DecodingError {
+                    // Log detailed decoding error for debugging
+                    print("[FirestoreService] Decoding error for document \(document.documentID) in collection \(collection):")
+                    print("[FirestoreService] Error: \(decodingError)")
+                    
+                    // Log the raw document data for debugging
+                    if let data = document.data() {
+                        print("[FirestoreService] Raw document data: \(data)")
+                    }
+                    
+                    failedDocuments.append((document.documentID, decodingError))
+                    
+                    // Continue processing other documents instead of failing completely
+                    continue
+                } catch {
+                    print("[FirestoreService] Unexpected error decoding document \(document.documentID) in collection \(collection): \(error)")
+                    failedDocuments.append((document.documentID, error))
+                    continue
+                }
             }
+            
+            // Log summary of results
+            print("[FirestoreService] Successfully decoded \(results.count) documents from collection \(collection)")
+            if !failedDocuments.isEmpty {
+                print("[FirestoreService] Failed to decode \(failedDocuments.count) documents from collection \(collection)")
+                for failed in failedDocuments {
+                    print("[FirestoreService] - Document \(failed.documentId): \(failed.error.localizedDescription)")
+                }
+                
+                // Log to Crashlytics for monitoring
+                CrashlyticsManager.shared.logFirestoreError(
+                    error: NSError(domain: "FirestoreDecoding", code: 1, userInfo: [
+                        "collection": collection,
+                        "failed_count": failedDocuments.count,
+                        "success_count": results.count,
+                        "failed_documents": failedDocuments.map { $0.documentId }
+                    ]),
+                    operation: "query_decode",
+                    collection: collection
+                )
+            }
+            
+            // Return successful results even if some documents failed to decode
+            return results
+            
         } catch let error as DecodingError {
             CrashlyticsManager.shared.logFirestoreError(
                 error: error,
@@ -447,5 +496,64 @@ final class FirestoreService {
         let path = pathComponents.joined(separator: "/")
         StorageLogger.log("Extracted path from URL: \(path)")
         return path
+    }
+    
+    // MARK: - Utility Methods
+    
+    /// Utility method to identify problematic documents in a collection
+    func identifyProblematicDocuments<T: Decodable>(_ type: T.Type, from collection: String, field: String, isEqualTo value: Any) async -> [String] {
+        do {
+            let snapshot = try await db.collection(collection)
+                .whereField(field, isEqualTo: value)
+                .getDocuments()
+            
+            var problematicDocumentIds: [String] = []
+            
+            for document in snapshot.documents {
+                do {
+                    _ = try document.data(as: T.self)
+                } catch {
+                    problematicDocumentIds.append(document.documentID)
+                    print("[FirestoreService] Problematic document identified: \(document.documentID) in collection \(collection)")
+                    print("[FirestoreService] Error: \(error)")
+                    if let data = document.data() {
+                        print("[FirestoreService] Document data: \(data)")
+                    }
+                }
+            }
+            
+            if !problematicDocumentIds.isEmpty {
+                print("[FirestoreService] Found \(problematicDocumentIds.count) problematic documents in collection \(collection)")
+                
+                // Log to Crashlytics for monitoring
+                CrashlyticsManager.shared.logNonFatalError(
+                    message: "Problematic documents found in collection",
+                    context: "firestore_document_validation",
+                    additionalData: [
+                        "collection": collection,
+                        "problematic_count": problematicDocumentIds.count,
+                        "problematic_documents": problematicDocumentIds
+                    ]
+                )
+            }
+            
+            return problematicDocumentIds
+            
+        } catch {
+            print("[FirestoreService] Error identifying problematic documents: \(error)")
+            return []
+        }
+    }
+    
+    /// Utility method to safely delete a document if it's corrupted
+    func safeDeleteDocument(from collection: String, documentId: String) async -> Bool {
+        do {
+            try await delete(from: collection, documentId: documentId)
+            print("[FirestoreService] Successfully deleted corrupted document: \(collection)/\(documentId)")
+            return true
+        } catch {
+            print("[FirestoreService] Failed to delete document \(collection)/\(documentId): \(error)")
+            return false
+        }
     }
 }

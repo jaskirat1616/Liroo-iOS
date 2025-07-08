@@ -40,6 +40,37 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
         self.summaryImageUrl = summaryImageUrl
         self.createdAt = createdAt ?? Timestamp(date: Date())
     }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        userId = try container.decode(String.self, forKey: .userId)
+        title = try container.decode(String.self, forKey: .title)
+        overview = try container.decodeIfPresent(String.self, forKey: .overview)
+        level = try container.decode(String.self, forKey: .level)
+        imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        chapters = try container.decodeIfPresent([FirebaseChapter].self, forKey: .chapters)
+        mainCharacters = try container.decodeIfPresent([FirebaseCharacter].self, forKey: .mainCharacters)
+        coverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
+        summaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
+        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case title
+        case overview
+        case level
+        case imageStyle
+        case chapters
+        case mainCharacters
+        case coverImageUrl
+        case summaryImageUrl
+        case createdAt
+    }
 }
 
 struct FirebaseChapter: Identifiable, Codable, Hashable {
@@ -82,6 +113,41 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
         self.characterInteractionImages = characterInteractionImages
         self.settingImageUrl = settingImageUrl
         self.actionImageUrl = actionImageUrl
+    }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        content = try container.decode(String.self, forKey: .content)
+        order = try container.decode(Int.self, forKey: .order)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
+        characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
+        emotionalMoments = try container.decodeIfPresent([String].self, forKey: .emotionalMoments)
+        keyEventImages = try container.decodeIfPresent([FirebaseEventImage].self, forKey: .keyEventImages)
+        emotionalMomentImages = try container.decodeIfPresent([FirebaseEventImage].self, forKey: .emotionalMomentImages)
+        characterInteractionImages = try container.decodeIfPresent([FirebaseEventImage].self, forKey: .characterInteractionImages)
+        settingImageUrl = try container.decodeIfPresent(String.self, forKey: .settingImageUrl)
+        actionImageUrl = try container.decodeIfPresent(String.self, forKey: .actionImageUrl)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case content
+        case order
+        case imageUrl
+        case keyEvents
+        case characterInteractions
+        case emotionalMoments
+        case keyEventImages
+        case emotionalMomentImages
+        case characterInteractionImages
+        case settingImageUrl
+        case actionImageUrl
     }
 }
 
@@ -151,6 +217,19 @@ struct FirebaseUserContent: Identifiable, Codable, Hashable {
         lhs.id == rhs.id
     }
     
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        userId = try container.decodeIfPresent(String.self, forKey: .userId)
+        topic = try container.decodeIfPresent(String.self, forKey: .topic)
+        level = try container.decodeIfPresent(String.self, forKey: .level)
+        summarizationTier = try container.decodeIfPresent(String.self, forKey: .summarizationTier)
+        blocks = try container.decodeIfPresent([FirebaseContentBlock].self, forKey: .blocks)
+        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+    }
+    
     enum CodingKeys: String, CodingKey {
         case id
         case userId
@@ -184,7 +263,25 @@ struct FirebaseContentBlock: Identifiable, Codable, Hashable {
         lhs.id == rhs.id && lhs.type == rhs.type && lhs.content == rhs.content && lhs.firebaseImageUrl == rhs.firebaseImageUrl
     }
     
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode id, but use default if missing
+        if let decodedId = try container.decodeIfPresent(String.self, forKey: .id) {
+            id = decodedId
+        }
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        content = try container.decodeIfPresent(String.self, forKey: .content)
+        alt = try container.decodeIfPresent(String.self, forKey: .alt)
+        firebaseImageUrl = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl)
+        options = try container.decodeIfPresent([FirebaseQuizOption].self, forKey: .options)
+        correctAnswerID = try container.decodeIfPresent(String.self, forKey: .correctAnswerID)
+        explanation = try container.decodeIfPresent(String.self, forKey: .explanation)
+    }
+    
     enum CodingKeys: String, CodingKey {
+        case id
         case type
         case content
         case alt
@@ -238,6 +335,31 @@ struct FirebaseLecture: Identifiable, Codable, Hashable {
         self.sections = sections
         self.audioFiles = audioFiles
     }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        userId = try container.decode(String.self, forKey: .userId)
+        title = try container.decode(String.self, forKey: .title)
+        level = try container.decode(String.self, forKey: .level)
+        imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        sections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections)
+        audioFiles = try container.decodeIfPresent([FirebaseAudioFile].self, forKey: .audioFiles)
+        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case title
+        case level
+        case imageStyle
+        case sections
+        case audioFiles
+        case createdAt
+    }
 }
 
 struct FirebaseLectureSection: Identifiable, Codable, Hashable {
@@ -256,6 +378,18 @@ struct FirebaseLectureSection: Identifiable, Codable, Hashable {
 
     static func == (lhs: FirebaseLectureSection, rhs: FirebaseLectureSection) -> Bool {
         lhs.sectionId == rhs.sectionId
+    }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        sectionId = try container.decode(String.self, forKey: .sectionId)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        script = try container.decodeIfPresent(String.self, forKey: .script)
+        imagePrompt = try container.decodeIfPresent(String.self, forKey: .imagePrompt)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        order = try container.decodeIfPresent(Int.self, forKey: .order)
     }
     
     enum CodingKeys: String, CodingKey {
@@ -287,7 +421,23 @@ struct FirebaseAudioFile: Identifiable, Codable, Hashable {
         lhs.id == rhs.id && lhs.type == rhs.type && lhs.url == rhs.url
     }
     
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode id, but use default if missing
+        if let decodedId = try container.decodeIfPresent(String.self, forKey: .id) {
+            id = decodedId
+        }
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
+        filename = try container.decodeIfPresent(String.self, forKey: .filename)
+        section = try container.decodeIfPresent(Int.self, forKey: .section)
+    }
+    
     enum CodingKeys: String, CodingKey {
+        case id
         case type
         case text
         case url

@@ -31,69 +31,96 @@ class HistoryViewModel: ObservableObject {
         Task {
             do {
                 var fetchedItems: [UserHistoryEntry] = []
+                var totalErrors = 0
 
                 // Fetch stories
-                let stories: [FirebaseStory] = try await firestoreService.query(
-                    FirebaseStory.self,
-                    from: "stories",
-                    field: "userId",
-                    isEqualTo: userId
-                )
-                fetchedItems.append(contentsOf: stories.compactMap { story in
-                    guard let docId = story.id, !docId.isEmpty else {
-                        print("[HistoryViewModel] Warning: Skipping story with nil or empty ID.")
-                        return nil
-                    }
-                    return UserHistoryEntry(from: story)
-                })
-                print("[HistoryViewModel] Fetched \(stories.count) stories for user \(userId), valid items: \(fetchedItems.count)")
+                do {
+                    let stories: [FirebaseStory] = try await firestoreService.query(
+                        FirebaseStory.self,
+                        from: "stories",
+                        field: "userId",
+                        isEqualTo: userId
+                    )
+                    fetchedItems.append(contentsOf: stories.compactMap { story in
+                        guard let docId = story.id, !docId.isEmpty else {
+                            print("[HistoryViewModel] Warning: Skipping story with nil or empty ID.")
+                            return nil
+                        }
+                        return UserHistoryEntry(from: story)
+                    })
+                    print("[HistoryViewModel] Fetched \(stories.count) stories for user \(userId), valid items: \(fetchedItems.count)")
+                } catch {
+                    print("[HistoryViewModel] Error fetching stories: \(error.localizedDescription)")
+                    totalErrors += 1
+                }
 
                 // Fetch user generated content
-                let userContents: [FirebaseUserContent] = try await firestoreService.query(
-                    FirebaseUserContent.self,
-                    from: "userGeneratedContent",
-                    field: "userId",
-                    isEqualTo: userId
-                )
-                print("[HistoryViewModel] DEBUG: Raw fetched userContents count: \(userContents.count)")
-                for (index, content) in userContents.enumerated() {
-                    print("[HistoryViewModel] DEBUG: Raw content[\(index)] - ID: \(content.id ?? "NIL ID"), Topic: \(content.topic ?? "NIL Topic")")
-                }
-                let storyItemCount = fetchedItems.count
-                fetchedItems.append(contentsOf: userContents.compactMap { content in
-                    guard let docId = content.id, !docId.isEmpty else {
-                        print("[HistoryViewModel] Warning: Skipping user content with nil or empty ID. Original fetched ID was: '\(content.id ?? "nil")'. Topic: '\(content.topic ?? "NIL Topic")'")
-                        return nil
+                do {
+                    let userContents: [FirebaseUserContent] = try await firestoreService.query(
+                        FirebaseUserContent.self,
+                        from: "userGeneratedContent",
+                        field: "userId",
+                        isEqualTo: userId
+                    )
+                    print("[HistoryViewModel] DEBUG: Raw fetched userContents count: \(userContents.count)")
+                    for (index, content) in userContents.enumerated() {
+                        print("[HistoryViewModel] DEBUG: Raw content[\(index)] - ID: \(content.id ?? "NIL ID"), Topic: \(content.topic ?? "NIL Topic")")
                     }
-                    return UserHistoryEntry(from: content)
-                })
-                let userContentItemCount = fetchedItems.count - storyItemCount
-                print("[HistoryViewModel] Fetched \(userContents.count) user contents for user \(userId), valid items: \(userContentItemCount)")
+                    let storyItemCount = fetchedItems.count
+                    fetchedItems.append(contentsOf: userContents.compactMap { content in
+                        guard let docId = content.id, !docId.isEmpty else {
+                            print("[HistoryViewModel] Warning: Skipping user content with nil or empty ID. Original fetched ID was: '\(content.id ?? "nil")'. Topic: '\(content.topic ?? "NIL Topic")'")
+                            return nil
+                        }
+                        return UserHistoryEntry(from: content)
+                    })
+                    let userContentItemCount = fetchedItems.count - storyItemCount
+                    print("[HistoryViewModel] Fetched \(userContents.count) user contents for user \(userId), valid items: \(userContentItemCount)")
+                } catch {
+                    print("[HistoryViewModel] Error fetching user content: \(error.localizedDescription)")
+                    totalErrors += 1
+                }
 
                 // Fetch lectures
-                let lectures: [FirebaseLecture] = try await firestoreService.query(
-                    FirebaseLecture.self,
-                    from: "lectures",
-                    field: "userId",
-                    isEqualTo: userId
-                )
-                print("[HistoryViewModel] DEBUG: Raw fetched lectures count: \(lectures.count)")
-                for (index, lecture) in lectures.enumerated() {
-                    print("[HistoryViewModel] DEBUG: Raw lecture[\(index)] - ID: \(lecture.id ?? "NIL ID"), Title: \(lecture.title)")
-                }
-                let beforeLectureCount = fetchedItems.count
-                fetchedItems.append(contentsOf: lectures.compactMap { lecture in
-                    guard let docId = lecture.id, !docId.isEmpty else {
-                        print("[HistoryViewModel] Warning: Skipping lecture with nil or empty ID.")
-                        return nil
+                do {
+                    let lectures: [FirebaseLecture] = try await firestoreService.query(
+                        FirebaseLecture.self,
+                        from: "lectures",
+                        field: "userId",
+                        isEqualTo: userId
+                    )
+                    print("[HistoryViewModel] DEBUG: Raw fetched lectures count: \(lectures.count)")
+                    for (index, lecture) in lectures.enumerated() {
+                        print("[HistoryViewModel] DEBUG: Raw lecture[\(index)] - ID: \(lecture.id ?? "NIL ID"), Title: \(lecture.title)")
                     }
-                    return UserHistoryEntry(from: lecture)
-                })
-                let lectureItemCount = fetchedItems.count - beforeLectureCount
-                print("[HistoryViewModel] Fetched \(lectures.count) lectures for user \(userId), valid items: \(lectureItemCount)")
+                    let beforeLectureCount = fetchedItems.count
+                    fetchedItems.append(contentsOf: lectures.compactMap { lecture in
+                        guard let docId = lecture.id, !docId.isEmpty else {
+                            print("[HistoryViewModel] Warning: Skipping lecture with nil or empty ID.")
+                            return nil
+                        }
+                        return UserHistoryEntry(from: lecture)
+                    })
+                    let lectureItemCount = fetchedItems.count - beforeLectureCount
+                    print("[HistoryViewModel] Fetched \(lectures.count) lectures for user \(userId), valid items: \(lectureItemCount)")
+                } catch {
+                    print("[HistoryViewModel] Error fetching lectures: \(error.localizedDescription)")
+                    totalErrors += 1
+                }
 
                 // Sort items by date, newest first
                 self.historyItems = fetchedItems.sorted { $0.date > $1.date }
+                
+                // Set error message if there were any failures, but still show partial results
+                if totalErrors > 0 {
+                    self.errorMessage = "Some content could not be loaded. Showing available items."
+                    
+                    // Run diagnostic check to identify problematic documents
+                    if let userId = Auth.auth().currentUser?.uid {
+                        await identifyProblematicDocuments(userId: userId)
+                    }
+                }
+                
                 self.isLoading = false
 
             } catch {
@@ -129,6 +156,105 @@ class HistoryViewModel: ObservableObject {
             } else {
                 self.errorMessage = nil
             }
+        }
+    }
+
+    func identifyProblematicDocuments(userId: String) async {
+        print("[HistoryViewModel] Identifying problematic documents for user: \(userId)")
+        
+        // Check stories collection
+        let problematicStories = await firestoreService.identifyProblematicDocuments(
+            FirebaseStory.self,
+            from: "stories",
+            field: "userId",
+            isEqualTo: userId
+        )
+        
+        // Check userGeneratedContent collection
+        let problematicContent = await firestoreService.identifyProblematicDocuments(
+            FirebaseUserContent.self,
+            from: "userGeneratedContent",
+            field: "userId",
+            isEqualTo: userId
+        )
+        
+        // Check lectures collection
+        let problematicLectures = await firestoreService.identifyProblematicDocuments(
+            FirebaseLecture.self,
+            from: "lectures",
+            field: "userId",
+            isEqualTo: userId
+        )
+        
+        let totalProblematic = problematicStories.count + problematicContent.count + problematicLectures.count
+        
+        if totalProblematic > 0 {
+            print("[HistoryViewModel] Found \(totalProblematic) problematic documents:")
+            print("[HistoryViewModel] - Stories: \(problematicStories.count)")
+            print("[HistoryViewModel] - User Content: \(problematicContent.count)")
+            print("[HistoryViewModel] - Lectures: \(problematicLectures.count)")
+            
+            // Log to Crashlytics for monitoring
+            CrashlyticsManager.shared.logNonFatalError(
+                message: "Problematic documents found in user history",
+                context: "history_validation",
+                additionalData: [
+                    "user_id": userId,
+                    "total_problematic": totalProblematic,
+                    "problematic_stories": problematicStories,
+                    "problematic_content": problematicContent,
+                    "problematic_lectures": problematicLectures
+                ]
+            )
+        } else {
+            print("[HistoryViewModel] No problematic documents found for user: \(userId)")
+        }
+    }
+
+    /// Test method to verify Firestore decoding is working properly
+    func testFirestoreDecoding() async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("[HistoryViewModel] No authenticated user for testing")
+            return
+        }
+        
+        print("[HistoryViewModel] Testing Firestore decoding for user: \(userId)")
+        
+        // Test each collection individually
+        do {
+            let stories = try await firestoreService.query(
+                FirebaseStory.self,
+                from: "stories",
+                field: "userId",
+                isEqualTo: userId
+            )
+            print("[HistoryViewModel] ✅ Successfully decoded \(stories.count) stories")
+        } catch {
+            print("[HistoryViewModel] ❌ Failed to decode stories: \(error)")
+        }
+        
+        do {
+            let content = try await firestoreService.query(
+                FirebaseUserContent.self,
+                from: "userGeneratedContent",
+                field: "userId",
+                isEqualTo: userId
+            )
+            print("[HistoryViewModel] ✅ Successfully decoded \(content.count) user content items")
+        } catch {
+            print("[HistoryViewModel] ❌ Failed to decode user content: \(error)")
+        }
+        
+        do {
+            let lectures = try await firestoreService.query(
+                FirebaseLecture.self,
+                from: "lectures",
+                field: "userId",
+                isEqualTo: userId
+            )
+            print("[HistoryViewModel] ✅ Successfully decoded \(lectures.count) lectures")
+        } catch {
+            print("[HistoryViewModel] ❌ Failed to decode lectures: \(error)")
         }
     }
 }

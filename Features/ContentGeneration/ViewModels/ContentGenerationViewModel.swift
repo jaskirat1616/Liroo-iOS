@@ -17,6 +17,7 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var selectedImageStyle: ImageStyle = .ghibli
     
     @Published var isLoading = false
+    @Published var isGenerating = false
     @Published var errorMessage: String?
     @Published var currentStory: Story?
     @Published var currentLecture: Lecture?
