@@ -19,11 +19,11 @@ struct StoryDetailView: View {
         if let chapters = story.chapters, !chapters.isEmpty {
             content += "Chapters:\n"
             for chapter in chapters {
-                if !chapter.title.isEmpty {
-                    content += chapter.title + "\n"
+                if let title = chapter.title, !title.isEmpty {
+                    content += title + "\n"
                 }
-                if !chapter.content.isEmpty {
-                    content += chapter.content + "\n\n"
+                if let chapterContent = chapter.content, !chapterContent.isEmpty {
+                    content += chapterContent + "\n\n"
                 }
             }
         }
@@ -146,8 +146,8 @@ struct StoryDetailView: View {
                     secondaryTextColor: secondaryTextColor,
                     fontStyle: fontStyle,
                     onTapGesture: {
-                        if !chapter.content.isEmpty {
-                            viewModel.initiateDialogue(paragraph: chapter.content, originalContent: fullStoryText)
+                        if let content = chapter.content, !content.isEmpty {
+                            viewModel.initiateDialogue(paragraph: content, originalContent: fullStoryText)
                         }
                     }
                 )
@@ -198,20 +198,20 @@ struct CharacterCard: View {
             
             // Character Info
             VStack(alignment: .leading, spacing: 8) {
-                Text(character.name)
+                Text(character.name ?? "Unknown Character")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(primaryTextColor)
                     .lineLimit(1)
                 
-                if !character.description.isEmpty {
-                    Text(character.description)
+                if let description = character.description, !description.isEmpty {
+                    Text(description)
                         .font(.system(size: 12))
                         .foregroundColor(secondaryTextColor)
                         .lineLimit(2)
                 }
                 
-                if !character.personality.isEmpty {
-                    Text("Personality: \(character.personality)")
+                if let personality = character.personality, !personality.isEmpty {
+                    Text("Personality: \(personality)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(secondaryTextColor)
                         .lineLimit(2)
@@ -256,14 +256,14 @@ struct ReadingChapterView: View {
             }
             
             // Chapter Title
-            if !chapter.title.isEmpty {
-                Text(chapter.title)
+            if let chapterTitle = chapter.title, !chapterTitle.isEmpty {
+                Text(chapterTitle)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(primaryTextColor)
             }
             
             // Chapter Main Image
-            if let imageUrl = chapter.imageUrl, !imageUrl.isEmpty {
+            if let imageUrl = chapter.firebaseImageUrl ?? chapter.imageUrl, !imageUrl.isEmpty {
                 AsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
@@ -306,9 +306,9 @@ struct ReadingChapterView: View {
                 .cornerRadius(8)
             }
             
-            // Key Event Image - Display first key event image if available
-            if let keyEventImages = chapter.keyEventImages, !keyEventImages.isEmpty, let firstImage = keyEventImages.first {
-                AsyncImage(url: URL(string: firstImage.imageUrl)) { image in
+            // Key Event Image
+            if let keyEventImageUrl = chapter.keyEventImageUrl, !keyEventImageUrl.isEmpty {
+                AsyncImage(url: URL(string: keyEventImageUrl)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -375,9 +375,9 @@ struct ReadingChapterView: View {
                 .cornerRadius(8)
             }
             
-            // Emotional Moment Image - Display first emotional moment image if available
-            if let emotionalMomentImages = chapter.emotionalMomentImages, !emotionalMomentImages.isEmpty, let firstImage = emotionalMomentImages.first {
-                AsyncImage(url: URL(string: firstImage.imageUrl)) { image in
+            // Emotional Moment Image
+            if let emotionalMomentImageUrl = chapter.emotionalMomentImageUrl, !emotionalMomentImageUrl.isEmpty {
+                AsyncImage(url: URL(string: emotionalMomentImageUrl)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -395,9 +395,9 @@ struct ReadingChapterView: View {
             }
             
             // Chapter Content
-            if !chapter.content.isEmpty {
+            if let content = chapter.content, !content.isEmpty {
                 MarkdownRenderer.MarkdownTextView(
-                    markdownText: chapter.content,
+                    markdownText: content,
                     baseFontSize: baseFontSize,
                     primaryTextColor: primaryTextColor,
                     secondaryTextColor: secondaryTextColor,

@@ -7,30 +7,6 @@ import BackgroundTasks
 import FirebaseCrashlytics
 import FirebaseMessaging
 
-// MARK: - Content Generation Error Types
-enum ContentGenerationError: Error, LocalizedError {
-    case encodingFailed
-    case invalidResponse
-    case backendError(String)
-    case httpError(Int)
-    case parsingFailed
-    
-    var errorDescription: String? {
-        switch self {
-        case .encodingFailed:
-            return "Failed to encode request data"
-        case .invalidResponse:
-            return "Invalid response from server"
-        case .backendError(let message):
-            return "Backend error: \(message)"
-        case .httpError(let code):
-            return "HTTP error: \(code)"
-        case .parsingFailed:
-            return "Failed to parse response data"
-        }
-    }
-}
-
 @MainActor
 class ContentGenerationViewModel: ObservableObject {
     @Published var inputText = ""
@@ -328,7 +304,7 @@ class ContentGenerationViewModel: ObservableObject {
     // MARK: - Background Generation Methods (Refactored to use Singleton)
 
     func generateStoryWithProgressInBackground() {
-        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 25)
+        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 8)
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         var effectiveInputText = inputText
         if !trimmedMainCharacter.isEmpty {
@@ -474,7 +450,7 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func generateStoryWithProgress() async throws {
-        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 25)
+        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 8)
         
         print("[Story] Starting story generation process")
         
@@ -556,8 +532,8 @@ class ContentGenerationViewModel: ObservableObject {
         }
         
         // Save to Firebase
-        if let userId = Auth.auth().currentUser?.uid {
-            await saveStoryToFirebase(story: story, userId: userId)
+        if let currentUser = Auth.auth().currentUser {
+            await saveStoryToFirebase(story: story, userId: currentUser.uid)
         }
         
         await MainActor.run {
@@ -1076,11 +1052,14 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded existing image to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                // Note: The new model structure doesn't have firebaseImageUrl, so we'll skip this update
-                                // The backend now provides all images directly
+                                // Note: firebaseImageUrl is no longer part of the model, so we skip this update
                                 
                                 await MainActor.run {
-                                    print("[Story][ImageGen] ✅ Existing image processed for chapter \(index + 1).")
+                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
+                                        // Note: firebaseImageUrl is no longer part of the model
+                                        self.currentStory = currentStory
+                                        print("[Story][ImageGen] ✅ UI updated with existing image Firebase URL for chapter \(index + 1).")
+                                    }
                                 }
                             }
                         }
@@ -1153,12 +1132,17 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                // Note: The new model structure doesn't have firebaseImageUrl, so we'll skip this update
-                                // The backend now provides all images directly
+                                // Note: firebaseImageUrl is no longer part of the model, so we skip this update
                                 success = true
                                 
                                 await MainActor.run {
-                                    print("[Story][ImageGen] ✅ New image processed for chapter \(index + 1).")
+                                    if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
+                                        // Note: firebaseImageUrl is no longer part of the model
+                                        self.currentStory = currentStory // Update the published property
+                                        print("[Story][ImageGen] ✅ UI updated with new image for chapter \(index + 1).")
+                                    } else {
+                                        print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
+                                    }
                                 }
                             } else {
                                 let reason = Auth.auth().currentUser?.uid == nil ? "User ID is nil." : "Failed to convert UIImage to JPEG data."
@@ -1197,7 +1181,7 @@ class ContentGenerationViewModel: ObservableObject {
         
         // Ensure the story being saved has the updated chapter image URLs
         var finalStoryToSave = newStory // Start with original story structure
-        finalStoryToSave.chapters = updatedChapters // Assign chapters that have firebaseImageUrls (or nil if failed)
+        finalStoryToSave.chapters = updatedChapters // Assign chapters that have been processed
         
         print("[Story][ImageGen] 📊 Final image generation summary:")
         for (index, chapter) in finalStoryToSave.chapters.enumerated() {
@@ -2288,5 +2272,32 @@ extension StoryChapter {
         self.characterInteractionImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .characterInteractionImages)
         self.settingImageUrl = try container.decodeIfPresent(String.self, forKey: .settingImageUrl)
         self.actionImageUrl = try container.decodeIfPresent(String.self, forKey: .actionImageUrl)
+    }
+}
+
+// MARK: - Content Generation Error Types
+enum ContentGenerationError: Error, LocalizedError {
+    case encodingFailed
+    case invalidResponse
+    case backendError(String)
+    case httpError(Int)
+    case parsingFailed
+    case networkError(Error)
+    
+    var errorDescription: String? {
+        switch self {
+        case .encodingFailed:
+            return "Failed to encode request data"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .backendError(let message):
+            return "Backend error: \(message)"
+        case .httpError(let code):
+            return "HTTP error: \(code)"
+        case .parsingFailed:
+            return "Failed to parse response data"
+        case .networkError(let error):
+            return "Network error: \(error.localizedDescription)"
+        }
     }
 }
