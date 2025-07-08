@@ -368,7 +368,7 @@ final class FirestoreService {
             if let story = try? storyDoc.data(as: FirebaseStory.self),
                let chapters = story.chapters {
                 for chapter in chapters {
-                    if let imageUrl = chapter.firebaseImageUrl,
+                    if let imageUrl = chapter.imageUrl,
                        let path = extractPathFromUrl(imageUrl) {
                         validImagePaths.insert(path)
                         StorageLogger.log("Found valid story image path: \(path)")

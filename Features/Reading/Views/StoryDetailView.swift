@@ -19,11 +19,11 @@ struct StoryDetailView: View {
         if let chapters = story.chapters, !chapters.isEmpty {
             content += "Chapters:\n"
             for chapter in chapters {
-                if let title = chapter.title, !title.isEmpty {
-                    content += title + "\n"
+                if !chapter.title.isEmpty {
+                    content += chapter.title + "\n"
                 }
-                if let chapterContent = chapter.content, !chapterContent.isEmpty {
-                    content += chapterContent + "\n\n"
+                if !chapter.content.isEmpty {
+                    content += chapter.content + "\n\n"
                 }
             }
         }
@@ -146,8 +146,8 @@ struct StoryDetailView: View {
                     secondaryTextColor: secondaryTextColor,
                     fontStyle: fontStyle,
                     onTapGesture: {
-                        if let content = chapter.content, !content.isEmpty {
-                            viewModel.initiateDialogue(paragraph: content, originalContent: fullStoryText)
+                        if !chapter.content.isEmpty {
+                            viewModel.initiateDialogue(paragraph: chapter.content, originalContent: fullStoryText)
                         }
                     }
                 )
@@ -198,20 +198,20 @@ struct CharacterCard: View {
             
             // Character Info
             VStack(alignment: .leading, spacing: 8) {
-                Text(character.name ?? "Unknown Character")
+                Text(character.name)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(primaryTextColor)
                     .lineLimit(1)
                 
-                if let description = character.description, !description.isEmpty {
-                    Text(description)
+                if !character.description.isEmpty {
+                    Text(character.description)
                         .font(.system(size: 12))
                         .foregroundColor(secondaryTextColor)
                         .lineLimit(2)
                 }
                 
-                if let personality = character.personality, !personality.isEmpty {
-                    Text("Personality: \(personality)")
+                if !character.personality.isEmpty {
+                    Text("Personality: \(character.personality)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(secondaryTextColor)
                         .lineLimit(2)
@@ -256,14 +256,14 @@ struct ReadingChapterView: View {
             }
             
             // Chapter Title
-            if let chapterTitle = chapter.title, !chapterTitle.isEmpty {
-                Text(chapterTitle)
+            if !chapter.title.isEmpty {
+                Text(chapter.title)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(primaryTextColor)
             }
             
             // Chapter Main Image
-            if let imageUrl = chapter.firebaseImageUrl ?? chapter.imageUrl, !imageUrl.isEmpty {
+            if let imageUrl = chapter.imageUrl, !imageUrl.isEmpty {
                 AsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
@@ -306,23 +306,25 @@ struct ReadingChapterView: View {
                 .cornerRadius(8)
             }
             
-            // Key Event Image
-            if let keyEventImageUrl = chapter.keyEventImageUrl, !keyEventImageUrl.isEmpty {
-                AsyncImage(url: URL(string: keyEventImageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 150)
-                        .overlay(
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        )
+            // Key Event Images
+            if let keyEventImages = chapter.keyEventImages, !keyEventImages.isEmpty {
+                ForEach(keyEventImages) { eventImage in
+                    AsyncImage(url: URL(string: eventImage.imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(height: 150)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .cornerRadius(12)
                 }
-                .frame(maxWidth: .infinity)
-                .cornerRadius(12)
             }
             
             // Character Interactions Section
@@ -375,29 +377,31 @@ struct ReadingChapterView: View {
                 .cornerRadius(8)
             }
             
-            // Emotional Moment Image
-            if let emotionalMomentImageUrl = chapter.emotionalMomentImageUrl, !emotionalMomentImageUrl.isEmpty {
-                AsyncImage(url: URL(string: emotionalMomentImageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 150)
-                        .overlay(
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        )
+            // Emotional Moment Images
+            if let emotionalMomentImages = chapter.emotionalMomentImages, !emotionalMomentImages.isEmpty {
+                ForEach(emotionalMomentImages) { momentImage in
+                    AsyncImage(url: URL(string: momentImage.imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(height: 150)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                            )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .cornerRadius(12)
                 }
-                .frame(maxWidth: .infinity)
-                .cornerRadius(12)
             }
             
             // Chapter Content
-            if let content = chapter.content, !content.isEmpty {
+            if !chapter.content.isEmpty {
                 MarkdownRenderer.MarkdownTextView(
-                    markdownText: content,
+                    markdownText: chapter.content,
                     baseFontSize: baseFontSize,
                     primaryTextColor: primaryTextColor,
                     secondaryTextColor: secondaryTextColor,
