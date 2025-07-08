@@ -428,25 +428,42 @@ class ContentGenerationViewModel: ObservableObject {
     
     /// Attempts to wake up the backend service if it's hibernating
     private func wakeUpBackend() async -> Bool {
-        print("[Backend] Attempting to wake up backend service...")
+        print("[Backend] Checking backend health...")
         
-        let healthURL = URL(string: "\(backendURL)/health")!
-        var request = URLRequest(url: healthURL)
+        let url = URL(string: "\(backendURL)/health")!
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 10 // 10 second timeout for health check
+        request.timeoutInterval = 10.0 // 10 second timeout for health check
         
         do {
-            let (_, response) = try await session.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             
-            if let httpResponse = response as? HTTPURLResponse {
-                print("[Backend] Health check response: \(httpResponse.statusCode)")
-                return httpResponse.statusCode == 200
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("[Backend] Invalid response type")
+                return false
+            }
+            
+            print("[Backend] Health check response: \(httpResponse.statusCode)")
+            
+            if httpResponse.statusCode == 200 {
+                if let healthData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let status = healthData["status"] as? String ?? "unknown"
+                    let message = healthData["message"] as? String ?? "No message"
+                    print("[Backend] Backend status: \(status) - \(message)")
+                    return status == "healthy"
+                }
+                return true
+            } else if httpResponse.statusCode == 503 {
+                print("[Backend] Backend is hibernating (503)")
+                return false
+            } else {
+                print("[Backend] Backend health check failed with status: \(httpResponse.statusCode)")
+                return false
             }
         } catch {
-            print("[Backend] Health check failed: \(error.localizedDescription)")
+            print("[Backend] Health check error: \(error.localizedDescription)")
+            return false
         }
-        
-        return false
     }
     
     private func generateStoryWithProgress() async throws {
@@ -501,45 +518,118 @@ class ContentGenerationViewModel: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Add retry logic for network issues
+        let maxRetries = 3
+        var attempt = 0
+        var lastError: Error?
         
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw ContentGenerationError.invalidResponse
-        }
-        
-        if httpResponse.statusCode != 200 {
-            print("[Story] HTTP Error: \(httpResponse.statusCode)")
-            if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errorMessage = errorJson["error"] as? String {
-                throw ContentGenerationError.backendError(errorMessage)
-            } else {
-                throw ContentGenerationError.httpError(httpResponse.statusCode)
+        repeat {
+            attempt += 1
+            print("[Story] Attempt \(attempt) of \(maxRetries)")
+            
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw ContentGenerationError.invalidResponse
+                }
+                
+                print("[Story] Received response with status code: \(httpResponse.statusCode)")
+                
+                // Handle 503 errors (backend hibernation) with retry
+                if httpResponse.statusCode == 503 {
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 3.0 // Exponential backoff: 3s, 6s, 9s
+                        print("[Story] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
+                        }
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        print("[Story] Backend hibernation retry limit reached")
+                        throw ContentGenerationError.backendError("Backend is starting up. Please try again in a few moments.")
+                    }
+                }
+                
+                if httpResponse.statusCode != 200 {
+                    print("[Story] HTTP Error: \(httpResponse.statusCode)")
+                    if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorMessage = errorJson["error"] as? String {
+                        throw ContentGenerationError.backendError(errorMessage)
+                    } else {
+                        throw ContentGenerationError.httpError(httpResponse.statusCode)
+                    }
+                }
+                
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let storyData = json["story"] as? [String: Any] else {
+                    throw ContentGenerationError.parsingFailed
+                }
+                
+                guard let storyJsonData = try? JSONSerialization.data(withJSONObject: storyData),
+                      let story = try? JSONDecoder().decode(Story.self, from: storyJsonData) else {
+                    throw ContentGenerationError.parsingFailed
+                }
+                
+                await MainActor.run {
+                    self.statusMessage = "Saving story to cloud..."
+                }
+                
+                // Save to Firebase
+                if let currentUser = Auth.auth().currentUser {
+                    await saveStoryToFirebase(story: story, userId: currentUser.uid)
+                }
+                
+                await MainActor.run {
+                    self.currentStory = story
+                    self.statusMessage = nil
+                }
+                
+                // Success - break out of retry loop
+                return
+                
+            } catch let error as ContentGenerationError {
+                // Don't retry for parsing or encoding errors
+                throw error
+            } catch {
+                lastError = error
+                print("[Story] Attempt \(attempt) failed: \(error.localizedDescription)")
+                
+                // Check if it's a timeout error
+                let nsError = error as NSError
+                if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        print("[Story] Request timed out. Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Request timed out. Retrying... (\(attempt)/\(maxRetries))"
+                        }
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        print("[Story] Request timeout retry limit reached")
+                        throw ContentGenerationError.networkError(error)
+                    }
+                } else {
+                    // For other network errors, retry once more
+                    if attempt < maxRetries {
+                        let retryDelay = Double(attempt) * 1.5
+                        print("[Story] Network error. Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
+                        await MainActor.run {
+                            self.statusMessage = "Network error. Retrying... (\(attempt)/\(maxRetries))"
+                        }
+                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                        continue
+                    } else {
+                        throw ContentGenerationError.networkError(error)
+                    }
+                }
             }
-        }
+        } while attempt < maxRetries
         
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let storyData = json["story"] as? [String: Any] else {
-            throw ContentGenerationError.parsingFailed
-        }
-        
-        guard let storyJsonData = try? JSONSerialization.data(withJSONObject: storyData),
-              let story = try? JSONDecoder().decode(Story.self, from: storyJsonData) else {
-            throw ContentGenerationError.parsingFailed
-        }
-        
-        await MainActor.run {
-            self.statusMessage = "Saving story to cloud..."
-        }
-        
-        // Save to Firebase
-        if let currentUser = Auth.auth().currentUser {
-            await saveStoryToFirebase(story: story, userId: currentUser.uid)
-        }
-        
-        await MainActor.run {
-            self.currentStory = story
-            self.statusMessage = nil
-        }
+        // If we get here, all retries failed
+        throw lastError ?? ContentGenerationError.networkError(NSError(domain: "Unknown", code: -1, userInfo: [NSLocalizedDescriptionKey: "All retry attempts failed"]))
     }
     
     private func generateLectureWithProgress() async throws {
@@ -1860,6 +1950,75 @@ class ContentGenerationViewModel: ObservableObject {
         let downloadURL = try await firestoreService.uploadImage(imageData, path: imagePath, metadata: metadata)
         print("[Firebase] Successfully uploaded image")
         return downloadURL
+    }
+
+    private func handleContentGenerationError(_ error: Error) {
+        print("[Story] Content generation error: \(error.localizedDescription)")
+        
+        let errorMessage: String
+        if let contentError = error as? ContentGenerationError {
+            switch contentError {
+            case .encodingFailed:
+                errorMessage = "Failed to prepare request. Please try again."
+            case .invalidResponse:
+                errorMessage = "Received invalid response from server. Please try again."
+            case .backendError(let message):
+                errorMessage = message
+            case .httpError(let code):
+                if code == 503 {
+                    errorMessage = "Backend service is starting up. Please wait a moment and try again."
+                } else {
+                    errorMessage = "Server error (HTTP \(code)). Please try again later."
+                }
+            case .parsingFailed:
+                errorMessage = "Failed to process server response. Please try again."
+            case .networkError(let underlyingError):
+                let nsError = underlyingError as NSError
+                if nsError.domain == NSURLErrorDomain {
+                    switch nsError.code {
+                    case NSURLErrorTimedOut:
+                        errorMessage = "Request timed out. Please check your internet connection and try again."
+                    case NSURLErrorNotConnectedToInternet:
+                        errorMessage = "No internet connection. Please check your network settings."
+                    case NSURLErrorCannotConnectToHost:
+                        errorMessage = "Cannot connect to server. Please try again later."
+                    default:
+                        errorMessage = "Network error. Please check your connection and try again."
+                    }
+                } else {
+                    errorMessage = "Network error: \(underlyingError.localizedDescription)"
+                }
+            }
+        } else {
+            errorMessage = "An unexpected error occurred. Please try again."
+        }
+        
+        Task { @MainActor in
+            self.statusMessage = errorMessage
+            self.isGenerating = false
+            
+            // Log to Crashlytics if available
+            #if DEBUG
+            print("[Crashlytics] Content generation error logged: \(errorMessage)")
+            #endif
+        }
+    }
+
+    func generateStory() {
+        guard !isGenerating else { return }
+        
+        Task {
+            await MainActor.run {
+                self.isGenerating = true
+                self.statusMessage = "Preparing story generation..."
+            }
+            
+            do {
+                try await generateStoryWithProgress()
+            } catch {
+                handleContentGenerationError(error)
+            }
+        }
     }
 }
 
