@@ -41,8 +41,8 @@ class ContentGenerationViewModel: ObservableObject {
     // Custom URLSession for regular, foreground tasks
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 600
-        config.timeoutIntervalForResource = 1800
+        config.timeoutIntervalForRequest = 1200  // Increased from 600 to 1200 seconds (20 minutes)
+        config.timeoutIntervalForResource = 3600 // Increased from 1800 to 3600 seconds (60 minutes)
         return URLSession(configuration: config)
     }()
     
@@ -203,7 +203,7 @@ class ContentGenerationViewModel: ObservableObject {
             UserDefaults.standard.set(encoded, forKey: "backgroundGenerationParams")
         }
         
-        let maxRetries = 2
+        let maxRetries = 3  // Increased from 2 to 3 retries
         var attempt = 0
         var lastError: Error?
         
@@ -273,7 +273,7 @@ class ContentGenerationViewModel: ObservableObject {
                         self.statusMessage = "Network connection lost. Retrying (\(attempt)/\(maxRetries))..."
                         self.globalManager.updateProgress(step: "Retrying...", stepNumber: globalManager.currentStepNumber, totalSteps: globalManager.totalSteps)
                     }
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                    try? await Task.sleep(nanoseconds: 3_000_000_000) // Increased from 2 to 3 seconds
                 } else {
                     // Send error notification automatically
                     await NotificationManager.shared.sendContentGenerationError(contentType: selectedSummarizationTier.displayName)
@@ -304,7 +304,7 @@ class ContentGenerationViewModel: ObservableObject {
     // MARK: - Background Generation Methods (Refactored to use Singleton)
 
     func generateStoryWithProgressInBackground() {
-        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 8)
+        globalManager.updateProgress(step: "Generating story content... (background)", stepNumber: 1, totalSteps: 6)  // Reduced from 8 to 6
         let trimmedMainCharacter = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
         var effectiveInputText = inputText
         if !trimmedMainCharacter.isEmpty {
@@ -433,7 +433,7 @@ class ContentGenerationViewModel: ObservableObject {
         let url = URL(string: "\(backendURL)/health")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 10.0 // 10 second timeout for health check
+        request.timeoutInterval = 30.0 // Increased from 10.0 to 30.0 seconds for health check
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -443,7 +443,7 @@ class ContentGenerationViewModel: ObservableObject {
                 return false
             }
             
-            print("[Backend] Health check response: \(httpResponse.statusCode)")
+                print("[Backend] Health check response: \(httpResponse.statusCode)")
             
             if httpResponse.statusCode == 200 {
                 if let healthData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -462,12 +462,12 @@ class ContentGenerationViewModel: ObservableObject {
             }
         } catch {
             print("[Backend] Health check error: \(error.localizedDescription)")
-            return false
+        return false
         }
     }
     
     private func generateStoryWithProgress() async throws {
-        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 8)
+        globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 6)  // Reduced from 8 to 6
         
         print("[Story] Starting story generation process")
         
@@ -487,13 +487,13 @@ class ContentGenerationViewModel: ObservableObject {
         if !trimmedMainCharacter.isEmpty {
             effectiveInputText = "The main character of this story is \(trimmedMainCharacter).\n\n\(inputText)"
         }
-        
+
         let storyPrompt = """
         [Level: \(selectedLevel.rawValue)]
         Please convert the following text into an engaging \(selectedGenre.rawValue.lowercased()) story.
         Image Style to consider for tone and visuals: \(selectedImageStyle.displayName).
         Original Text:
-        \(effectiveInputText)
+        \(effectiveInputText) 
         """
         
         await MainActor.run {
@@ -519,7 +519,7 @@ class ContentGenerationViewModel: ObservableObject {
         request.httpBody = jsonData
         
         // Add retry logic for network issues
-        let maxRetries = 3
+        let maxRetries = 5  // Increased from 3 to 5 retries
         var attempt = 0
         var lastError: Error?
         
@@ -539,7 +539,7 @@ class ContentGenerationViewModel: ObservableObject {
                 // Handle 503 errors (backend hibernation) with retry
                 if httpResponse.statusCode == 503 {
                     if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 3.0 // Exponential backoff: 3s, 6s, 9s
+                        let retryDelay = Double(attempt) * 5.0 // Increased from 3.0 to 5.0 seconds (5s, 10s, 15s, 20s, 25s)
                         print("[Story] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
                         await MainActor.run {
                             self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
@@ -600,7 +600,7 @@ class ContentGenerationViewModel: ObservableObject {
                 let nsError = error as NSError
                 if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
                     if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        let retryDelay = Double(attempt) * 3.0 // Increased from 2.0 to 3.0 seconds (3s, 6s, 9s, 12s, 15s)
                         print("[Story] Request timed out. Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
                         await MainActor.run {
                             self.statusMessage = "Request timed out. Retrying... (\(attempt)/\(maxRetries))"
@@ -614,7 +614,7 @@ class ContentGenerationViewModel: ObservableObject {
                 } else {
                     // For other network errors, retry once more
                     if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 1.5
+                        let retryDelay = Double(attempt) * 2.0 // Increased from 1.5 to 2.0 seconds
                         print("[Story] Network error. Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
                         await MainActor.run {
                             self.statusMessage = "Network error. Retrying... (\(attempt)/\(maxRetries))"
@@ -671,7 +671,7 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Lecture] Sending request to backend (/generate_lecture)")
         
         // Add retry logic for 503 errors (backend hibernation)
-        let maxRetries = 3
+        let maxRetries = 5  // Increased from 3 to 5 retries
         var attempt = 0
         
         repeat {
@@ -691,7 +691,7 @@ class ContentGenerationViewModel: ObservableObject {
                 // Handle 503 errors (backend hibernation) with retry
                 if httpResponse.statusCode == 503 {
                     if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        let retryDelay = Double(attempt) * 4.0 // Increased from 2.0 to 4.0 seconds (4s, 8s, 12s, 16s, 20s)
                         print("[Lecture] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
                         await MainActor.run {
                             self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
@@ -855,7 +855,7 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Content] Request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "Unable to print request body")")
         
         // Add retry logic for 503 errors (backend hibernation)
-        let maxRetries = 3
+        let maxRetries = 5  // Increased from 3 to 5 retries
         var attempt = 0
         
         repeat {
@@ -875,7 +875,7 @@ class ContentGenerationViewModel: ObservableObject {
                 // Handle 503 errors (backend hibernation) with retry
                 if httpResponse.statusCode == 503 {
                     if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 2.0 // Exponential backoff: 2s, 4s, 6s
+                        let retryDelay = Double(attempt) * 4.0 // Increased from 2.0 to 4.0 seconds (4s, 8s, 12s, 16s, 20s)
                         print("[Content] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
                         await MainActor.run {
                             self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
@@ -2459,4 +2459,4 @@ enum ContentGenerationError: Error, LocalizedError {
             return "Network error: \(error.localizedDescription)"
         }
     }
-}
+} 
