@@ -2407,26 +2407,21 @@ extension Story {
 extension StoryChapter {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
         if let idString = try container.decodeIfPresent(String.self, forKey: .id) {
             self.id = idString
+        } else if let chapterIdString = try container.decodeIfPresent(String.self, forKey: .chapterId) {
+            self.id = chapterIdString
         } else {
-            print("[StoryChapter.decoder] Warning: Chapter 'id' missing or invalid in JSON. Generating new client-side UUID.")
-            self.id = UUID().uuidString // Generate a new UUID if not present or invalid
+            print("[StoryChapter.decoder] Warning: Chapter 'id' and 'chapterId' missing or invalid in JSON. Generating new client-side UUID.")
+            self.id = UUID().uuidString
         }
-        
         self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Chapter"
         self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No content for this chapter."
-        self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0 // Default order if missing
-        
+        self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
         self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
-        
-        // Decode additional story elements
         self.keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
         self.characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
         self.emotionalMoments = try container.decodeIfPresent([String].self, forKey: .emotionalMoments)
-        
-        // Decode new image arrays
         self.keyEventImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .keyEventImages)
         self.emotionalMomentImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .emotionalMomentImages)
         self.characterInteractionImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .characterInteractionImages)

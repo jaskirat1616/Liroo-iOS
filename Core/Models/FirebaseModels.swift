@@ -44,19 +44,32 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
-        if id == "" { id = UUID().uuidString }
-        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        var tempId = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        if tempId == "" { tempId = UUID().uuidString }
+        let tempUserId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        let tempTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
+        let tempOverview = try container.decodeIfPresent(String.self, forKey: .overview)
+        let tempLevel = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
+        let tempImageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        let tempChapters = try container.decodeIfPresent([FirebaseChapter].self, forKey: .chapters) ?? []
+        let tempMainCharacters = try container.decodeIfPresent([FirebaseCharacter].self, forKey: .mainCharacters)
+        let tempCoverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
+        let tempSummaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
+        let tempCreatedAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+        // Assign all properties
+        id = tempId
+        userId = tempUserId
+        title = tempTitle
+        overview = tempOverview
+        level = tempLevel
+        imageStyle = tempImageStyle
+        chapters = tempChapters
+        mainCharacters = tempMainCharacters
+        coverImageUrl = tempCoverImageUrl
+        summaryImageUrl = tempSummaryImageUrl
+        createdAt = tempCreatedAt
+        // Now you can use self
         if userId == "" { print("[FirebaseStory.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
-        overview = try container.decodeIfPresent(String.self, forKey: .overview)
-        level = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
-        imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
-        chapters = try container.decodeIfPresent([FirebaseChapter].self, forKey: .chapters) ?? []
-        mainCharacters = try container.decodeIfPresent([FirebaseCharacter].self, forKey: .mainCharacters)
-        coverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
-        summaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
-        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
     }
     
     enum CodingKeys: String, CodingKey {
@@ -116,14 +129,20 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
         self.actionImageUrl = actionImageUrl
     }
     
-    // Custom decoding to handle missing fields gracefully
+    // Custom decoding to handle both 'id' and 'chapterId' for legacy support
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        id = try container.decode(String.self, forKey: .id)
-        title = try container.decode(String.self, forKey: .title)
-        content = try container.decode(String.self, forKey: .content)
-        order = try container.decode(Int.self, forKey: .order)
+        if let idValue = try container.decodeIfPresent(String.self, forKey: .id) {
+            id = idValue
+        } else if let chapterIdValue = try container.decodeIfPresent(String.self, forKey: .chapterId) {
+            id = chapterIdValue
+        } else {
+            id = UUID().uuidString
+            print("[FirebaseChapter.decoder] Warning: No id or chapterId found, generated new UUID: \(id)")
+        }
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
         characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
@@ -137,6 +156,7 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
     
     enum CodingKeys: String, CodingKey {
         case id
+        case chapterId
         case title
         case content
         case order
@@ -368,16 +388,26 @@ struct FirebaseLecture: Identifiable, Codable, Hashable {
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
-        if id == "" { id = UUID().uuidString }
-        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        var tempId = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        if tempId == "" { tempId = UUID().uuidString }
+        let tempUserId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        let tempTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
+        let tempLevel = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
+        let tempImageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
+        let tempSections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections) ?? []
+        let tempAudioFiles = try container.decodeIfPresent([FirebaseAudioFile].self, forKey: .audioFiles)
+        let tempCreatedAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+        // Assign all properties
+        id = tempId
+        userId = tempUserId
+        title = tempTitle
+        level = tempLevel
+        imageStyle = tempImageStyle
+        sections = tempSections
+        audioFiles = tempAudioFiles
+        createdAt = tempCreatedAt
+        // Now you can use self
         if userId == "" { print("[FirebaseLecture.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
-        level = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
-        imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
-        sections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections) ?? []
-        audioFiles = try container.decodeIfPresent([FirebaseAudioFile].self, forKey: .audioFiles)
-        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
     }
     
     enum CodingKeys: String, CodingKey {
