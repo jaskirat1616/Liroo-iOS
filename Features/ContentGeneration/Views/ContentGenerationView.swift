@@ -106,24 +106,18 @@ struct ContentGenerationView: View {
     private var convertedUserContent: FirebaseUserContent {
         // Convert ContentBlock array to FirebaseContentBlock format
         let firebaseBlocks = viewModel.blocks.map { block in
-            var firebaseBlock = FirebaseContentBlock()
+            var firebaseBlock = FirebaseContentBlock(
+                type: block.type.rawValue,
+                content: block.content,
+                alt: block.alt,
+                firebaseImageUrl: block.firebaseImageUrl,
+                options: block.options?.map { option in
+                    FirebaseQuizOption(id: option.id, text: option.text)
+                },
+                correctAnswerID: block.correctAnswerID,
+                explanation: block.explanation
+            )
             firebaseBlock.id = block.id.uuidString
-            firebaseBlock.type = block.type.rawValue
-            firebaseBlock.content = block.content
-            firebaseBlock.alt = block.alt
-            firebaseBlock.firebaseImageUrl = block.firebaseImageUrl
-            firebaseBlock.correctAnswerID = block.correctAnswerID
-            firebaseBlock.explanation = block.explanation
-            
-            // Convert quiz options if they exist
-            if let options = block.options {
-                firebaseBlock.options = options.map { option in
-                    var firebaseOption = FirebaseQuizOption()
-                    firebaseOption.id = option.id
-                    firebaseOption.text = option.text
-                    return firebaseOption
-                }
-            }
             
             return firebaseBlock
         }
