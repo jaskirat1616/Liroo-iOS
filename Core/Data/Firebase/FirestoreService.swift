@@ -183,6 +183,17 @@ final class FirestoreService {
     
     // MARK: - Query
     func query<T: Decodable>(_ type: T.Type, from collection: String, field: String, isEqualTo value: Any) async throws -> [T] {
+        func makeJSONSafe(_ value: Any) -> Any {
+            if let timestamp = value as? Timestamp {
+                return ISO8601DateFormatter().string(from: timestamp.dateValue())
+            } else if let dict = value as? [String: Any] {
+                return dict.mapValues { makeJSONSafe($0) }
+            } else if let array = value as? [Any] {
+                return array.map { makeJSONSafe($0) }
+            } else {
+                return value
+            }
+        }
         do {
             let snapshot = try await db.collection(collection)
                 .whereField(field, isEqualTo: value)
@@ -198,20 +209,18 @@ final class FirestoreService {
                     if data["id"] == nil || (data["id"] as? String)?.isEmpty == true {
                         data["id"] = document.documentID
                     }
-                    let jsonData = try JSONSerialization.data(withJSONObject: data)
+                    let jsonSafeData = makeJSONSafe(data)
+                    let jsonData = try JSONSerialization.data(withJSONObject: jsonSafeData)
                     let decodedItem = try JSONDecoder().decode(T.self, from: jsonData)
                     results.append(decodedItem)
                 } catch let decodingError as DecodingError {
                     // Log detailed decoding error for debugging
                     print("[FirestoreService] Decoding error for document \(document.documentID) in collection \(collection):")
                     print("[FirestoreService] Error: \(decodingError)")
-                    
                     // Log the raw document data for debugging
                     let data = document.data()
                     print("[FirestoreService] Raw document data: \(data)")
-                    
                     failedDocuments.append((document.documentID, decodingError))
-                    
                     // Continue processing other documents instead of failing completely
                     continue
                 } catch {
