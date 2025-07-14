@@ -526,6 +526,16 @@ struct FirebaseLectureSection: Identifiable, Codable, Hashable {
         order = try container.decodeIfPresent(Int.self, forKey: .order)
     }
     
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sectionId, forKey: .sectionId)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(script, forKey: .script)
+        try container.encodeIfPresent(imagePrompt, forKey: .imagePrompt)
+        try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
+        try container.encodeIfPresent(order, forKey: .order)
+    }
+    
     enum CodingKeys: String, CodingKey {
         case sectionId
         case id
