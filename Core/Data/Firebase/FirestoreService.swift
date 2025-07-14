@@ -193,7 +193,13 @@ final class FirestoreService {
             
             for document in snapshot.documents {
                 do {
-                    let decodedItem = try document.data(as: T.self)
+                    var data = document.data()
+                    // Inject the document ID as 'id' if missing or empty
+                    if data["id"] == nil || (data["id"] as? String)?.isEmpty == true {
+                        data["id"] = document.documentID
+                    }
+                    let jsonData = try JSONSerialization.data(withJSONObject: data)
+                    let decodedItem = try JSONDecoder().decode(T.self, from: jsonData)
                     results.append(decodedItem)
                 } catch let decodingError as DecodingError {
                     // Log detailed decoding error for debugging

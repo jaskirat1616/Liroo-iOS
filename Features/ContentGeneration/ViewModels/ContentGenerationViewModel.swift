@@ -37,7 +37,7 @@ class ContentGenerationViewModel: ObservableObject {
     private let globalManager = GlobalBackgroundProcessingManager.shared
     private let firestoreService = FirestoreService.shared
     private let backgroundTaskService = BackgroundTaskCompletionService.shared
-    private let backendURL = "https://backend-orasync-test.onrender.com"
+    private let backendURL = "https://liroo-backend-904791784838.us-central1.run.app"
     
     // Custom URLSession for regular, foreground tasks
     private lazy var session: URLSession = {
