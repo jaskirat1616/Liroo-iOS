@@ -44,14 +44,15 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        id = try container.decodeIfPresent(String.self, forKey: .id)
-        userId = try container.decode(String.self, forKey: .userId)
-        title = try container.decode(String.self, forKey: .title)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        if id == "" { id = UUID().uuidString }
+        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        if userId == "" { print("[FirebaseStory.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
         overview = try container.decodeIfPresent(String.self, forKey: .overview)
-        level = try container.decode(String.self, forKey: .level)
+        level = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
         imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
-        chapters = try container.decodeIfPresent([FirebaseChapter].self, forKey: .chapters)
+        chapters = try container.decodeIfPresent([FirebaseChapter].self, forKey: .chapters) ?? []
         mainCharacters = try container.decodeIfPresent([FirebaseCharacter].self, forKey: .mainCharacters)
         coverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
         summaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
@@ -367,13 +368,14 @@ struct FirebaseLecture: Identifiable, Codable, Hashable {
     // Custom decoding to handle missing fields gracefully
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        id = try container.decodeIfPresent(String.self, forKey: .id)
-        userId = try container.decode(String.self, forKey: .userId)
-        title = try container.decode(String.self, forKey: .title)
-        level = try container.decode(String.self, forKey: .level)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        if id == "" { id = UUID().uuidString }
+        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        if userId == "" { print("[FirebaseLecture.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
+        level = try container.decodeIfPresent(String.self, forKey: .level) ?? "unknown"
         imageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
-        sections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections)
+        sections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections) ?? []
         audioFiles = try container.decodeIfPresent([FirebaseAudioFile].self, forKey: .audioFiles)
         createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
     }
