@@ -889,6 +889,17 @@ struct ContentGenerationView: View {
                                 .font(.system(size: isIPad ? 13 : 12, weight: .regular))
                                 .foregroundColor(.secondary)
                                 .lineLimit(3)
+                            
+                            // Add info about generation time
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.orange)
+                                Text("Generation may take 5-15 minutes due to multiple image creations")
+                                    .font(.system(size: isIPad ? 12 : 11, weight: .regular))
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.top, 4)
                         }
                     }
                     .padding(.top, 2)
@@ -908,20 +919,29 @@ struct ContentGenerationView: View {
                 await viewModel.generateContent()
             }
         }) {
-            HStack(spacing: 12) {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .primary))
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .medium))
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .primary))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Text(viewModel.isLoading ? "Generating..." : "Generate Content")
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
                 
-                Text(viewModel.isLoading ? "Generating..." : "Generate Content")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.primary)
+                // Show additional info for comic generation
+                if viewModel.selectedSummarizationTier == .comic && !viewModel.isLoading {
+                    Text("Comics may take 5-15 minutes to generate")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.orange)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)

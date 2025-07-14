@@ -44,8 +44,16 @@ class ContentGenerationViewModel: ObservableObject {
     // Custom URLSession for regular, foreground tasks
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 1200  // Increased from 600 to 1200 seconds (20 minutes)
-        config.timeoutIntervalForResource = 3600 // Increased from 1800 to 3600 seconds (60 minutes)
+        config.timeoutIntervalForRequest = 3600  // Increased from 1200 to 3600 seconds (60 minutes)
+        config.timeoutIntervalForResource = 7200 // Increased from 3600 to 7200 seconds (120 minutes)
+        return URLSession(configuration: config)
+    }()
+    
+    // Custom URLSession for comic generation with extended timeouts
+    private lazy var comicSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 7200  // 120 minutes for comic generation
+        config.timeoutIntervalForResource = 14400 // 240 minutes (4 hours) for comic generation
         return URLSession(configuration: config)
     }()
     
@@ -75,7 +83,8 @@ class ContentGenerationViewModel: ObservableObject {
             while !Task.isCancelled {
                 do {
                     try await pollProgress(requestId: requestId)
-                    try await Task.sleep(nanoseconds: 1_000_000_000) // Poll every 1 second
+                    // Poll every 2 seconds for comics (longer than 1 second for other content types)
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
                 } catch {
                     print("[Progress] Polling error: \(error)")
                     // If polling fails, add task to background monitoring
@@ -101,7 +110,10 @@ class ContentGenerationViewModel: ObservableObject {
     
     private func pollProgress(requestId: String) async throws {
         let url = URL(string: "\(backendURL)/progress/\(requestId)")!
-        let (data, response) = try await session.data(from: url)
+        
+        // Use comic session if we're generating a comic, otherwise use regular session
+        let sessionToUse = selectedSummarizationTier == .comic ? comicSession : session
+        let (data, response) = try await sessionToUse.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -243,6 +255,15 @@ class ContentGenerationViewModel: ObservableObject {
                         operation: "content_generation",
                         duration: duration,
                         threshold: 60
+                    )
+                }
+                
+                // Special handling for comic generation performance
+                if selectedSummarizationTier == .comic && duration > 300 { // 5 minutes
+                    CrashlyticsManager.shared.logPerformanceIssue(
+                        operation: "comic_generation",
+                        duration: duration,
+                        threshold: 300
                     )
                 }
                 
@@ -2045,7 +2066,7 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func generateComicWithProgress() async throws {
-        globalManager.updateProgress(step: "Generating comic content...", stepNumber: 1, totalSteps: 2)
+        globalManager.updateProgress(step: "Generating comic content...", stepNumber: 1, totalSteps: 3)
         
         print("[Comic] Starting comic generation process")
         
@@ -2091,7 +2112,11 @@ class ContentGenerationViewModel: ObservableObject {
             print("[Comic] Attempt \(attempt) of \(maxRetries)")
             
             do {
-                let (data, response) = try await session.data(for: request)
+                await MainActor.run {
+                    self.statusMessage = "Generating comic script and characters... (This may take several minutes)"
+                }
+                
+                let (data, response) = try await comicSession.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     print("[Comic] ERROR: Invalid server response")
@@ -2149,7 +2174,10 @@ class ContentGenerationViewModel: ObservableObject {
                         globalManager.setRecentlyGeneratedContent(comic: comic)
                     }
                     
-                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 2, totalSteps: 2)
+                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+                    await MainActor.run {
+                        self.statusMessage = "Saving comic to cloud storage..."
+                    }
                     
                     if let currentUser = Auth.auth().currentUser {
                         print("[Comic] User authenticated (\(currentUser.uid)), proceeding with Firebase save for comic ID \(comic.id.uuidString)")
@@ -2184,7 +2212,13 @@ class ContentGenerationViewModel: ObservableObject {
                 if let urlError = error as? URLError {
                     switch urlError.code {
                     case .timedOut:
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out. Please try again."])
+                        // For comics, handle timeout more gracefully
+                        if selectedSummarizationTier == .comic {
+                            handleComicGenerationTimeout()
+                            return // Don't throw error, let it continue in background
+                        } else {
+                            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Comic generation is taking longer than expected. Please try again - the process may continue in the background."])
+                        }
                     case .notConnectedToInternet:
                         throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
                     default:
@@ -2243,6 +2277,32 @@ class ContentGenerationViewModel: ObservableObject {
             await MainActor.run {
                 self.errorMessage = "Failed to save comic to cloud: \(error.localizedDescription)"
             }
+        }
+    }
+    
+    // MARK: - Comic Generation Specific Handling
+    
+    private func handleComicGenerationTimeout() {
+        let timeoutMessage = """
+        Comic generation is taking longer than expected. This is normal for comics with many panels.
+        
+        The process will continue in the background. You'll receive a notification when it's complete.
+        
+        You can continue using the app while waiting.
+        """
+        
+        Task { @MainActor in
+            self.statusMessage = timeoutMessage
+            self.isLoading = false
+            
+            // Add to background monitoring
+            if let requestId = currentRequestId {
+                backgroundTaskService.addPendingTask(requestId)
+            }
+            
+            // Show a user-friendly alert
+            // Note: In a real implementation, you might want to show an alert here
+            print("[Comic] Generation timeout handled gracefully")
         }
     }
 }
