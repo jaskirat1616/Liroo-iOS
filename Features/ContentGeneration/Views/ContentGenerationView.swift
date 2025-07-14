@@ -122,13 +122,15 @@ struct ContentGenerationView: View {
             return firebaseBlock
         }
         
-        var userContent = FirebaseUserContent()
-        userContent.id = UUID().uuidString
-        userContent.topic = viewModel.inputText
-        userContent.blocks = firebaseBlocks
-        userContent.level = viewModel.selectedLevel.rawValue
-        userContent.summarizationTier = viewModel.selectedSummarizationTier.rawValue
-        userContent.createdAt = Timestamp(date: Date())
+        var userContent = FirebaseUserContent(
+            id: UUID().uuidString,
+            userId: nil, // Will be set by the backend
+            topic: viewModel.inputText,
+            level: viewModel.selectedLevel.rawValue,
+            summarizationTier: viewModel.selectedSummarizationTier.rawValue,
+            blocks: firebaseBlocks,
+            createdAt: Timestamp(date: Date())
+        )
         
         return userContent
     }

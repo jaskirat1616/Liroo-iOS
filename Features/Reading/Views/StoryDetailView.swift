@@ -323,7 +323,7 @@ struct ReadingChapterView: View {
                             )
                     }
                     .frame(maxWidth: .infinity)
-                    .cornerRadius(12)
+                            .cornerRadius(12)
                 }
             }
             
@@ -392,8 +392,8 @@ struct ReadingChapterView: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle())
                             )
-                    }
-                    .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity)
                     .cornerRadius(12)
                 }
             }

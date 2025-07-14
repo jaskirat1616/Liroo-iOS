@@ -35,20 +35,20 @@ class HistoryViewModel: ObservableObject {
 
                 // Fetch stories
                 do {
-                    let stories: [FirebaseStory] = try await firestoreService.query(
-                        FirebaseStory.self,
-                        from: "stories",
-                        field: "userId",
-                        isEqualTo: userId
-                    )
-                    fetchedItems.append(contentsOf: stories.compactMap { story in
-                        guard let docId = story.id, !docId.isEmpty else {
-                            print("[HistoryViewModel] Warning: Skipping story with nil or empty ID.")
-                            return nil
-                        }
-                        return UserHistoryEntry(from: story)
-                    })
-                    print("[HistoryViewModel] Fetched \(stories.count) stories for user \(userId), valid items: \(fetchedItems.count)")
+                let stories: [FirebaseStory] = try await firestoreService.query(
+                    FirebaseStory.self,
+                    from: "stories",
+                    field: "userId",
+                    isEqualTo: userId
+                )
+                fetchedItems.append(contentsOf: stories.compactMap { story in
+                    guard let docId = story.id, !docId.isEmpty else {
+                        print("[HistoryViewModel] Warning: Skipping story with nil or empty ID.")
+                        return nil
+                    }
+                    return UserHistoryEntry(from: story)
+                })
+                print("[HistoryViewModel] Fetched \(stories.count) stories for user \(userId), valid items: \(fetchedItems.count)")
                 } catch {
                     print("[HistoryViewModel] Error fetching stories: \(error.localizedDescription)")
                     totalErrors += 1
@@ -56,26 +56,26 @@ class HistoryViewModel: ObservableObject {
 
                 // Fetch user generated content
                 do {
-                    let userContents: [FirebaseUserContent] = try await firestoreService.query(
-                        FirebaseUserContent.self,
-                        from: "userGeneratedContent",
-                        field: "userId",
-                        isEqualTo: userId
-                    )
-                    print("[HistoryViewModel] DEBUG: Raw fetched userContents count: \(userContents.count)")
-                    for (index, content) in userContents.enumerated() {
-                        print("[HistoryViewModel] DEBUG: Raw content[\(index)] - ID: \(content.id ?? "NIL ID"), Topic: \(content.topic ?? "NIL Topic")")
+                let userContents: [FirebaseUserContent] = try await firestoreService.query(
+                    FirebaseUserContent.self,
+                    from: "userGeneratedContent",
+                    field: "userId",
+                    isEqualTo: userId
+                )
+                print("[HistoryViewModel] DEBUG: Raw fetched userContents count: \(userContents.count)")
+                for (index, content) in userContents.enumerated() {
+                    print("[HistoryViewModel] DEBUG: Raw content[\(index)] - ID: \(content.id ?? "NIL ID"), Topic: \(content.topic ?? "NIL Topic")")
+                }
+                let storyItemCount = fetchedItems.count
+                fetchedItems.append(contentsOf: userContents.compactMap { content in
+                    guard let docId = content.id, !docId.isEmpty else {
+                        print("[HistoryViewModel] Warning: Skipping user content with nil or empty ID. Original fetched ID was: '\(content.id ?? "nil")'. Topic: '\(content.topic ?? "NIL Topic")'")
+                        return nil
                     }
-                    let storyItemCount = fetchedItems.count
-                    fetchedItems.append(contentsOf: userContents.compactMap { content in
-                        guard let docId = content.id, !docId.isEmpty else {
-                            print("[HistoryViewModel] Warning: Skipping user content with nil or empty ID. Original fetched ID was: '\(content.id ?? "nil")'. Topic: '\(content.topic ?? "NIL Topic")'")
-                            return nil
-                        }
-                        return UserHistoryEntry(from: content)
-                    })
-                    let userContentItemCount = fetchedItems.count - storyItemCount
-                    print("[HistoryViewModel] Fetched \(userContents.count) user contents for user \(userId), valid items: \(userContentItemCount)")
+                    return UserHistoryEntry(from: content)
+                })
+                let userContentItemCount = fetchedItems.count - storyItemCount
+                print("[HistoryViewModel] Fetched \(userContents.count) user contents for user \(userId), valid items: \(userContentItemCount)")
                 } catch {
                     print("[HistoryViewModel] Error fetching user content: \(error.localizedDescription)")
                     totalErrors += 1
@@ -83,26 +83,26 @@ class HistoryViewModel: ObservableObject {
 
                 // Fetch lectures
                 do {
-                    let lectures: [FirebaseLecture] = try await firestoreService.query(
-                        FirebaseLecture.self,
-                        from: "lectures",
-                        field: "userId",
-                        isEqualTo: userId
-                    )
-                    print("[HistoryViewModel] DEBUG: Raw fetched lectures count: \(lectures.count)")
-                    for (index, lecture) in lectures.enumerated() {
-                        print("[HistoryViewModel] DEBUG: Raw lecture[\(index)] - ID: \(lecture.id ?? "NIL ID"), Title: \(lecture.title)")
+                let lectures: [FirebaseLecture] = try await firestoreService.query(
+                    FirebaseLecture.self,
+                    from: "lectures",
+                    field: "userId",
+                    isEqualTo: userId
+                )
+                print("[HistoryViewModel] DEBUG: Raw fetched lectures count: \(lectures.count)")
+                for (index, lecture) in lectures.enumerated() {
+                    print("[HistoryViewModel] DEBUG: Raw lecture[\(index)] - ID: \(lecture.id ?? "NIL ID"), Title: \(lecture.title)")
+                }
+                let beforeLectureCount = fetchedItems.count
+                fetchedItems.append(contentsOf: lectures.compactMap { lecture in
+                    guard let docId = lecture.id, !docId.isEmpty else {
+                        print("[HistoryViewModel] Warning: Skipping lecture with nil or empty ID.")
+                        return nil
                     }
-                    let beforeLectureCount = fetchedItems.count
-                    fetchedItems.append(contentsOf: lectures.compactMap { lecture in
-                        guard let docId = lecture.id, !docId.isEmpty else {
-                            print("[HistoryViewModel] Warning: Skipping lecture with nil or empty ID.")
-                            return nil
-                        }
-                        return UserHistoryEntry(from: lecture)
-                    })
-                    let lectureItemCount = fetchedItems.count - beforeLectureCount
-                    print("[HistoryViewModel] Fetched \(lectures.count) lectures for user \(userId), valid items: \(lectureItemCount)")
+                    return UserHistoryEntry(from: lecture)
+                })
+                let lectureItemCount = fetchedItems.count - beforeLectureCount
+                print("[HistoryViewModel] Fetched \(lectures.count) lectures for user \(userId), valid items: \(lectureItemCount)")
                 } catch {
                     print("[HistoryViewModel] Error fetching lectures: \(error.localizedDescription)")
                     totalErrors += 1
