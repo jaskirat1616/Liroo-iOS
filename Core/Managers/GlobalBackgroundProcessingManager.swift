@@ -16,6 +16,7 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
     @Published public var isIndicatorVisible: Bool = true
     @Published var recentlyGeneratedStory: Story? = nil
     @Published var recentlyGeneratedLecture: Lecture? = nil
+    @Published var recentlyGeneratedComic: Comic? = nil
     @Published var recentlyGeneratedUserContent: [ContentBlock]? = nil
     @Published var showSuccessBox: Bool = false
     @Published var lastGeneratedContent: LastGeneratedContent? = nil {
@@ -171,9 +172,10 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
         }
     }
     
-    func setRecentlyGeneratedContent(story: Story? = nil, lecture: Lecture? = nil, userContent: [ContentBlock]? = nil) {
+    func setRecentlyGeneratedContent(story: Story? = nil, lecture: Lecture? = nil, comic: Comic? = nil, userContent: [ContentBlock]? = nil) {
         self.recentlyGeneratedStory = story
         self.recentlyGeneratedLecture = lecture
+        self.recentlyGeneratedComic = comic
         self.recentlyGeneratedUserContent = userContent
         self.showSuccessBox = true
     }
@@ -181,6 +183,7 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
     func clearRecentlyGeneratedContent() {
         self.recentlyGeneratedStory = nil
         self.recentlyGeneratedLecture = nil
+        self.recentlyGeneratedComic = nil
         self.recentlyGeneratedUserContent = nil
         self.showSuccessBox = false
     }
@@ -195,7 +198,7 @@ public class GlobalBackgroundProcessingManager: ObservableObject {
 }
 
 struct LastGeneratedContent: Codable {
-    enum ContentType: String, Codable { case story, lecture, userContent }
+    enum ContentType: String, Codable { case story, lecture, comic, userContent }
     let type: ContentType
     let id: String
     let title: String

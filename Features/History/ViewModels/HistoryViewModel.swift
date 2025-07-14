@@ -108,6 +108,33 @@ class HistoryViewModel: ObservableObject {
                     totalErrors += 1
                 }
 
+                // Fetch comics
+                do {
+                let comics: [FirebaseComic] = try await firestoreService.query(
+                    FirebaseComic.self,
+                    from: "comics",
+                    field: "userId",
+                    isEqualTo: userId
+                )
+                print("[HistoryViewModel] DEBUG: Raw fetched comics count: \(comics.count)")
+                for (index, comic) in comics.enumerated() {
+                    print("[HistoryViewModel] DEBUG: Raw comic[\(index)] - ID: \(comic.id ?? "NIL ID"), Title: \(comic.comicTitle)")
+                }
+                let beforeComicCount = fetchedItems.count
+                fetchedItems.append(contentsOf: comics.compactMap { comic in
+                    guard let docId = comic.id, !docId.isEmpty else {
+                        print("[HistoryViewModel] Warning: Skipping comic with nil or empty ID.")
+                        return nil
+                    }
+                    return UserHistoryEntry(from: comic)
+                })
+                let comicItemCount = fetchedItems.count - beforeComicCount
+                print("[HistoryViewModel] Fetched \(comics.count) comics for user \(userId), valid items: \(comicItemCount)")
+                } catch {
+                    print("[HistoryViewModel] Error fetching comics: \(error.localizedDescription)")
+                    totalErrors += 1
+                }
+
                 // Sort items by date, newest first
                 self.historyItems = fetchedItems.sorted { $0.date > $1.date }
                 
@@ -186,13 +213,22 @@ class HistoryViewModel: ObservableObject {
             isEqualTo: userId
         )
         
-        let totalProblematic = problematicStories.count + problematicContent.count + problematicLectures.count
+        // Check comics collection
+        let problematicComics = await firestoreService.identifyProblematicDocuments(
+            FirebaseComic.self,
+            from: "comics",
+            field: "userId",
+            isEqualTo: userId
+        )
+        
+        let totalProblematic = problematicStories.count + problematicContent.count + problematicLectures.count + problematicComics.count
         
         if totalProblematic > 0 {
             print("[HistoryViewModel] Found \(totalProblematic) problematic documents:")
             print("[HistoryViewModel] - Stories: \(problematicStories.count)")
             print("[HistoryViewModel] - User Content: \(problematicContent.count)")
             print("[HistoryViewModel] - Lectures: \(problematicLectures.count)")
+            print("[HistoryViewModel] - Comics: \(problematicComics.count)")
             
             // Log to Crashlytics for monitoring
             CrashlyticsManager.shared.logNonFatalError(
@@ -203,7 +239,8 @@ class HistoryViewModel: ObservableObject {
                     "total_problematic": totalProblematic,
                     "problematic_stories": problematicStories,
                     "problematic_content": problematicContent,
-                    "problematic_lectures": problematicLectures
+                    "problematic_lectures": problematicLectures,
+                    "problematic_comics": problematicComics
                 ]
             )
         } else {
@@ -255,6 +292,18 @@ class HistoryViewModel: ObservableObject {
             print("[HistoryViewModel] ✅ Successfully decoded \(lectures.count) lectures")
         } catch {
             print("[HistoryViewModel] ❌ Failed to decode lectures: \(error)")
+        }
+        
+        do {
+            let comics = try await firestoreService.query(
+                FirebaseComic.self,
+                from: "comics",
+                field: "userId",
+                isEqualTo: userId
+            )
+            print("[HistoryViewModel] ✅ Successfully decoded \(comics.count) comics")
+        } catch {
+            print("[HistoryViewModel] ❌ Failed to decode comics: \(error)")
         }
     }
 }

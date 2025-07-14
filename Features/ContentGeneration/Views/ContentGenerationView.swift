@@ -18,6 +18,7 @@ extension SummarizationTier {
         case .detailedExplanation: return "Detailed"
         case .story: return "Story"
         case .lecture: return "Lecture"
+        case .comic: return "Comic"
         }
     }
 }
@@ -73,6 +74,8 @@ struct ContentGenerationView: View {
             return "book.fill"
         } else if globalManager.recentlyGeneratedLecture != nil {
             return "mic.fill"
+        } else if globalManager.recentlyGeneratedComic != nil {
+            return "rectangle.stack.fill"
         } else {
             return "doc.text.fill"
         }
@@ -83,6 +86,8 @@ struct ContentGenerationView: View {
             return "story"
         } else if globalManager.recentlyGeneratedLecture != nil {
             return "lecture"
+        } else if globalManager.recentlyGeneratedComic != nil {
+            return "comic"
         } else {
             return "content"
         }
@@ -95,6 +100,8 @@ struct ContentGenerationView: View {
                 return "book.fill"
             case .lecture:
                 return "mic.fill"
+            case .comic:
+                return "rectangle.stack.fill"
             case .userContent:
                 return "doc.text.fill"
             }
@@ -190,6 +197,8 @@ struct ContentGenerationView: View {
                                 viewModel.isShowingFullScreenStory = true
                             case .lecture:
                                 viewModel.isShowingFullScreenLecture = true
+                            case .comic:
+                                viewModel.isShowingFullScreenComic = true
                             case .userContent:
                                 viewModel.isShowingFullScreenContent = true
                             }
@@ -208,6 +217,7 @@ struct ContentGenerationView: View {
                     if globalManager.showSuccessBox && (
                         globalManager.recentlyGeneratedStory != nil ||
                         globalManager.recentlyGeneratedLecture != nil ||
+                        globalManager.recentlyGeneratedComic != nil ||
                         globalManager.recentlyGeneratedUserContent != nil
                     ) {
                         Button(action: {
@@ -216,6 +226,8 @@ struct ContentGenerationView: View {
                                 viewModel.isShowingFullScreenStory = true
                             } else if globalManager.recentlyGeneratedLecture != nil {
                                 viewModel.isShowingFullScreenLecture = true
+                            } else if globalManager.recentlyGeneratedComic != nil {
+                                viewModel.isShowingFullScreenComic = true
                             } else if globalManager.recentlyGeneratedUserContent != nil {
                                 viewModel.isShowingFullScreenContent = true
                             }
@@ -422,6 +434,27 @@ struct ContentGenerationView: View {
                         itemTitle: recent.title,
                         dismissAction: {
                             viewModel.isShowingFullScreenContent = false
+                        }
+                    )
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $viewModel.isShowingFullScreenComic, onDismiss: { }) {
+            if let comic = viewModel.currentComic {
+                ComicView(
+                    comic: comic,
+                    dismissAction: {
+                        viewModel.isShowingFullScreenComic = false
+                    }
+                )
+            } else if let recent = globalManager.lastGeneratedContent, recent.type == .comic {
+                NavigationStack {
+                    FullReadingView(
+                        itemID: recent.id,
+                        collectionName: "comics",
+                        itemTitle: recent.title,
+                        dismissAction: {
+                            viewModel.isShowingFullScreenComic = false
                         }
                     )
                 }
@@ -798,6 +831,64 @@ struct ContentGenerationView: View {
                                 .background(Color(.systemGray6))
                                 .cornerRadius(12)
                             }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                
+                // Comic-specific options
+                if viewModel.selectedSummarizationTier == .comic {
+                    VStack(spacing: 12) {
+                        Divider()
+                            .padding(.vertical, 2)
+                        
+                        // Image Style Selection for Comic
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Comic Style")
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                .foregroundColor(.primary)
+                            
+                            Menu {
+                                ForEach(ImageStyle.allCases, id: \.self) { style in
+                                    Button(action: {
+                                        viewModel.selectedImageStyle = style
+                                    }) {
+                                        HStack {
+                                            Text(style.displayName)
+                                            if viewModel.selectedImageStyle == style {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Text(viewModel.selectedImageStyle.displayName)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                            }
+                        }
+                        
+                        // Comic Info
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Comic Generation")
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                .foregroundColor(.primary)
+                            
+                            Text("Creates a comic with multiple panels, character dialogue, and original-sized images in a scrollable view.")
+                                .font(.system(size: isIPad ? 13 : 12, weight: .regular))
+                                .foregroundColor(.secondary)
+                                .lineLimit(3)
                         }
                     }
                     .padding(.top, 2)

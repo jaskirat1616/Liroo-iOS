@@ -245,6 +245,8 @@ struct MainTabView: View {
             baseTime = 30 // 30 seconds for lecture generation
         case "content":
             baseTime = 25 // 25 seconds for content generation
+        case "comic":
+            baseTime = 60 // 60 seconds for comic generation (more complex with multiple panels)
         default:
             baseTime = 30
         }

@@ -600,3 +600,129 @@ struct FirebaseAudioFile: Identifiable, Codable, Hashable {
         case section
     }
 }
+
+// MARK: - Firebase Comic Models
+
+struct FirebaseComic: Identifiable, Codable, Hashable {
+    @DocumentID var id: String?
+    var userId: String
+    var comicTitle: String
+    var theme: String
+    var characterStyleGuide: [String: String]
+    var panelLayout: [FirebaseComicPanel]
+    var createdAt: Timestamp? = Timestamp(date: Date())
+
+    // Conform to Hashable
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: FirebaseComic, rhs: FirebaseComic) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    init(id: String? = nil, userId: String, comicTitle: String, theme: String, characterStyleGuide: [String: String], panelLayout: [FirebaseComicPanel], createdAt: Timestamp? = nil) {
+        self.id = id
+        self.userId = userId
+        self.comicTitle = comicTitle
+        self.theme = theme
+        self.characterStyleGuide = characterStyleGuide
+        self.panelLayout = panelLayout
+        self.createdAt = createdAt ?? Timestamp(date: Date())
+    }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var tempId = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        if tempId == "" { tempId = UUID().uuidString }
+        let tempUserId = try container.decodeIfPresent(String.self, forKey: .userId) ?? ""
+        let tempComicTitle = try container.decodeIfPresent(String.self, forKey: .comicTitle) ?? "Untitled Comic"
+        let tempTheme = try container.decodeIfPresent(String.self, forKey: .theme) ?? "Adventure"
+        let tempCharacterStyleGuide = try container.decodeIfPresent([String: String].self, forKey: .characterStyleGuide) ?? [:]
+        let tempPanelLayout = try container.decodeIfPresent([FirebaseComicPanel].self, forKey: .panelLayout) ?? []
+        
+        // Robust createdAt decoding
+        let tempCreatedAt: Timestamp
+        if let timestamp = try? container.decodeIfPresent(Timestamp.self, forKey: .createdAt) {
+            tempCreatedAt = timestamp
+        } else if let dateString = try? container.decodeIfPresent(String.self, forKey: .createdAt),
+                  let date = ISO8601DateFormatter().date(from: dateString) {
+            tempCreatedAt = Timestamp(date: date)
+        } else {
+            tempCreatedAt = Timestamp(date: Date())
+        }
+        
+        // Assign all properties
+        id = tempId
+        userId = tempUserId
+        comicTitle = tempComicTitle
+        theme = tempTheme
+        characterStyleGuide = tempCharacterStyleGuide
+        panelLayout = tempPanelLayout
+        createdAt = tempCreatedAt
+        
+        if userId == "" { print("[FirebaseComic.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId
+        case comicTitle
+        case theme
+        case characterStyleGuide
+        case panelLayout
+        case createdAt
+    }
+}
+
+struct FirebaseComicPanel: Identifiable, Codable, Hashable {
+    var id = UUID().uuidString
+    var panelId: Int
+    var scene: String
+    var imagePrompt: String
+    var dialogue: [String: String]
+    var imageUrl: String?
+
+    // Conform to Hashable
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(panelId)
+    }
+
+    static func == (lhs: FirebaseComicPanel, rhs: FirebaseComicPanel) -> Bool {
+        lhs.id == rhs.id && lhs.panelId == rhs.panelId
+    }
+    
+    init(panelId: Int, scene: String, imagePrompt: String, dialogue: [String: String], imageUrl: String? = nil) {
+        self.panelId = panelId
+        self.scene = scene
+        self.imagePrompt = imagePrompt
+        self.dialogue = dialogue
+        self.imageUrl = imageUrl
+    }
+    
+    // Custom decoding to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Try to decode id, but use default if missing
+        if let decodedId = try container.decodeIfPresent(String.self, forKey: .id) {
+            id = decodedId
+        }
+        panelId = try container.decodeIfPresent(Int.self, forKey: .panelId) ?? 0
+        scene = try container.decodeIfPresent(String.self, forKey: .scene) ?? ""
+        imagePrompt = try container.decodeIfPresent(String.self, forKey: .imagePrompt) ?? ""
+        dialogue = try container.decodeIfPresent([String: String].self, forKey: .dialogue) ?? [:]
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case panelId
+        case scene
+        case imagePrompt
+        case dialogue
+        case imageUrl
+    }
+}

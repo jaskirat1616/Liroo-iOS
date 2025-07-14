@@ -41,6 +41,7 @@ enum ContentType {
     case story
     case lecture
     case userContent
+    case comic
 }
 
 

@@ -6,6 +6,7 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
     case story = "Stories"
     case generatedContent = "Content"
     case lecture = "Lectures"
+    case comic = "Comics"
     var id: String { rawValue }
 }
 
@@ -38,6 +39,8 @@ struct HistoryView: View {
             return viewModel.historyItems.filter { $0.type == .generatedContent }
         case .lecture:
             return viewModel.historyItems.filter { $0.type == .lecture }
+        case .comic:
+            return viewModel.historyItems.filter { $0.type == .comic }
         }
     }
 
@@ -118,6 +121,13 @@ struct HistoryView: View {
                                                         lectureTitle: item.title
                                                     )) {
                                                         LectureHistoryRow(item: item)
+                                                    }
+                                                } else if item.type == .comic {
+                                                    NavigationLink(destination: ComicDestinationView(
+                                                        comicID: item.originalDocumentID,
+                                                        comicTitle: item.title
+                                                    )) {
+                                                        HistoryRow(item: item)
                                                     }
                                                 } else {
                                                     NavigationLink(destination: FullReadingView(
@@ -300,6 +310,8 @@ struct HistoryView: View {
                 return "doc.text.fill"
             case .lecture:
                 return "mic.fill"
+            case .comic:
+                return "rectangle.stack.fill"
             }
         }
         private func iconColor(for type: UserHistoryEntryType) -> Color {
@@ -310,6 +322,8 @@ struct HistoryView: View {
                 return .purple
             case .lecture:
                 return .purple
+            case .comic:
+                return .blue
             }
         }
     }
@@ -419,6 +433,106 @@ struct LectureDestinationView: View {
                     print("[LectureDestinationView] Lecture loaded successfully - Sections: \(sections.count), AudioFiles: \(audioFiles.count)")
                 } catch {
                     print("[LectureDestinationView] Decoding error: \(error.localizedDescription)")
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Comic Destination View
+struct ComicDestinationView: View {
+    let comicID: String
+    let comicTitle: String
+    @State private var comic: Comic? = nil
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack(spacing: 20) {
+                    ProgressView()
+                    Text("Loading comic...")
+                        .foregroundColor(.secondary)
+                }
+            } else if let errorMessage = errorMessage {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.red)
+                    Text("Failed to load comic")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+            } else if let comic = comic {
+                ComicView(comic: comic, dismissAction: nil)
+            }
+        }
+        .navigationTitle("Comic")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            loadComic()
+        }
+    }
+    
+    private func loadComic() {
+        isLoading = true
+        errorMessage = nil
+        
+        print("[ComicDestinationView] Loading comic with ID: \(comicID)")
+        
+        let db = Firestore.firestore()
+        db.collection("comics").document(comicID).getDocument { snapshot, error in
+            DispatchQueue.main.async {
+                isLoading = false
+                if let error = error {
+                    print("[ComicDestinationView] Error loading comic: \(error.localizedDescription)")
+                    errorMessage = error.localizedDescription
+                    return
+                }
+                
+                print("[ComicDestinationView] Document exists: \(snapshot?.exists ?? false)")
+                
+                do {
+                    guard let firebaseComic = try snapshot?.data(as: FirebaseComic.self) else {
+                        print("[ComicDestinationView] Failed to decode comic data")
+                        errorMessage = "Comic not found or could not decode."
+                        return
+                    }
+                    
+                    print("[ComicDestinationView] Successfully decoded comic - ID: \(firebaseComic.id ?? "nil"), Title: \(firebaseComic.comicTitle)")
+                    print("[ComicDestinationView] Panel count: \(firebaseComic.panelLayout.count)")
+                    
+                    // Convert to Comic model
+                    let panels = firebaseComic.panelLayout.map { panel in
+                        ComicPanel(
+                            panelId: panel.panelId,
+                            scene: panel.scene,
+                            imagePrompt: panel.imagePrompt,
+                            dialogue: panel.dialogue,
+                            imageUrl: panel.imageUrl
+                        )
+                    }
+                    
+                    let comic = Comic(
+                        id: UUID(uuidString: firebaseComic.id ?? "") ?? UUID(),
+                        comicTitle: firebaseComic.comicTitle,
+                        theme: firebaseComic.theme,
+                        characterStyleGuide: firebaseComic.characterStyleGuide,
+                        panelLayout: panels
+                    )
+                    
+                    self.comic = comic
+                    
+                    print("[ComicDestinationView] Comic loaded successfully - Panels: \(panels.count)")
+                } catch {
+                    print("[ComicDestinationView] Decoding error: \(error.localizedDescription)")
                     errorMessage = error.localizedDescription
                 }
             }

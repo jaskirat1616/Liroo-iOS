@@ -6,6 +6,7 @@ enum UserHistoryEntryType: String, Codable, CaseIterable { // Renamed from Histo
     case story = "Story"
     case generatedContent = "Content"
     case lecture = "Lecture"
+    case comic = "Comic"
 }
 
 // Unified struct for display in the history list
@@ -15,7 +16,7 @@ struct UserHistoryEntry: Identifiable, Hashable { // Renamed from HistoryItem
     let date: Date
     let type: UserHistoryEntryType // Updated type
     let originalDocumentID: String // Firestore document ID of the original item
-    let originalCollectionName: String // "stories", "userGeneratedContent", or "lectures"
+    let originalCollectionName: String // "stories", "userGeneratedContent", "lectures", or "comics"
 
     // Initializer for FirebaseStory
     init(from story: FirebaseStory) {
@@ -45,6 +46,16 @@ struct UserHistoryEntry: Identifiable, Hashable { // Renamed from HistoryItem
         self.type = .lecture
         self.originalDocumentID = lecture.id ?? ""
         self.originalCollectionName = "lectures"
+    }
+
+    // Initializer for FirebaseComic
+    init(from comic: FirebaseComic) {
+        self.id = comic.id ?? UUID().uuidString
+        self.title = comic.comicTitle
+        self.date = comic.createdAt?.dateValue() ?? Date()
+        self.type = .comic
+        self.originalDocumentID = comic.id ?? ""
+        self.originalCollectionName = "comics"
     }
 
     // Explicit Hashable conformance

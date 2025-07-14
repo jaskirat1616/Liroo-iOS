@@ -233,6 +233,8 @@ class BackgroundTaskCompletionService: ObservableObject {
             await processStory(requestId: requestId, resultData: resultData)
         } else if resultData["lecture"] != nil {
             await processLecture(requestId: requestId, resultData: resultData)
+        } else if resultData["comic"] != nil {
+            await processComic(requestId: requestId, resultData: resultData)
         } else if resultData["flashcards"] != nil {
             await processFlashcards(requestId: requestId, resultData: resultData)
         } else if resultData["slides"] != nil {
@@ -270,6 +272,14 @@ class BackgroundTaskCompletionService: ObservableObject {
             
             // Update global manager with lecture
             // globalManager.setRecentlyGeneratedContent(lecture: lecture) // You'd need to convert lectureData to Lecture object
+        }
+    }
+    
+    private func processComic(requestId: String, resultData: [String: Any]) async {
+        if let comicData = resultData["comic"] as? [String: Any] {
+            print("[BackgroundTaskService] Comic generation completed")
+            // Update global manager with comic
+            // globalManager.setRecentlyGeneratedContent(comic: comic) // You'd need to convert comicData to Comic object
         }
     }
     
@@ -319,6 +329,7 @@ class BackgroundTaskCompletionService: ObservableObject {
         if resultData["blocks"] != nil { return "Detailed Explanation" }
         if resultData["story"] != nil { return "Story" }
         if resultData["lecture"] != nil { return "Lecture" }
+        if resultData["comic"] != nil { return "Comic" }
         if resultData["flashcards"] != nil { return "Flashcards" }
         if resultData["slides"] != nil { return "Slideshow" }
         if resultData["dialogue_response"] != nil { return "Dialogue" }
