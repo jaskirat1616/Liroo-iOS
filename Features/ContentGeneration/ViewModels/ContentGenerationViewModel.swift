@@ -2162,10 +2162,12 @@ struct StoryChapter: Identifiable, Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id
+        case chapterId
         case title
         case content
         case order
         case imageUrl
+        case firebaseImageUrl
         case keyEvents
         case characterInteractions
         case emotionalMoments
@@ -2190,6 +2192,23 @@ struct StoryChapter: Identifiable, Codable, Equatable {
         self.characterInteractionImages = characterInteractionImages
         self.settingImageUrl = settingImageUrl
         self.actionImageUrl = actionImageUrl
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(content, forKey: .content)
+        try container.encode(order, forKey: .order)
+        try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
+        try container.encodeIfPresent(keyEvents, forKey: .keyEvents)
+        try container.encodeIfPresent(characterInteractions, forKey: .characterInteractions)
+        try container.encodeIfPresent(emotionalMoments, forKey: .emotionalMoments)
+        try container.encodeIfPresent(keyEventImages, forKey: .keyEventImages)
+        try container.encodeIfPresent(emotionalMomentImages, forKey: .emotionalMomentImages)
+        try container.encodeIfPresent(characterInteractionImages, forKey: .characterInteractionImages)
+        try container.encodeIfPresent(settingImageUrl, forKey: .settingImageUrl)
+        try container.encodeIfPresent(actionImageUrl, forKey: .actionImageUrl)
     }
 }
 
@@ -2418,7 +2437,14 @@ extension StoryChapter {
         self.title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled Chapter"
         self.content = try container.decodeIfPresent(String.self, forKey: .content) ?? "No content for this chapter."
         self.order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
-        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        // Robust imageUrl decoding
+        if let imageUrlValue = try container.decodeIfPresent(String.self, forKey: .imageUrl) {
+            self.imageUrl = imageUrlValue
+        } else if let firebaseImageUrlValue = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl) {
+            self.imageUrl = firebaseImageUrlValue
+        } else {
+            self.imageUrl = nil
+        }
         self.keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
         self.characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
         self.emotionalMoments = try container.decodeIfPresent([String].self, forKey: .emotionalMoments)

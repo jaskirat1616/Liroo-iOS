@@ -55,7 +55,16 @@ struct FirebaseStory: Identifiable, Codable, Hashable {
         let tempMainCharacters = try container.decodeIfPresent([FirebaseCharacter].self, forKey: .mainCharacters)
         let tempCoverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
         let tempSummaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
-        let tempCreatedAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+        // Robust createdAt decoding
+        let tempCreatedAt: Timestamp
+        if let timestamp = try? container.decodeIfPresent(Timestamp.self, forKey: .createdAt) {
+            tempCreatedAt = timestamp
+        } else if let dateString = try? container.decodeIfPresent(String.self, forKey: .createdAt),
+                  let date = ISO8601DateFormatter().date(from: dateString) {
+            tempCreatedAt = Timestamp(date: date)
+        } else {
+            tempCreatedAt = Timestamp(date: Date())
+        }
         // Assign all properties
         id = tempId
         userId = tempUserId
@@ -143,7 +152,14 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
         title = try container.decodeIfPresent(String.self, forKey: .title) ?? "Untitled"
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
-        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        // Robust imageUrl decoding
+        if let imageUrlValue = try container.decodeIfPresent(String.self, forKey: .imageUrl) {
+            imageUrl = imageUrlValue
+        } else if let firebaseImageUrlValue = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl) {
+            imageUrl = firebaseImageUrlValue
+        } else {
+            imageUrl = nil
+        }
         keyEvents = try container.decodeIfPresent([String].self, forKey: .keyEvents)
         characterInteractions = try container.decodeIfPresent([String].self, forKey: .characterInteractions)
         emotionalMoments = try container.decodeIfPresent([String].self, forKey: .emotionalMoments)
@@ -154,6 +170,24 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
         actionImageUrl = try container.decodeIfPresent(String.self, forKey: .actionImageUrl)
     }
     
+    // Custom encoding to match custom decoding
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(content, forKey: .content)
+        try container.encode(order, forKey: .order)
+        try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
+        try container.encodeIfPresent(keyEvents, forKey: .keyEvents)
+        try container.encodeIfPresent(characterInteractions, forKey: .characterInteractions)
+        try container.encodeIfPresent(emotionalMoments, forKey: .emotionalMoments)
+        try container.encodeIfPresent(keyEventImages, forKey: .keyEventImages)
+        try container.encodeIfPresent(emotionalMomentImages, forKey: .emotionalMomentImages)
+        try container.encodeIfPresent(characterInteractionImages, forKey: .characterInteractionImages)
+        try container.encodeIfPresent(settingImageUrl, forKey: .settingImageUrl)
+        try container.encodeIfPresent(actionImageUrl, forKey: .actionImageUrl)
+    }
+    
     enum CodingKeys: String, CodingKey {
         case id
         case chapterId
@@ -161,6 +195,7 @@ struct FirebaseChapter: Identifiable, Codable, Hashable {
         case content
         case order
         case imageUrl
+        case firebaseImageUrl
         case keyEvents
         case characterInteractions
         case emotionalMoments
@@ -259,7 +294,15 @@ struct FirebaseUserContent: Identifiable, Codable, Hashable {
         level = try container.decodeIfPresent(String.self, forKey: .level)
         summarizationTier = try container.decodeIfPresent(String.self, forKey: .summarizationTier)
         blocks = try container.decodeIfPresent([FirebaseContentBlock].self, forKey: .blocks)
-        createdAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+        // Robust createdAt decoding
+        if let timestamp = try? container.decodeIfPresent(Timestamp.self, forKey: .createdAt) {
+            createdAt = timestamp
+        } else if let dateString = try? container.decodeIfPresent(String.self, forKey: .createdAt),
+                  let date = ISO8601DateFormatter().date(from: dateString) {
+            createdAt = Timestamp(date: date)
+        } else {
+            createdAt = Timestamp(date: Date())
+        }
     }
     
     enum CodingKeys: String, CodingKey {
@@ -396,7 +439,16 @@ struct FirebaseLecture: Identifiable, Codable, Hashable {
         let tempImageStyle = try container.decodeIfPresent(String.self, forKey: .imageStyle)
         let tempSections = try container.decodeIfPresent([FirebaseLectureSection].self, forKey: .sections) ?? []
         let tempAudioFiles = try container.decodeIfPresent([FirebaseAudioFile].self, forKey: .audioFiles)
-        let tempCreatedAt = try container.decodeIfPresent(Timestamp.self, forKey: .createdAt) ?? Timestamp(date: Date())
+        // Robust createdAt decoding
+        let tempCreatedAt: Timestamp
+        if let timestamp = try? container.decodeIfPresent(Timestamp.self, forKey: .createdAt) {
+            tempCreatedAt = timestamp
+        } else if let dateString = try? container.decodeIfPresent(String.self, forKey: .createdAt),
+                  let date = ISO8601DateFormatter().date(from: dateString) {
+            tempCreatedAt = Timestamp(date: date)
+        } else {
+            tempCreatedAt = Timestamp(date: Date())
+        }
         // Assign all properties
         id = tempId
         userId = tempUserId
@@ -406,7 +458,6 @@ struct FirebaseLecture: Identifiable, Codable, Hashable {
         sections = tempSections
         audioFiles = tempAudioFiles
         createdAt = tempCreatedAt
-        // Now you can use self
         if userId == "" { print("[FirebaseLecture.decoder] Warning: userId missing, set to empty string for id: \(id ?? "nil")") }
     }
     
@@ -450,24 +501,39 @@ struct FirebaseLectureSection: Identifiable, Codable, Hashable {
         self.order = order
     }
     
-    // Custom decoding to handle missing fields gracefully
+    // Custom decoding to handle both 'sectionId' and 'id', and robust imageUrl
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        sectionId = try container.decode(String.self, forKey: .sectionId)
+        if let sectionIdValue = try container.decodeIfPresent(String.self, forKey: .sectionId) {
+            sectionId = sectionIdValue
+        } else if let idValue = try container.decodeIfPresent(String.self, forKey: .id) {
+            sectionId = idValue
+        } else {
+            sectionId = UUID().uuidString
+            print("[FirebaseLectureSection.decoder] Warning: No sectionId or id found, generated new UUID: \(sectionId)")
+        }
         title = try container.decodeIfPresent(String.self, forKey: .title)
         script = try container.decodeIfPresent(String.self, forKey: .script)
         imagePrompt = try container.decodeIfPresent(String.self, forKey: .imagePrompt)
-        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        // Robust imageUrl decoding
+        if let imageUrlValue = try container.decodeIfPresent(String.self, forKey: .imageUrl) {
+            imageUrl = imageUrlValue
+        } else if let firebaseImageUrlValue = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl) {
+            imageUrl = firebaseImageUrlValue
+        } else {
+            imageUrl = nil
+        }
         order = try container.decodeIfPresent(Int.self, forKey: .order)
     }
     
     enum CodingKeys: String, CodingKey {
         case sectionId
+        case id
         case title
         case script
         case imagePrompt
         case imageUrl
+        case firebaseImageUrl
         case order
     }
 }
