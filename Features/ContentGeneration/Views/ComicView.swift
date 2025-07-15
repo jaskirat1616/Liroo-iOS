@@ -16,20 +16,18 @@ struct ComicView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Comic Header
+                VStack(spacing: 8) {
+                    // Comic Header (plain)
                     comicHeader
-                    
-                    // Character Style Guide (if available)
+                    // Character Style Guide (if available, plain)
                     if !comic.characterStyleGuide.isEmpty {
                         characterStyleGuideSection
                     }
-                    
                     // Comic Panels
                     comicPanelsSection
                 }
-                .padding(.horizontal, isIPad ? 24 : 16)
-                .padding(.vertical, 20)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
             }
             .navigationTitle("Comic")
             .navigationBarTitleDisplayMode(.inline)
@@ -39,16 +37,12 @@ struct ComicView: View {
                         dismissAction()
                     }
                 }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
-                        // Share comic
                         Button(action: shareComic) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 16, weight: .medium))
                         }
-                        
-                        // Save comic
                         Button(action: saveComic) {
                             Image(systemName: "bookmark")
                                 .font(.system(size: 16, weight: .medium))
@@ -62,102 +56,70 @@ struct ComicView: View {
         }
     }
     
-    // MARK: - Comic Header
+    // MARK: - Comic Header (plain)
     private var comicHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(comic.comicTitle)
                 .font(.system(size: isIPad ? 32 : 28, weight: .bold))
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.leading)
-            
             Text("Theme: \(comic.theme)")
                 .font(.system(size: isIPad ? 18 : 16, weight: .medium))
                 .foregroundColor(.secondary)
-            
             HStack {
                 Label("\(comic.panelLayout.count) panels", systemImage: "rectangle.stack")
                     .font(.system(size: isIPad ? 16 : 14, weight: .medium))
                     .foregroundColor(.secondary)
-                
                 Spacer()
-                
                 Text("Scroll to read")
                     .font(.system(size: isIPad ? 14 : 12, weight: .regular))
                     .foregroundColor(.secondary)
                     .italic()
             }
         }
-        .padding(20)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(.bottom, 8)
     }
     
-    // MARK: - Character Style Guide Section
+    // MARK: - Character Style Guide Section (plain)
     private var characterStyleGuideSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Characters")
                 .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
                 .foregroundColor(.primary)
-            
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                ForEach(Array(comic.characterStyleGuide.keys.sorted()), id: \.self) { characterName in
-                    if let description = comic.characterStyleGuide[characterName] {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(characterName)
-                                .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                                .foregroundColor(.primary)
-                            
-                            Text(description)
-                                .font(.system(size: isIPad ? 14 : 12, weight: .regular))
-                                .foregroundColor(.secondary)
-                                .lineLimit(3)
-                        }
-                        .padding(12)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+            ForEach(Array(comic.characterStyleGuide.keys.sorted()), id: \.self) { characterName in
+                if let description = comic.characterStyleGuide[characterName] {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(characterName)
+                            .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text(description)
+                            .font(.system(size: isIPad ? 14 : 12, weight: .regular))
+                            .foregroundColor(.secondary)
+                            .lineLimit(3)
                     }
                 }
             }
         }
-        .padding(20)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(.bottom, 8)
     }
     
-    // MARK: - Comic Panels Section
+    // MARK: - Comic Panels Section (plain)
     private var comicPanelsSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Comic Panels")
-                .font(.system(size: isIPad ? 20 : 18, weight: .semibold))
-                .foregroundColor(.primary)
-            
-            LazyVStack(spacing: 32) {
-                ForEach(Array(comic.panelLayout.enumerated()), id: \.element.id) { index, panel in
-                    ComicPanelView(
-                        panel: panel,
-                        panelIndex: index + 1,
-                        totalPanels: comic.panelLayout.count
-                    )
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(Array(comic.panelLayout.enumerated()), id: \.element.id) { index, panel in
+                ComicPanelView(
+                    panel: panel,
+                    panelIndex: index + 1,
+                    totalPanels: comic.panelLayout.count
+                )
             }
         }
-        .padding(20)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
     }
     
     // MARK: - Actions
     private func shareComic() {
-        // Create shareable content
         var shareText = "\(comic.comicTitle)\n\n"
         shareText += "Theme: \(comic.theme)\n\n"
-        
         for (index, panel) in comic.panelLayout.enumerated() {
             shareText += "Panel \(index + 1): \(panel.scene)\n"
             for (character, dialogue) in panel.dialogue {
@@ -165,19 +127,17 @@ struct ComicView: View {
             }
             shareText += "\n"
         }
-        
         shareItems = [shareText]
         showingShareSheet = true
     }
     
     private func saveComic() {
-        // Save comic to user's library
         print("Save comic: \(comic.comicTitle)")
         // TODO: Implement save functionality
     }
 }
 
-// MARK: - Comic Panel View
+// MARK: - Comic Panel View (plain, no boxes)
 struct ComicPanelView: View {
     let panel: ComicPanel
     let panelIndex: Int
@@ -185,128 +145,72 @@ struct ComicPanelView: View {
     
     @Environment(\.colorScheme) private var colorScheme
     
-    // MARK: - iPad Detection
     private var isIPad: Bool {
         UIDevice.current.userInterfaceIdiom == .pad
     }
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Panel Header
+        VStack(alignment: .leading, spacing: 4) {
+            // Panel Header (just text, no box)
             HStack {
                 Text("Panel \(panelIndex) of \(totalPanels)")
                     .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
                     .foregroundColor(.primary)
-                
                 Spacer()
-                
                 Text(panel.scene)
                     .font(.system(size: isIPad ? 14 : 12, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.trailing)
             }
-            
-            // Comic Image
+            // Comic Image (original aspect, max width)
             if let imageUrl = panel.imageUrl {
                 AsyncImage(url: URL(string: imageUrl)) { phase in
                     switch phase {
                     case .empty:
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading panel image...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 400 : 300)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: isIPad ? 400 : 250)
                     case .success(let image):
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: .infinity)
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
                     case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.gray)
-                            Text("Failed to load panel image")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 400 : 300)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, minHeight: isIPad ? 400 : 250)
                     @unknown default:
                         EmptyView()
                     }
                 }
             } else {
-                // Placeholder for missing image
-                VStack(spacing: 8) {
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .foregroundColor(.gray)
-                    Text("No image available")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: isIPad ? 400 : 300)
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                Image(systemName: "photo")
+                    .font(.largeTitle)
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity, minHeight: isIPad ? 400 : 250)
             }
-            
-            // Dialogue Section
+            // Dialogue (plain, no box, no header)
             if !panel.dialogue.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Dialogue")
-                        .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                        .foregroundColor(.primary)
-                    
-                    VStack(spacing: 8) {
-                        ForEach(Array(panel.dialogue.keys.sorted()), id: \.self) { character in
-                            if let dialogue = panel.dialogue[character] {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Text(character)
-                                        .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
-                                        .foregroundColor(.accentColor)
-                                        .frame(width: isIPad ? 80 : 60, alignment: .leading)
-                                    
-                                    Text("\"\(dialogue)\"")
-                                        .font(.system(size: isIPad ? 14 : 12, weight: .regular))
-                                        .foregroundColor(.primary)
-                                        .multilineTextAlignment(.leading)
-                                    
-                                    Spacer()
-                                }
-                                .padding(12)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
-                            }
+                ForEach(Array(panel.dialogue.keys.sorted()), id: \.self) { character in
+                    if let dialogue = panel.dialogue[character] {
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(character + ":")
+                                .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                                .foregroundColor(.accentColor)
+                                .frame(width: isIPad ? 80 : 60, alignment: .leading)
+                            Text("\"\(dialogue)\"")
+                                .font(.system(size: isIPad ? 14 : 12, weight: .regular))
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
                         }
                     }
                 }
-                .padding(16)
-                .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
-                )
             }
         }
-        .padding(20)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 0)
     }
 }
 
