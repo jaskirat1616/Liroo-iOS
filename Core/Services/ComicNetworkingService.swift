@@ -40,7 +40,12 @@ class ComicNetworkingService: ObservableObject {
         }
         
         // Get FCM token if not provided
-        let fcmToken = userToken ?? await getFCMToken()
+        let fcmToken: String?
+        if let userToken = userToken {
+            fcmToken = userToken
+        } else {
+            fcmToken = await getFCMToken()
+        }
         
         // Prepare request
         let requestBody: [String: Any] = [

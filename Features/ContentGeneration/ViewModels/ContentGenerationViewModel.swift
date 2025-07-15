@@ -2088,147 +2088,79 @@ class ContentGenerationViewModel: ObservableObject {
         // Get user's FCM token for notifications
         let userToken = await getFCMToken()
         
-        let requestBody: [String: Any] = [
-            "text": inputText,
-            "level": selectedLevel.rawValue,
-            "image_style": selectedImageStyle.displayName,
-            "user_token": userToken ?? ""
-        ]
+        await MainActor.run {
+            self.statusMessage = "Generating comic script and characters... (This may take several minutes)"
+        }
         
-        let url = URL(string: "\(backendURL)/generate_comic")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        
-        print("[Comic] Sending request to backend (/generate_comic)")
-        
-        // Add retry logic for 503 errors (backend hibernation)
-        let maxRetries = 5
-        var attempt = 0
-        
-        repeat {
-            attempt += 1
-            print("[Comic] Attempt \(attempt) of \(maxRetries)")
+        do {
+            // Use the new ComicNetworkingService for better error handling
+            let (comic, requestId) = try await ComicNetworkingService.shared.generateComic(
+                text: inputText,
+                level: selectedLevel.rawValue,
+                imageStyle: selectedImageStyle.displayName,
+                userToken: userToken
+            )
             
-            do {
-                await MainActor.run {
-                    self.statusMessage = "Generating comic script and characters... (This may take several minutes)"
-                }
-                
-                let (data, response) = try await comicSession.data(for: request)
-                
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    print("[Comic] ERROR: Invalid server response")
-                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid server response"])
-                }
-                
-                print("[Comic] Received response with status code: \(httpResponse.statusCode)")
-                
-                // Handle 503 errors (backend hibernation) with retry
-                if httpResponse.statusCode == 503 {
-                    if attempt < maxRetries {
-                        let retryDelay = Double(attempt) * 4.0
-                        print("[Comic] Backend is hibernating (503). Retrying in \(retryDelay) seconds... (Attempt \(attempt)/\(maxRetries))")
-                        await MainActor.run {
-                            self.statusMessage = "Backend is starting up... Please wait (\(attempt)/\(maxRetries))"
-                        }
-                        try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
-                        continue
-                    } else {
-                        print("[Comic] Backend hibernation retry limit reached")
-                        let hibernationError = NSError(domain: "BackendHibernation", code: 503, userInfo: [NSLocalizedDescriptionKey: "Backend is starting up. Please try again in a few moments."])
-                        throw hibernationError
-                    }
-                }
-                
-                guard httpResponse.statusCode == 200 else {
-                    print("[Comic] ERROR: Server returned status code \(httpResponse.statusCode)")
-                    if let errorResponse = String(data: data, encoding: .utf8) {
-                        print("[Comic] Error response from server: \(errorResponse)")
-                    }
-                    throw NSError(domain: "", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-                }
-                
-                let apiResponse = try JSONDecoder().decode(ComicResponse.self, from: data)
-                print("[Comic] Successfully decoded ComicResponse")
-                
-                // Start progress polling if we received a request_id
-                if let requestId = apiResponse.request_id {
-                    print("[Comic] Received request_id: \(requestId), starting progress polling")
-                    currentRequestId = requestId
-                    startProgressPolling(requestId: requestId)
-                } else {
-                    startProgressPollingFallback()
-                }
-                
-                if let comic = apiResponse.comic {
-                    print("[Comic] Successfully received comic from backend")
-                    print("[Comic] Comic Title: \(comic.comicTitle)")
-                    print("[Comic] Number of panels: \(comic.panelLayout.count)")
-                    
-                    await MainActor.run {
-                        self.currentComic = comic
-                        print("[Comic] Updated UI with comic object")
-                        globalManager.setLastGeneratedContent(type: .comic, id: comic.id.uuidString, title: comic.comicTitle)
-                        globalManager.setRecentlyGeneratedContent(comic: comic)
-                    }
-                    
-                    globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
-                    await MainActor.run {
-                        self.statusMessage = "Saving comic to cloud storage..."
-                    }
-                    
-                    if let currentUser = Auth.auth().currentUser {
-                        print("[Comic] User authenticated (\(currentUser.uid)), proceeding with Firebase save for comic ID \(comic.id.uuidString)")
-                        
-                        // Save comic to Firebase
-                        await saveComicToFirebase(comic, userId: currentUser.uid)
-                        
-                        print("[Comic] Comic content processing completed.")
-                    } else {
-                        print("[Comic] ERROR: No authenticated user found after receiving comic. Cannot save.")
-                        throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
-                    }
-                } else if let error = apiResponse.error {
-                    print("[Comic] ERROR: Backend returned error: \(error)")
-                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: error])
-                }
-                
-                // If we reach here, the request was successful, so break out of retry loop
-                break
-                
-            } catch let error as NSError {
-                // If it's a 503 error and we haven't exhausted retries, continue the loop
-                if error.code == 503 && attempt < maxRetries {
-                    continue
-                }
-                
-                // For all other errors or if we've exhausted retries, throw the error
-                print("[Comic] Network error occurred")
-                print("[Comic] Error code: \(error.code)")
-                print("[Comic] Error description: \(error.localizedDescription)")
-                
-                if let urlError = error as? URLError {
-                    switch urlError.code {
-                    case .timedOut:
-                        // For comics, handle timeout more gracefully
-                        if selectedSummarizationTier == .comic {
-                            handleComicGenerationTimeout()
-                            return // Don't throw error, let it continue in background
-                        } else {
-                            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Comic generation is taking longer than expected. Please try again - the process may continue in the background."])
-                        }
-                    case .notConnectedToInternet:
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
-                    default:
-                        throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(error.localizedDescription)"])
-                    }
-                } else {
-                    throw error
-                }
+            print("[Comic] Successfully received comic from backend")
+            print("[Comic] Comic Title: \(comic.comicTitle)")
+            print("[Comic] Number of panels: \(comic.panelLayout.count)")
+            print("[Comic] Request ID: \(requestId ?? "None")")
+            
+            // Start progress polling if we received a request_id
+            if let requestId = requestId {
+                print("[Comic] Received request_id: \(requestId), starting progress polling")
+                currentRequestId = requestId
+                startProgressPolling(requestId: requestId)
+            } else {
+                startProgressPollingFallback()
             }
-        } while attempt < maxRetries
+            
+            await MainActor.run {
+                self.currentComic = comic
+                print("[Comic] Updated UI with comic object")
+                globalManager.setLastGeneratedContent(type: .comic, id: comic.id.uuidString, title: comic.comicTitle)
+                globalManager.setRecentlyGeneratedContent(comic: comic)
+            }
+            
+            globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
+            await MainActor.run {
+                self.statusMessage = "Saving comic to cloud storage..."
+            }
+            
+            if let currentUser = Auth.auth().currentUser {
+                print("[Comic] User authenticated (\(currentUser.uid)), proceeding with Firebase save for comic ID \(comic.id.uuidString)")
+                
+                // Save comic to Firebase
+                await saveComicToFirebase(comic, userId: currentUser.uid)
+                
+                print("[Comic] Comic content processing completed.")
+            } else {
+                print("[Comic] ERROR: No authenticated user found after receiving comic. Cannot save.")
+                throw NSError(domain: "AuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+            }
+            
+        } catch let error as ComicGenerationError {
+            print("[Comic] Comic generation error: \(error)")
+            
+            switch error {
+            case .timeout:
+                handleComicGenerationTimeout()
+                return // Don't throw error, let it continue in background
+            case .noInternetConnection:
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your connection and try again."])
+            case .backendError(let message):
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
+            case .decodingError(let message):
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process comic data: \(message)"])
+            case .networkError(let message):
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Network error: \(message)"])
+            case .invalidResponse:
+                throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"])
+            }
+        } catch {
+            print("[Comic] Unexpected error: \(error)")
+            throw error
+        }
     }
     
     private func saveComicToFirebase(_ comic: Comic, userId: String) async {

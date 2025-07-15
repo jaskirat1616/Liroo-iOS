@@ -1,5 +1,68 @@
 import Foundation
 
+// MARK: - Custom Decoder Extension for Mixed Content
+extension KeyedDecodingContainer {
+    func decode(_ type: [String: Any].Type, forKey key: K) throws -> [String: Any] {
+        let value = try decode(AnyCodable.self, forKey: key)
+        return value.value as? [String: Any] ?? [:]
+    }
+}
+
+// MARK: - AnyCodable for handling mixed JSON types
+struct AnyCodable: Codable {
+    let value: Any
+    
+    init(_ value: Any) {
+        self.value = value
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        
+        if container.decodeNil() {
+            self.value = NSNull()
+        } else if let bool = try? container.decode(Bool.self) {
+            self.value = bool
+        } else if let int = try? container.decode(Int.self) {
+            self.value = int
+        } else if let double = try? container.decode(Double.self) {
+            self.value = double
+        } else if let string = try? container.decode(String.self) {
+            self.value = string
+        } else if let array = try? container.decode([AnyCodable].self) {
+            self.value = array.map { $0.value }
+        } else if let dictionary = try? container.decode([String: AnyCodable].self) {
+            self.value = dictionary.mapValues { $0.value }
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "AnyCodable cannot decode value")
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        
+        switch self.value {
+        case is NSNull:
+            try container.encodeNil()
+        case let bool as Bool:
+            try container.encode(bool)
+        case let int as Int:
+            try container.encode(int)
+        case let double as Double:
+            try container.encode(double)
+        case let string as String:
+            try container.encode(string)
+        case let array as [Any]:
+            try container.encode(array.map { AnyCodable($0) })
+        case let dictionary as [String: Any]:
+            try container.encode(dictionary.mapValues { AnyCodable($0) })
+        default:
+            let context = EncodingError.Context(codingPath: container.codingPath, debugDescription: "AnyCodable cannot encode value")
+            throw EncodingError.invalidValue(self.value, context)
+        }
+    }
+}
+
 // MARK: - Comic Response Models
 struct ComicResponse: Codable {
     let success: Bool
@@ -17,7 +80,7 @@ struct ComicResponse: Codable {
             self.success = success
         } else {
             // Fallback for old format - assume success if no error
-            self.success = try? container.decode(String.self, forKey: .error) == nil
+            self.success = (try? container.decode(String.self, forKey: .error)) == nil
         }
         
         self.comic = try? container.decode(Comic.self, forKey: .comic)
@@ -67,26 +130,30 @@ struct Comic: Identifiable, Codable, Equatable {
             decodedGuide = complexGuide.mapValues { detailsDict -> String in
                 return detailsDict.map { "\($0.key.replacingOccurrences(of: "_", with: " ").capitalized): \($0.value)" }.joined(separator: ", ")
             }
-        } else if let mixedGuide = try? container.decode([String: Any].self, forKey: .characterStyleGuide) {
-            // Handle mixed types in character style guide
-            for (key, value) in mixedGuide {
-                if let stringValue = value as? String {
-                    decodedGuide[key] = stringValue
-                } else if let dictValue = value as? [String: Any] {
-                    let descriptionParts = dictValue.compactMap { (k, v) -> String? in
-                        if let strValue = v as? String {
-                            return "\(k.replacingOccurrences(of: "_", with: " ").capitalized): \(strValue)"
-                        }
-                        return nil
-                    }
-                    decodedGuide[key] = descriptionParts.joined(separator: ", ")
-                } else {
-                    decodedGuide[key] = String(describing: value)
-                }
-            }
         } else {
-            // Fallback if the structure is something else entirely or missing
-            decodedGuide = [:]
+            // Try to decode as Any and handle manually
+            if let mixedGuideCodable = try? container.decode(AnyCodable.self, forKey: .characterStyleGuide),
+               let mixedGuide = mixedGuideCodable.value as? [String: Any] {
+                // Handle mixed types in character style guide
+                for (key, value) in mixedGuide {
+                    if let stringValue = value as? String {
+                        decodedGuide[key] = stringValue
+                    } else if let dictValue = value as? [String: Any] {
+                        let descriptionParts = dictValue.compactMap { (k, v) -> String? in
+                            if let strValue = v as? String {
+                                return "\(k.replacingOccurrences(of: "_", with: " ").capitalized): \(strValue)"
+                            }
+                            return nil
+                        }
+                        decodedGuide[key] = descriptionParts.joined(separator: ", ")
+                    } else {
+                        decodedGuide[key] = String(describing: value)
+                    }
+                }
+            } else {
+                // Fallback if the structure is something else entirely or missing
+                decodedGuide = [:]
+            }
         }
         self.characterStyleGuide = decodedGuide
     }
@@ -128,13 +195,17 @@ struct ComicPanel: Identifiable, Codable, Equatable {
         var decodedDialogue = [String: String]()
         if let dialogue = try? container.decode([String: String].self, forKey: .dialogue) {
             decodedDialogue = dialogue
-        } else if let mixedDialogue = try? container.decode([String: Any].self, forKey: .dialogue) {
-            // Handle mixed types in dialogue
-            for (key, value) in mixedDialogue {
-                if let stringValue = value as? String {
-                    decodedDialogue[key] = stringValue
-                } else {
-                    decodedDialogue[key] = String(describing: value)
+        } else {
+            // Try to decode as Any and handle manually
+            if let mixedDialogueCodable = try? container.decode(AnyCodable.self, forKey: .dialogue),
+               let mixedDialogue = mixedDialogueCodable.value as? [String: Any] {
+                // Handle mixed types in dialogue
+                for (key, value) in mixedDialogue {
+                    if let stringValue = value as? String {
+                        decodedDialogue[key] = stringValue
+                    } else {
+                        decodedDialogue[key] = String(describing: value)
+                    }
                 }
             }
         }
