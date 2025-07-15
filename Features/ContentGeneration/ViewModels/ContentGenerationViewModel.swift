@@ -2420,6 +2420,7 @@ struct StoryChapter: Identifiable, Codable, Equatable {
     let characterInteractionImages: [StoryEventImage]? // Multiple images for character interactions
     let settingImageUrl: String? // Setting/background image
     let actionImageUrl: String? // Action sequence image
+    var firebaseImageUrl: String? // Firebase Storage URL for the main image
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -2439,7 +2440,7 @@ struct StoryChapter: Identifiable, Codable, Equatable {
         case actionImageUrl
     }
 
-    init(id: String = UUID().uuidString, title: String, content: String, order: Int, imageUrl: String? = nil, keyEvents: [String]? = nil, characterInteractions: [String]? = nil, emotionalMoments: [String]? = nil, keyEventImages: [StoryEventImage]? = nil, emotionalMomentImages: [StoryEventImage]? = nil, characterInteractionImages: [StoryEventImage]? = nil, settingImageUrl: String? = nil, actionImageUrl: String? = nil) {
+    init(id: String = UUID().uuidString, title: String, content: String, order: Int, imageUrl: String? = nil, keyEvents: [String]? = nil, characterInteractions: [String]? = nil, emotionalMoments: [String]? = nil, keyEventImages: [StoryEventImage]? = nil, emotionalMomentImages: [StoryEventImage]? = nil, characterInteractionImages: [StoryEventImage]? = nil, settingImageUrl: String? = nil, actionImageUrl: String? = nil, firebaseImageUrl: String? = nil) {
         self.id = id
         self.title = title
         self.content = content
@@ -2453,6 +2454,7 @@ struct StoryChapter: Identifiable, Codable, Equatable {
         self.characterInteractionImages = characterInteractionImages
         self.settingImageUrl = settingImageUrl
         self.actionImageUrl = actionImageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
 
     func encode(to encoder: Encoder) throws {
@@ -2470,6 +2472,7 @@ struct StoryChapter: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(characterInteractionImages, forKey: .characterInteractionImages)
         try container.encodeIfPresent(settingImageUrl, forKey: .settingImageUrl)
         try container.encodeIfPresent(actionImageUrl, forKey: .actionImageUrl)
+        try container.encodeIfPresent(firebaseImageUrl, forKey: .firebaseImageUrl)
     }
 }
 
@@ -2714,6 +2717,7 @@ extension StoryChapter {
         self.characterInteractionImages = try container.decodeIfPresent([StoryEventImage].self, forKey: .characterInteractionImages)
         self.settingImageUrl = try container.decodeIfPresent(String.self, forKey: .settingImageUrl)
         self.actionImageUrl = try container.decodeIfPresent(String.self, forKey: .actionImageUrl)
+        self.firebaseImageUrl = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl)
     }
 }
 

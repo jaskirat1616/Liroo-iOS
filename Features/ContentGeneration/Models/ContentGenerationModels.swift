@@ -21,7 +21,7 @@ struct Chapter: Identifiable {
 struct Lecture: Identifiable, Codable {
     let id: UUID
     let title: String
-    let sections: [LectureSection]
+    var sections: [LectureSection]
     let level: ReadingLevel
     let imageStyle: String?
     let createdAt: Date
