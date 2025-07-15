@@ -43,14 +43,16 @@ struct LectureSection: Identifiable, Codable {
     let imagePrompt: String
     let imageUrl: String?
     let order: Int
+    var firebaseImageUrl: String?
     
-    init(id: UUID = UUID(), title: String, script: String, imagePrompt: String, imageUrl: String? = nil, order: Int) {
+    init(id: UUID = UUID(), title: String, script: String, imagePrompt: String, imageUrl: String? = nil, order: Int, firebaseImageUrl: String? = nil) {
         self.id = id
         self.title = title
         self.script = script
         self.imagePrompt = imagePrompt
         self.imageUrl = imageUrl
         self.order = order
+        self.firebaseImageUrl = firebaseImageUrl
     }
 }
 

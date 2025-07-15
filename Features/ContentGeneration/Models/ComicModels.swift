@@ -174,6 +174,7 @@ struct ComicPanel: Identifiable, Codable, Equatable {
     let imagePrompt: String
     let dialogue: [String: String]
     let imageUrl: String?
+    var firebaseImageUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -214,13 +215,14 @@ struct ComicPanel: Identifiable, Codable, Equatable {
         self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
     }
     
-    init(id: UUID = UUID(), panelId: Int, scene: String, imagePrompt: String, dialogue: [String: String], imageUrl: String? = nil) {
+    init(id: UUID = UUID(), panelId: Int, scene: String, imagePrompt: String, dialogue: [String: String], imageUrl: String? = nil, firebaseImageUrl: String? = nil) {
         self.id = id
         self.panelId = panelId
         self.scene = scene
         self.imagePrompt = imagePrompt
         self.dialogue = dialogue
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
 }
 

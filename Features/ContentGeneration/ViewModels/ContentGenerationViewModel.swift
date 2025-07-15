@@ -774,7 +774,7 @@ class ContentGenerationViewModel: ObservableObject {
                     
                     // Convert BackendLecture to Lecture with proper ID
                     let lectureId = UUID()
-                    let convertedLecture = Lecture(
+                    var convertedLecture = Lecture(
                         id: lectureId,
                         title: lecture.title,
                         sections: lecture.sections.enumerated().map { index, section in
@@ -798,6 +798,28 @@ class ContentGenerationViewModel: ObservableObject {
                     // Convert audio files from backend response
                     let audioFiles = apiResponse.audio_files ?? []
                     print("[Lecture] Received \(audioFiles.count) audio files from backend")
+
+                    if let userId = Auth.auth().currentUser?.uid {
+                        var updatedSections: [LectureSection] = []
+                        for var section in convertedLecture.sections {
+                            if let imageUrlString = section.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                                do {
+                                    let (imageData, _) = try await session.data(from: imageUrl)
+                                    if let image = UIImage(data: imageData) {
+                                        if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                                            let fileName = "lecture_\(convertedLecture.id.uuidString)_\(section.id.uuidString).jpg"
+                                            let downloadURL = try await uploadImageToFirebase(imageData: jpegData, fileName: fileName, userId: userId)
+                                            section.firebaseImageUrl = downloadURL.absoluteString
+                                        }
+                                    }
+                                } catch {
+                                    print("[Lecture] Failed to process image for section \(section.title): \(error)")
+                                }
+                            }
+                            updatedSections.append(section)
+                        }
+                        convertedLecture.sections = updatedSections
+                    }
                     
                     await MainActor.run {
                         self.currentLecture = convertedLecture
@@ -979,7 +1001,8 @@ class ContentGenerationViewModel: ObservableObject {
                             processedImageBlocks += 1
                             
                             if let imageUrlString = block.url,
-                               let imageUrl = URL(string: imageUrlString) {
+                               let imageUrl = URL(string: imageUrlString),
+                                let userId = Auth.auth().currentUser?.uid {
                                 
                                 print("[Content] Processing image block \(processedImageBlocks): \(imageUrlString)")
                                 
@@ -995,8 +1018,7 @@ class ContentGenerationViewModel: ObservableObject {
                                     let (imageData, _) = try await session.data(from: imageUrl)
                                     print("[Content] ✅ Successfully downloaded image data. Size: \(imageData.count) bytes")
                                     
-                                    if let image = UIImage(data: imageData),
-                                       let userId = Auth.auth().currentUser?.uid {
+                                    if let image = UIImage(data: imageData) {
                                         print("[Content] ✅ Converted existing image to UIImage. Size: \(image.size)")
                                         
                                         if let imageData = image.jpegData(compressionQuality: 0.8) {
@@ -1131,7 +1153,7 @@ class ContentGenerationViewModel: ObservableObject {
             )
             
             // ✅ CHECK: Does this chapter already have an image from the backend?
-            if let existingImageUrl = chapter.imageUrl {
+            if let existingImageUrl = chapter.imageUrl, let userId = Auth.auth().currentUser?.uid {
                 print("[Story][ImageGen] ✅ Chapter \(index + 1) already has image from backend: \(existingImageUrl)")
                 
                 // Sub-step 2: Download existing image
@@ -1156,8 +1178,7 @@ class ContentGenerationViewModel: ObservableObject {
                         
                         print("[Story][ImageGen] ✅ Successfully downloaded existing image: \(imageData.count) bytes")
                         
-                        if let image = UIImage(data: imageData),
-                           let userId = Auth.auth().currentUser?.uid {
+                        if let image = UIImage(data: imageData) {
                             print("[Story][ImageGen] ✅ Converted existing image to UIImage. Size: \(image.size)")
                             
                             if let imageData = image.jpegData(compressionQuality: 0.8) {
@@ -1186,11 +1207,11 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded existing image to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                // Note: firebaseImageUrl is no longer part of the model, so we skip this update
+                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
                                 
                                 await MainActor.run {
                                     if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
-                                        // Note: firebaseImageUrl is no longer part of the model
+                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
                                         self.currentStory = currentStory
                                         print("[Story][ImageGen] ✅ UI updated with existing image Firebase URL for chapter \(index + 1).")
                                     }
@@ -1523,7 +1544,7 @@ class ContentGenerationViewModel: ObservableObject {
                     title: section.title,
                     script: section.script,
                     imagePrompt: section.imagePrompt,
-                    imageUrl: section.imageUrl,
+                    imageUrl: section.firebaseImageUrl,
                     order: section.order
                 )
             },
@@ -2115,11 +2136,34 @@ class ContentGenerationViewModel: ObservableObject {
                 startProgressPollingFallback()
             }
             
+            var updatedComic = comic
+            if let userId = Auth.auth().currentUser?.uid {
+                var updatedPanels: [ComicPanel] = []
+                for var panel in comic.panelLayout {
+                    if let imageUrlString = panel.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                        do {
+                            let (imageData, _) = try await session.data(from: imageUrl)
+                            if let image = UIImage(data: imageData) {
+                                if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                                    let fileName = "comic_\(comic.id.uuidString)_\(panel.id.uuidString).jpg"
+                                    let downloadURL = try await uploadImageToFirebase(imageData: jpegData, fileName: fileName, userId: userId)
+                                    panel.firebaseImageUrl = downloadURL.absoluteString
+                                }
+                            }
+                        } catch {
+                            print("[Comic] Failed to process image for panel \(panel.panelId): \(error)")
+                        }
+                    }
+                    updatedPanels.append(panel)
+                }
+                updatedComic.panelLayout = updatedPanels
+            }
+            
             await MainActor.run {
-                self.currentComic = comic
+                self.currentComic = updatedComic
                 print("[Comic] Updated UI with comic object")
-                globalManager.setLastGeneratedContent(type: .comic, id: comic.id.uuidString, title: comic.comicTitle)
-                globalManager.setRecentlyGeneratedContent(comic: comic)
+                globalManager.setLastGeneratedContent(type: .comic, id: updatedComic.id.uuidString, title: updatedComic.comicTitle)
+                globalManager.setRecentlyGeneratedContent(comic: updatedComic)
             }
             
             globalManager.updateProgress(step: "Saving to cloud...", stepNumber: 3, totalSteps: 3)
@@ -2131,7 +2175,7 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Comic] User authenticated (\(currentUser.uid)), proceeding with Firebase save for comic ID \(comic.id.uuidString)")
                 
                 // Save comic to Firebase
-                await saveComicToFirebase(comic, userId: currentUser.uid)
+                await saveComicToFirebase(updatedComic, userId: currentUser.uid)
                 
                 print("[Comic] Comic content processing completed.")
             } else {
@@ -2182,7 +2226,7 @@ class ContentGenerationViewModel: ObservableObject {
                     scene: panel.scene,
                     imagePrompt: panel.imagePrompt,
                     dialogue: panel.dialogue,
-                    imageUrl: panel.imageUrl
+                    imageUrl: panel.firebaseImageUrl
                 )
             },
             createdAt: Timestamp(date: Date())
