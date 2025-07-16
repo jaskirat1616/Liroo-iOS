@@ -173,6 +173,8 @@ struct ComicPanelView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
             }
             
             // Comic Image
@@ -208,10 +210,13 @@ struct ComicPanelView: View {
                                     .font(.custom("ComicNeue-Bold", size: isIPad ? 16 : 14, relativeTo: .body))
                                     .foregroundColor(.accentColor)
                                     .frame(width: isIPad ? 80 : 60, alignment: .leading)
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
                                 Text("\"\(dialogue)\"")
                                     .font(.custom("ComicNeue-Regular", size: isIPad ? 16 : 14, relativeTo: .body))
                                     .foregroundColor(.primary)
-                                    .padding(10)
+                                    .padding(.vertical, 14)
+                                    .padding(.horizontal, 18)
                                     .background(
                                         RoundedRectangle(cornerRadius: 16)
                                             .fill(Color.white.opacity(colorScheme == .dark ? 0.15 : 0.85))

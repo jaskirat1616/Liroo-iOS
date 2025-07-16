@@ -1,4 +1,5 @@
 import SwiftUI
+import CommonCrypto
 
 // MARK: - Cached Async Image Component
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
@@ -117,11 +118,19 @@ class ImageCache {
     private let cache = NSCache<NSString, UIImage>()
     private let loadingURLs = NSMutableSet()
     private let queue = DispatchQueue(label: "com.liroo.imagecache", attributes: .concurrent)
+    private let fileManager = FileManager.default
+    private let diskCacheURL: URL
+    private let cacheExpiryDays: Int = 30
     
     private init() {
         cache.countLimit = 100 // Maximum number of images
         cache.totalCostLimit = 1024 * 1024 * 100 // 100 MB
-        
+        // Disk cache directory
+        let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        diskCacheURL = caches.appendingPathComponent("LirooImageCache", isDirectory: true)
+        if !fileManager.fileExists(atPath: diskCacheURL.path) {
+            try? fileManager.createDirectory(at: diskCacheURL, withIntermediateDirectories: true, attributes: nil)
+        }
         // Add memory warning observer
         NotificationCenter.default.addObserver(
             self,
@@ -129,6 +138,8 @@ class ImageCache {
             name: UIApplication.didReceiveMemoryWarningNotification,
             object: nil
         )
+        // Optionally clear old files on init
+        clearOldFiles()
     }
     
     deinit {
@@ -139,19 +150,35 @@ class ImageCache {
         queue.async(flags: .barrier) {
             self.cache.setObject(image, forKey: key as NSString)
             print("[ImageCache] 💾 Cached image for key: \(key)")
+            // Save to disk
+            if let data = image.pngData() {
+                let fileURL = self.diskCacheURL.appendingPathComponent(self.hashedFileName(for: key))
+                try? data.write(to: fileURL)
+                print("[ImageCache] 💾 Saved image to disk: \(fileURL.lastPathComponent)")
+            }
         }
     }
     
     func get(forKey key: String) -> UIImage? {
-        return queue.sync {
-            let image = cache.object(forKey: key as NSString)
-            if image != nil {
-                print("[ImageCache] 🎯 Cache hit for key: \(key)")
-            } else {
-                print("[ImageCache] ❌ Cache miss for key: \(key)")
+        // First check memory
+        if let image = queue.sync(execute: { cache.object(forKey: key as NSString) }) {
+            print("[ImageCache] 🎯 Cache hit for key: \(key)")
+            return image
+        }
+        // Then check disk
+        let fileURL = diskCacheURL.appendingPathComponent(hashedFileName(for: key))
+        if fileManager.fileExists(atPath: fileURL.path),
+           let data = try? Data(contentsOf: fileURL),
+           let image = UIImage(data: data) {
+            print("[ImageCache] 💾 Disk cache hit for key: \(key)")
+            // Put it back in memory cache
+            queue.async(flags: .barrier) {
+                self.cache.setObject(image, forKey: key as NSString)
             }
             return image
         }
+        print("[ImageCache] ❌ Cache miss for key: \(key)")
+        return nil
     }
     
     func remove(forKey key: String) {
@@ -218,6 +245,30 @@ class ImageCache {
     @objc private func clearCache() {
         print("[ImageCache] ⚠️ Memory warning received, clearing cache")
         removeAll()
+    }
+    
+    // MARK: - Disk Cache Helpers
+    private func hashedFileName(for key: String) -> String {
+        // Use SHA256 for unique, safe filenames
+        if let data = key.data(using: .utf8) {
+            var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+            data.withUnsafeBytes {
+                _ = CC_SHA256($0.baseAddress, CC_LONG(data.count), &hash)
+            }
+            return hash.map { String(format: "%02x", $0) }.joined()
+        }
+        return UUID().uuidString
+    }
+    private func clearOldFiles() {
+        let expiry = Date().addingTimeInterval(-Double(cacheExpiryDays) * 24 * 60 * 60)
+        guard let files = try? fileManager.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: [.contentModificationDateKey], options: []) else { return }
+        for file in files {
+            if let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+               let modDate = attrs.contentModificationDate, modDate < expiry {
+                try? fileManager.removeItem(at: file)
+                print("[ImageCache] 🗑️ Removed expired cached image: \(file.lastPathComponent)")
+            }
+        }
     }
 }
 

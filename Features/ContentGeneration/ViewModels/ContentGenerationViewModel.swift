@@ -2370,7 +2370,7 @@ struct Story: Identifiable, Codable, Equatable {
     let level: ReadingLevel
     var chapters: [StoryChapter]
     let imageStyle: String? // Overall story image style, hint from backend
-    let mainCharacters: [StoryCharacter]? // New: Main characters with descriptions
+    var mainCharacters: [StoryCharacter]? // New: Main characters with descriptions
     let coverImageUrl: String? // New: Story cover/hero image (GCS URL)
     let summaryImageUrl: String? // New: Story conclusion/summary image (GCS URL)
     var firebaseCoverImageUrl: String? // Firebase Storage URL for cover
