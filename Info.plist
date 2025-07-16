@@ -18,6 +18,12 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>OpenDyslexic-Regular.otf</string>
+		<string>ComicNeue-Regular.ttf</string>
+		<string>ComicNeue-Bold.ttf</string>
+		<string>ComicNeue-Italic.ttf</string>
+		<string>ComicNeue-BoldItalic.ttf</string>
+		<string>ComicNeue-Light.ttf</string>
+		<string>ComicNeue-LightItalic.ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

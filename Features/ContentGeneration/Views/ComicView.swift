@@ -14,48 +14,21 @@ struct ComicView: View {
     }
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Comic Header
-                    comicHeader
-                    
-                    // Character Style Guide (if available)
-                    if !comic.characterStyleGuide.isEmpty {
-                        characterStyleGuideSection
-                    }
-                    
-                    // Comic Panels
-                    comicPanelsSection
-                }
-                .padding(.horizontal, 0)
-                .padding(.vertical, 0)
-            }
-            .navigationTitle("Comic")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") {
-                        dismissAction()
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // Comic Header
+                comicHeader
+                
+                // Character Style Guide (if available)
+                if !comic.characterStyleGuide.isEmpty {
+                    characterStyleGuideSection
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        // Share comic
-                        Button(action: shareComic) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        
-                        // Save comic
-                        Button(action: saveComic) {
-                            Image(systemName: "bookmark")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                    }
-                }
+                // Comic Panels
+                comicPanelsSection
             }
+            .padding(.horizontal, 0)
+            .padding(.vertical, 0)
         }
         .sheet(isPresented: $showingShareSheet) {
             ShareSheet(activityItems: shareItems)
@@ -181,17 +154,25 @@ struct ComicPanelView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Panel Header
-            HStack {
-                Text("Panel \(panelIndex) of \(totalPanels)")
-                    .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
-                    .foregroundColor(.primary)
-                Spacer()
+            // Panel Header (removed Panel X of Y)
+            // HStack {
+            //     Text("Panel \(panelIndex) of \(totalPanels)")
+            //         .font(.system(size: isIPad ? 16 : 14, weight: .semibold))
+            //         .foregroundColor(.primary)
+            //     Spacer()
+            //     Text(panel.scene)
+            //         .font(.system(size: isIPad ? 14 : 12, weight: .medium))
+            //         .foregroundColor(.secondary)
+            //         .lineLimit(2)
+            //         .multilineTextAlignment(.trailing)
+            // }
+            // Only show scene if you want
+            if !panel.scene.isEmpty {
                 Text(panel.scene)
                     .font(.system(size: isIPad ? 14 : 12, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(2)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(.leading)
             }
             
             // Comic Image
@@ -219,17 +200,27 @@ struct ComicPanelView: View {
             
             // Dialogue Section
             if !panel.dialogue.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(panel.dialogue.keys.sorted()), id: \.self) { character in
                         if let dialogue = panel.dialogue[character] {
-                            HStack(alignment: .top, spacing: 4) {
+                            HStack(alignment: .top, spacing: 8) {
                                 Text(character)
-                                    .font(.system(size: isIPad ? 14 : 12, weight: .semibold))
+                                    .font(.custom("ComicNeue-Bold", size: isIPad ? 16 : 14, relativeTo: .body))
                                     .foregroundColor(.accentColor)
                                     .frame(width: isIPad ? 80 : 60, alignment: .leading)
                                 Text("\"\(dialogue)\"")
-                                    .font(.system(size: isIPad ? 14 : 12, weight: .regular))
+                                    .font(.custom("ComicNeue-Regular", size: isIPad ? 16 : 14, relativeTo: .body))
                                     .foregroundColor(.primary)
+                                    .padding(10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .fill(Color.white.opacity(colorScheme == .dark ? 0.15 : 0.85))
+                                            .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
                                     .multilineTextAlignment(.leading)
                                 Spacer()
                             }
