@@ -140,47 +140,30 @@ struct UserContentBlockView: View {
             
             // Block Image
             if let imageUrlString = block.firebaseImageUrl, let imageUrl = URL(string: imageUrlString) {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading content image...")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(secondaryTextColor)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
+                CachedAsyncImage(url: imageUrl) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(1, contentMode: .fill)
+                        .frame(maxWidth: isIPad ? 400 : .infinity)
+                        .frame(height: isIPad ? 400 : 300)
+                        .clipped()
                         .cornerRadius(12)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(1, contentMode: .fill)
-                            .frame(maxWidth: isIPad ? 400 : .infinity)
-                            .frame(height: isIPad ? 400 : 300)
-                            .clipped()
-                            .cornerRadius(12)
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundColor(.gray)
-                            Text("Failed to load content image")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.red)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 300 : 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    @unknown default:
-                        EmptyView()
+                } placeholder: {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Loading content image...")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(secondaryTextColor)
+                            .padding(.top, 8)
                     }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: isIPad ? 300 : 200)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
                 }
                 .frame(maxWidth: .infinity)
+                .id(imageUrlString) // Force reload only when URL changes
             }
             
             // Block Content

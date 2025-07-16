@@ -195,32 +195,26 @@ struct ComicPanelView: View {
             }
             
             // Comic Image
-            if let imageUrl = panel.imageUrl {
-                AsyncImage(url: URL(string: imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .frame(maxWidth: .infinity)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity)
-                    case .failure:
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundColor(.gray)
-                            .frame(maxWidth: .infinity)
-                    @unknown default:
-                        EmptyView()
-                    }
+            if let imageUrl = panel.firebaseImageUrl ?? panel.imageUrl {
+                CachedAsyncImage(url: URL(string: imageUrl)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+                } placeholder: {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 200)
                 }
+                .id(imageUrl) // Force reload only when URL changes
             } else {
                 Image(systemName: "photo")
                     .font(.largeTitle)
                     .foregroundColor(.gray)
                     .frame(maxWidth: .infinity)
+                    .frame(height: 200)
             }
             
             // Dialogue Section

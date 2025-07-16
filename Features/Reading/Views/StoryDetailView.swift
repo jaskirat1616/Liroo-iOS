@@ -168,7 +168,7 @@ struct CharacterCard: View {
         VStack(alignment: .leading, spacing: 12) {
             // Character Image
             if let imageUrl = character.imageUrl, !imageUrl.isEmpty {
-                AsyncImage(url: URL(string: imageUrl)) { image in
+                CachedAsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -184,6 +184,7 @@ struct CharacterCard: View {
                 .frame(height: 120)
                 .clipped()
                 .cornerRadius(12)
+                .id(imageUrl) // Force reload only when URL changes
             } else {
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))
@@ -263,8 +264,8 @@ struct ReadingChapterView: View {
             }
             
             // Chapter Main Image
-            if let imageUrl = chapter.imageUrl, !imageUrl.isEmpty {
-                AsyncImage(url: URL(string: imageUrl)) { image in
+            if let imageUrl = chapter.firebaseImageUrl ?? chapter.imageUrl, !imageUrl.isEmpty {
+                CachedAsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -279,6 +280,7 @@ struct ReadingChapterView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .cornerRadius(12)
+                .id(imageUrl) // Force reload only when URL changes
             }
             
             // Key Events Section
@@ -309,7 +311,7 @@ struct ReadingChapterView: View {
             // Key Event Images
             if let keyEventImages = chapter.keyEventImages, !keyEventImages.isEmpty {
                 ForEach(keyEventImages) { eventImage in
-                    AsyncImage(url: URL(string: eventImage.imageUrl)) { image in
+                    CachedAsyncImage(url: URL(string: eventImage.imageUrl)) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -323,7 +325,8 @@ struct ReadingChapterView: View {
                             )
                     }
                     .frame(maxWidth: .infinity)
-                            .cornerRadius(12)
+                    .cornerRadius(12)
+                    .id(eventImage.imageUrl) // Force reload only when URL changes
                 }
             }
             
@@ -380,7 +383,7 @@ struct ReadingChapterView: View {
             // Emotional Moment Images
             if let emotionalMomentImages = chapter.emotionalMomentImages, !emotionalMomentImages.isEmpty {
                 ForEach(emotionalMomentImages) { momentImage in
-                    AsyncImage(url: URL(string: momentImage.imageUrl)) { image in
+                    CachedAsyncImage(url: URL(string: momentImage.imageUrl)) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -392,9 +395,10 @@ struct ReadingChapterView: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle())
                             )
-                }
-                .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
                     .cornerRadius(12)
+                    .id(momentImage.imageUrl) // Force reload only when URL changes
                 }
             }
             

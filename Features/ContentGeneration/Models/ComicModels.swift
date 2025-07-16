@@ -103,7 +103,7 @@ struct Comic: Identifiable, Codable, Equatable {
     let comicTitle: String
     let theme: String
     let characterStyleGuide: [String: String]
-    let panelLayout: [ComicPanel]
+    var panelLayout: [ComicPanel]
     
     enum CodingKeys: String, CodingKey {
         case id

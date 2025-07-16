@@ -401,13 +401,15 @@ struct LectureDestinationView: View {
                     
                     // Convert to Lecture and AudioFile models
                     let sections = (firebaseLecture.sections ?? []).enumerated().map { index, section in
-                        LectureSection(
+                        print("[LectureDestinationView] Section \(index + 1): imageUrl = \(section.imageUrl ?? "nil")")
+                        return LectureSection(
                             id: UUID(uuidString: section.sectionId) ?? UUID(),
                             title: section.title ?? "Section \(index + 1)",
                             script: section.script ?? "",
                             imagePrompt: section.imagePrompt ?? "",
                             imageUrl: section.imageUrl,
-                            order: section.order ?? (index + 1)
+                            order: section.order ?? (index + 1),
+                            firebaseImageUrl: section.imageUrl // Use the Firebase URL as firebaseImageUrl
                         )
                     }
                     let lecture = Lecture(
@@ -471,7 +473,7 @@ struct ComicDestinationView: View {
                 }
                 .padding()
             } else if let comic = comic {
-                ComicView(comic: comic, dismissAction: nil)
+                ComicView(comic: comic, dismissAction: {})
             }
         }
         .navigationTitle("Comic")
@@ -511,12 +513,14 @@ struct ComicDestinationView: View {
                     
                     // Convert to Comic model
                     let panels = firebaseComic.panelLayout.map { panel in
-                        ComicPanel(
+                        print("[ComicDestinationView] Panel \(panel.panelId): imageUrl = \(panel.imageUrl ?? "nil")")
+                        return ComicPanel(
                             panelId: panel.panelId,
                             scene: panel.scene,
                             imagePrompt: panel.imagePrompt,
                             dialogue: panel.dialogue,
-                            imageUrl: panel.imageUrl
+                            imageUrl: panel.imageUrl,
+                            firebaseImageUrl: panel.imageUrl // Use the Firebase URL as firebaseImageUrl
                         )
                     }
                     
@@ -531,6 +535,9 @@ struct ComicDestinationView: View {
                     self.comic = comic
                     
                     print("[ComicDestinationView] Comic loaded successfully - Panels: \(panels.count)")
+                    for (index, panel) in panels.enumerated() {
+                        print("[ComicDestinationView] Panel \(index + 1): firebaseImageUrl = \(panel.firebaseImageUrl ?? "nil")")
+                    }
                 } catch {
                     print("[ComicDestinationView] Decoding error: \(error.localizedDescription)")
                     errorMessage = error.localizedDescription

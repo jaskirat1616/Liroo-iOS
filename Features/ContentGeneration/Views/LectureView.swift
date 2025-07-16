@@ -339,48 +339,31 @@ struct LectureView: View {
     private func sectionImage(_ section: LectureSection) -> some View {
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         return Group {
-            if let imageUrl = section.imageUrl, let url = URL(string: imageUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                            Text("Loading section image...")
-                                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 4), weight: .medium))
-                                .foregroundColor(currentTheme.secondaryTextColor)
-                                .padding(.top, 8)
-                        }
-                        .frame(maxWidth: .infinity)
+            if let imageUrl = section.firebaseImageUrl ?? section.imageUrl, let url = URL(string: imageUrl) {
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(1, contentMode: .fill)
+                        .frame(maxWidth: isIPad ? 400 : .infinity)
                         .frame(height: isIPad ? 400 : 300)
-                        .background(Color(.systemGray6))
+                        .clipped()
                         .cornerRadius(12)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(1, contentMode: .fill)
-                            .frame(maxWidth: isIPad ? 400 : .infinity)
-                            .frame(height: isIPad ? 400 : 300)
-                            .clipped()
-                            .cornerRadius(12)
-                    case .failure:
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundColor(.gray)
-                            Text("Failed to load section image")
-                                .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 4), weight: .medium))
-                                .foregroundColor(.red)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: isIPad ? 400 : 300)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    @unknown default:
-                        EmptyView()
+                } placeholder: {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Loading section image...")
+                            .font(currentFontStyle.getFont(size: CGFloat(selectedFontSize - 4), weight: .medium))
+                            .foregroundColor(currentTheme.secondaryTextColor)
+                            .padding(.top, 8)
                     }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: isIPad ? 400 : 300)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
                 }
                 .frame(maxWidth: .infinity)
+                .id(imageUrl) // Force reload only when URL changes
             } else {
                 EmptyView()
             }
