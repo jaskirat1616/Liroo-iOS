@@ -1396,7 +1396,7 @@ class ContentGenerationViewModel: ObservableObject {
                 name: character.name,
                 description: character.description,
                 personality: character.personality,
-                imageUrl: character.imageUrl
+                imageUrl: character.firebaseImageUrl ?? character.imageUrl // Use Firebase URL with fallback
             )
         }
         
@@ -1454,8 +1454,8 @@ class ContentGenerationViewModel: ObservableObject {
             imageStyle: story.imageStyle,
             chapters: firebaseChapters,
             mainCharacters: firebaseCharacters,
-            coverImageUrl: story.coverImageUrl,
-            summaryImageUrl: story.summaryImageUrl
+            coverImageUrl: story.firebaseCoverImageUrl ?? story.coverImageUrl,
+            summaryImageUrl: story.firebaseSummaryImageUrl ?? story.summaryImageUrl
         )
         
         // Log Firebase story details
@@ -2377,8 +2377,10 @@ struct Story: Identifiable, Codable, Equatable {
     var chapters: [StoryChapter]
     let imageStyle: String? // Overall story image style, hint from backend
     let mainCharacters: [StoryCharacter]? // New: Main characters with descriptions
-    let coverImageUrl: String? // New: Story cover/hero image
-    let summaryImageUrl: String? // New: Story conclusion/summary image
+    let coverImageUrl: String? // New: Story cover/hero image (GCS URL)
+    let summaryImageUrl: String? // New: Story conclusion/summary image (GCS URL)
+    var firebaseCoverImageUrl: String? // Firebase Storage URL for cover
+    var firebaseSummaryImageUrl: String? // Firebase Storage URL for summary
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -2386,13 +2388,15 @@ struct Story: Identifiable, Codable, Equatable {
         case content
         case level
         case chapters
-        case imageStyle // Ensure this matches the JSON key from the backend if it sends one for the story's overall style
+        case imageStyle
         case mainCharacters
         case coverImageUrl
         case summaryImageUrl
+        case firebaseCoverImageUrl
+        case firebaseSummaryImageUrl
     }
 
-    init(id: UUID = UUID(), title: String, content: String, level: ReadingLevel, chapters: [StoryChapter], imageStyle: String? = nil, mainCharacters: [StoryCharacter]? = nil, coverImageUrl: String? = nil, summaryImageUrl: String? = nil) {
+    init(id: UUID = UUID(), title: String, content: String, level: ReadingLevel, chapters: [StoryChapter], imageStyle: String? = nil, mainCharacters: [StoryCharacter]? = nil, coverImageUrl: String? = nil, summaryImageUrl: String? = nil, firebaseCoverImageUrl: String? = nil, firebaseSummaryImageUrl: String? = nil) {
         self.id = id
         self.title = title
         self.content = content
@@ -2402,6 +2406,8 @@ struct Story: Identifiable, Codable, Equatable {
         self.mainCharacters = mainCharacters
         self.coverImageUrl = coverImageUrl
         self.summaryImageUrl = summaryImageUrl
+        self.firebaseCoverImageUrl = firebaseCoverImageUrl
+        self.firebaseSummaryImageUrl = firebaseSummaryImageUrl
     }
 }
 
@@ -2633,31 +2639,34 @@ struct StoryCharacter: Identifiable, Codable, Equatable {
     let name: String
     let description: String
     let personality: String
-    let imageUrl: String? // Character portrait image
-    
+    let imageUrl: String? // Character portrait image (GCS URL)
+    var firebaseImageUrl: String? // Firebase Storage URL
+
     enum CodingKeys: String, CodingKey {
         case name
         case description
         case personality
         case imageUrl
+        case firebaseImageUrl
     }
-    
-    init(name: String, description: String, personality: String, imageUrl: String? = nil) {
+
+    init(name: String, description: String, personality: String, imageUrl: String? = nil, firebaseImageUrl: String? = nil) {
         self.id = UUID()
         self.name = name
         self.description = description
         self.personality = personality
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
         self.id = UUID() // Generate new UUID for each character
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown Character"
         self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? "No description available"
         self.personality = try container.decodeIfPresent(String.self, forKey: .personality) ?? "No personality traits described"
         self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        self.firebaseImageUrl = try container.decodeIfPresent(String.self, forKey: .firebaseImageUrl)
     }
 }
 
@@ -2691,6 +2700,8 @@ extension Story {
         self.mainCharacters = try container.decodeIfPresent([StoryCharacter].self, forKey: .mainCharacters)
         self.coverImageUrl = try container.decodeIfPresent(String.self, forKey: .coverImageUrl)
         self.summaryImageUrl = try container.decodeIfPresent(String.self, forKey: .summaryImageUrl)
+        self.firebaseCoverImageUrl = try container.decodeIfPresent(String.self, forKey: .firebaseCoverImageUrl)
+        self.firebaseSummaryImageUrl = try container.decodeIfPresent(String.self, forKey: .firebaseSummaryImageUrl)
     }
 }
 
