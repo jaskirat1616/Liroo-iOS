@@ -264,7 +264,7 @@ struct ReadingChapterView: View {
             }
             
             // Chapter Main Image
-            if let imageUrl = chapter.firebaseImageUrl ?? chapter.imageUrl, !imageUrl.isEmpty {
+            if let imageUrl = chapter.imageUrl, !imageUrl.isEmpty {
                 CachedAsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()

@@ -1287,14 +1287,15 @@ class ContentGenerationViewModel: ObservableObject {
                                 print("[Story][ImageGen] ✅ Successfully uploaded image for chapter \(index + 1) to Firebase Storage.")
                                 print("[Story][ImageGen] 📥 Received Firebase Download URL: \(downloadURL.absoluteString)")
                                 
-                                // Note: firebaseImageUrl is no longer part of the model, so we skip this update
+                                // Update the chapter with Firebase Storage URL
+                                updatedChapters[index].firebaseImageUrl = downloadURL.absoluteString
                                 success = true
                                 
                                 await MainActor.run {
                                     if var currentStory = self.currentStory, currentStory.chapters.indices.contains(index) {
-                                        // Note: firebaseImageUrl is no longer part of the model
-                                        self.currentStory = currentStory // Update the published property
-                                        print("[Story][ImageGen] ✅ UI updated with new image for chapter \(index + 1).")
+                                        currentStory.chapters[index].firebaseImageUrl = downloadURL.absoluteString
+                                        self.currentStory = currentStory
+                                        print("[Story][ImageGen] ✅ UI updated with Firebase URL for chapter \(index + 1).")
                                     } else {
                                         print("[Story][ImageGen] ⚠️ Warning: Could not update currentStory in UI for chapter \(index + 1) image URL (story or chapter index mismatch).")
                                     }
@@ -1406,7 +1407,7 @@ class ContentGenerationViewModel: ObservableObject {
                 FirebaseEventImage(
                     id: eventImage.id,
                     description: eventImage.description,
-                    imageUrl: eventImage.imageUrl
+                    imageUrl: eventImage.firebaseImageUrl ?? eventImage.imageUrl // Use Firebase URL with fallback
                 )
             }
             
@@ -1414,7 +1415,7 @@ class ContentGenerationViewModel: ObservableObject {
                 FirebaseEventImage(
                     id: momentImage.id,
                     description: momentImage.description,
-                    imageUrl: momentImage.imageUrl
+                    imageUrl: momentImage.firebaseImageUrl ?? momentImage.imageUrl // Use Firebase URL with fallback
                 )
             }
             
@@ -1422,7 +1423,7 @@ class ContentGenerationViewModel: ObservableObject {
                 FirebaseEventImage(
                     id: interactionImage.id,
                     description: interactionImage.description,
-                    imageUrl: interactionImage.imageUrl
+                    imageUrl: interactionImage.firebaseImageUrl ?? interactionImage.imageUrl // Use Firebase URL with fallback
                 )
             }
             
@@ -1431,7 +1432,7 @@ class ContentGenerationViewModel: ObservableObject {
                 title: chapter.title,
                 content: chapter.content,
                 order: chapter.order,
-                imageUrl: chapter.imageUrl,
+                imageUrl: chapter.firebaseImageUrl ?? chapter.imageUrl, // Use Firebase URL with fallback
                 keyEvents: chapter.keyEvents,
                 characterInteractions: chapter.characterInteractions,
                 emotionalMoments: chapter.emotionalMoments,
@@ -2481,39 +2482,45 @@ struct StoryEventImage: Identifiable, Codable, Equatable {
     let id: String
     let description: String // Event description or moment description
     let imageUrl: String
+    var firebaseImageUrl: String? // Firebase Storage URL
     
     enum CodingKeys: String, CodingKey {
         case id
         case description
         case imageUrl
+        case firebaseImageUrl
     }
     
     // For key events
-    init(event: String, imageUrl: String) {
+    init(event: String, imageUrl: String, firebaseImageUrl: String? = nil) {
         self.id = UUID().uuidString
         self.description = event
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
     
     // For emotional moments
-    init(moment: String, imageUrl: String) {
+    init(moment: String, imageUrl: String, firebaseImageUrl: String? = nil) {
         self.id = UUID().uuidString
         self.description = moment
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
     
     // For character interactions
-    init(interaction: String, imageUrl: String) {
+    init(interaction: String, imageUrl: String, firebaseImageUrl: String? = nil) {
         self.id = UUID().uuidString
         self.description = interaction
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
     
     // Custom initializer for decoding
-    init(id: String, description: String, imageUrl: String) {
+    init(id: String, description: String, imageUrl: String, firebaseImageUrl: String? = nil) {
         self.id = id
         self.description = description
         self.imageUrl = imageUrl
+        self.firebaseImageUrl = firebaseImageUrl
     }
 }
 
