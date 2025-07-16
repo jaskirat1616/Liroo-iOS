@@ -4,17 +4,6 @@ import FirebaseFirestore
 // REMOVED the duplicate DialogueMessage and MessageSender structs from here.
 // The app will now use the single source of truth from ReadingViewModel.swift.
 
-enum Sender {
-    case user
-    case ai
-}
-
-struct DialogueMessage: Identifiable {
-    let id = UUID()
-    let text: String
-    let sender: Sender
-}
-
 struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = ""
@@ -59,7 +48,7 @@ struct FullReadingView: View {
                     Text(errorMessage)
                         .foregroundColor(.red)
                     Button("Retry") {
-                        Task { await viewModel.fetchContent() }
+                        Task { await viewModel.fetchFullContent() }
                     }
                 }
             } else if let story = viewModel.story {
@@ -199,7 +188,7 @@ struct DialogueSheetView: View {
 
 // Simple Message View for Dialogue
 struct MessageView: View {
-    let message: DialogueMessage
+    let message: ChatMessage
     let theme: ReadingTheme
     let fontStyle: ReadingFontStyle
 
