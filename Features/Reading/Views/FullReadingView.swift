@@ -4,6 +4,17 @@ import FirebaseFirestore
 // REMOVED the duplicate DialogueMessage and MessageSender structs from here.
 // The app will now use the single source of truth from ReadingViewModel.swift.
 
+enum Sender {
+    case user
+    case ai
+}
+
+struct DialogueMessage: Identifiable {
+    let id = UUID()
+    let text: String
+    let sender: Sender
+}
+
 struct FullReadingView: View {
     @StateObject private var viewModel: FullReadingViewModel
     @State private var userDialogueInput: String = ""
@@ -209,91 +220,5 @@ struct MessageView: View {
                 Spacer()
             }
         }
-    }
-}
-
-
-// MARK: - ViewModel
-@MainActor
-class FullReadingViewModel: ObservableObject {
-    @Published var story: FirebaseStory? // Correct type
-    @Published var userContent: FirebaseUserContent?
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    
-    @Published var isShowingDialogueView = false
-    @Published var selectedParagraphForDialogue: String?
-    @Published var originalContentForDialogue: String?
-    @Published var dialogueMessages: [DialogueMessage] = []
-    @Published var isSendingDialogueMessage = false
-    
-    private let itemID: String
-    private let collectionName: String
-    private let db = Firestore.firestore()
-    private var readingSessionID: String?
-
-    init(itemID: String, collectionName: String) {
-        self.itemID = itemID
-        self.collectionName = collectionName
-        Task {
-            await fetchContent()
-        }
-    }
-
-    func fetchContent() async {
-        guard !isLoading else { return }
-        isLoading = true
-        
-        do {
-            if collectionName == "stories" {
-                let document = try await db.collection("stories").document(itemID).getDocument()
-                guard document.exists else {
-                    errorMessage = "Story not found."
-                    isLoading = false
-                    return
-                }
-                
-                var storyData = try document.data(as: FirebaseStory.self) // Correct Type
-                let chaptersSnapshot = try await db.collection("stories").document(itemID).collection("chapters").getDocuments()
-                let chapters = try chaptersSnapshot.documents.compactMap { try $0.data(as: FirebaseChapter.self) }
-                storyData.chapters = chapters.sorted(by: { $0.order ?? 0 < $1.order ?? 0 })
-                
-                self.story = storyData
-                
-            } else if collectionName == "userContent" {
-                let document = try await db.collection("userContent").document(itemID).getDocument()
-                self.userContent = try document.data(as: FirebaseUserContent.self)
-            }
-            isLoading = false
-        } catch {
-            errorMessage = "Failed to load content: \(error.localizedDescription)"
-            isLoading = false
-            print("Error fetching content: \(error)")
-        }
-    }
-    
-    func startReadingSession() { print("Reading session started.") }
-    func finishReadingSession() { print("Reading session finished.") }
-    func updateReadingProgress() { print("Updating reading progress.") }
-
-    func initiateDialogue(paragraph: String, originalContent: String) {
-        selectedParagraphForDialogue = paragraph
-        originalContentForDialogue = originalContent
-        dialogueMessages = [DialogueMessage(id: UUID(), sender: .ai, text: "What about this paragraph?")]
-        isShowingDialogueView = true
-    }
-    
-    func sendDialogueMessage(userQuestion: String, selectedSnippet: String, originalBlockContent: String) async {
-        // Placeholder for your dialogue sending logic
-        isSendingDialogueMessage = true
-        dialogueMessages.append(DialogueMessage(id: UUID(), sender: .user, text: userQuestion))
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        dialogueMessages.append(DialogueMessage(id: UUID(), sender: .ai, text: "That's a great question!"))
-        isSendingDialogueMessage = false
-    }
-
-    func clearDialogue() {
-        dialogueMessages = []
-        selectedParagraphForDialogue = nil
     }
 }
