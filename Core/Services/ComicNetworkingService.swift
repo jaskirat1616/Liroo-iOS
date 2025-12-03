@@ -7,7 +7,7 @@ class ComicNetworkingService: ObservableObject {
     static let shared = ComicNetworkingService()
     
     private let logger = Logger(subsystem: "com.liroo.app", category: "ComicNetworking")
-    private let backendURL = "https://liroo-backend-904791784838.us-central1.run.app"
+    private var backendURL: String { AppConfig.backendURL }
     
     // Custom URLSession for comic generation with extended timeouts
     private lazy var comicSession: URLSession = {

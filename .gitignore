@@ -1,6 +1,5 @@
-# Documentation files
+# Documentation files (keep README.md)
 Documentation/
-*.md
 *.txt
 *.sh
 *.log
@@ -24,3 +23,32 @@ DerivedData/
 
 # Crashlytics
 .crashlytics/
+
+# Sensitive files - DO NOT COMMIT
+GoogleService-Info.plist
+*.env
+.env
+.env.local
+.env.*.local
+credentials.json
+service-account-key.json
+*credentials*.json
+*key*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Backend output files
+lecture_output/
+*.txt
+*.json
+!requirements.txt
+!package.json

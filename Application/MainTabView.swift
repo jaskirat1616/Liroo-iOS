@@ -142,12 +142,17 @@ struct MainTabView: View {
                         .padding(.bottom, 34) // Adjust for safe area
                     }
                 }
-                .edgesIgnoringSafeArea(.bottom)
                 .environmentObject(coordinator)
             }
         }
         .onAppear {
             globalManager.restoreFromUserDefaults()
+            // Ensure proper display scaling
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                windowScene.windows.forEach { window in
+                    window.contentScaleFactor = UIScreen.main.scale
+                }
+            }
         }
     }
     

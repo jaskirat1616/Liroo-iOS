@@ -4,6 +4,7 @@ import SwiftUI
 struct StoryDetailView: View {
     @EnvironmentObject var viewModel: FullReadingViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var narratorService = NarratorTTSService.shared
     let story: FirebaseStory
     let baseFontSize: Double
     let primaryTextColor: Color
@@ -33,8 +34,8 @@ struct StoryDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Story Header
-                storyHeader
+                // Story Header with Sound Button
+                storyHeaderWithSound
                     .padding(.top, 20)
                     .padding(.bottom, 24)
                 
@@ -58,6 +59,9 @@ struct StoryDetailView: View {
             }
             .padding(.horizontal, isIPad ? 40 : 16)
         }
+        .onDisappear {
+            narratorService.stop()
+        }
     }
     
     // MARK: - iPad Detection
@@ -65,22 +69,99 @@ struct StoryDetailView: View {
         UIDevice.current.userInterfaceIdiom == .pad
     }
     
-    // MARK: - Story Header
-    private var storyHeader: some View {
+    // MARK: - Story Header with Sound Button
+    private var storyHeaderWithSound: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(story.title)
-                .font(.system(size: 22, weight: .bold, design: .default))
-                .foregroundColor(primaryTextColor)
-            
-            Text("AI-Generated Story")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(secondaryTextColor)
+            HStack {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(story.title)
+                        .font(.system(size: 22, weight: .bold, design: .default))
+                        .foregroundColor(primaryTextColor)
+                    
+                    Text("AI-Generated Story")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundColor(secondaryTextColor)
+                }
+                
+                Spacer()
+                
+                // Sound Button with glass morphism
+                Button(action: {
+                    Task {
+                        if narratorService.isPlaying {
+                            narratorService.stop()
+                        } else {
+                            await narratorService.narrate(text: fullStoryText)
+                        }
+                    }
+                }) {
+                    ZStack {
+                        // Glass morphism background
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.3),
+                                                Color.white.opacity(0.1)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        
+                        HStack(spacing: 8) {
+                            if narratorService.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .primary))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: narratorService.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Text(narratorService.isPlaying ? "Playing" : "Sound")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    .frame(height: 44)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
     
     // MARK: - Story Overview
@@ -102,10 +183,29 @@ struct StoryDetailView: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
     
     // MARK: - Characters Section
@@ -219,10 +319,29 @@ struct CharacterCard: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
 }
 
@@ -414,9 +533,28 @@ struct ReadingChapterView: View {
                 )
             }
         }
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
 }

@@ -6,18 +6,7 @@ enum AppTheme: String, Codable {
     case system
 }
 
-struct AppColors {
-    static let primary = Color("Primary")
-    static let secondary = Color("Secondary")
-    static let background = Color("Background")
-    static let text = Color("Text")
-    static let accent = Color("Accent")
-    
-    // Semantic colors
-    static let success = Color("Success")
-    static let warning = Color("Warning")
-    static let error = Color("Error")
-}
+
 
 struct AppFonts {
     static let title = Font.custom("OpenDyslexic-Regular", size: 24)

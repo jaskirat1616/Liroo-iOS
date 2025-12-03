@@ -4,6 +4,7 @@ import SwiftUI
 struct UserContentDetailView: View {
     @EnvironmentObject var viewModel: FullReadingViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var narratorService = NarratorTTSService.shared
     let userContent: FirebaseUserContent
     let baseFontSize: Double
     let primaryTextColor: Color
@@ -32,8 +33,8 @@ struct UserContentDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Content Header
-                contentHeader
+                // Content Header with Sound Button
+                contentHeaderWithSound
                     .padding(.horizontal, isIPad ? 40 : 16)
                     .padding(.top, 20)
                     .padding(.bottom, 24)
@@ -46,6 +47,9 @@ struct UserContentDetailView: View {
                 }
             }
         }
+        .onDisappear {
+            narratorService.stop()
+        }
     }
     
     // MARK: - iPad Detection
@@ -53,32 +57,106 @@ struct UserContentDetailView: View {
         UIDevice.current.userInterfaceIdiom == .pad
     }
     
-    // MARK: - Content Header
-    private var contentHeader: some View {
+    // MARK: - Content Header with Sound Button
+    private var contentHeaderWithSound: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(userContent.topic ?? "Generated Content")
-                .font(.system(size: 28, weight: .bold, design: .default))
-                .foregroundColor(primaryTextColor)
-
-            
-            if let level = userContent.level {
-                HStack {
-                    Text("Level: \(level)")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(secondaryTextColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
+            HStack {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(userContent.topic ?? "Generated Content")
+                        .font(.system(size: 28, weight: .bold, design: .default))
+                        .foregroundColor(primaryTextColor)
                     
-                    Spacer()
+                    if let level = userContent.level {
+                        Text("Level: \(level)")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(secondaryTextColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(.ultraThinMaterial)
+                            )
+                    }
                 }
+                
+                Spacer()
+                
+                // Sound Button with glass morphism
+                Button(action: {
+                    Task {
+                        if narratorService.isPlaying {
+                            narratorService.stop()
+                        } else {
+                            await narratorService.narrate(text: fullUserContentText)
+                        }
+                    }
+                }) {
+                    ZStack {
+                        // Glass morphism background
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.3),
+                                                Color.white.opacity(0.1)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        
+                        HStack(spacing: 8) {
+                            if narratorService.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .primary))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: narratorService.isPlaying ? "speaker.wave.3.fill" : "speaker.wave.2.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Text(narratorService.isPlaying ? "Playing" : "Sound")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    }
+                    .frame(height: 44)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
-        .padding(12)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
     
     // MARK: - Content Blocks Section
@@ -193,9 +271,28 @@ struct UserContentBlockView: View {
                 )
             }
         }
-        .padding(8)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(16)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
 }

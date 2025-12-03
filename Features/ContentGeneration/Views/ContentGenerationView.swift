@@ -649,9 +649,28 @@ struct ContentGenerationView: View {
             }
         }
         .padding(isIPad ? 28 : 16)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
     
     // MARK: - Configuration Section
@@ -907,9 +926,28 @@ struct ContentGenerationView: View {
             }
         }
         .padding(isIPad ? 20 : 14)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 2)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
     
     // MARK: - Generate Button
@@ -948,10 +986,24 @@ struct ContentGenerationView: View {
             .padding(.horizontal, 20)
             .background(
                 ZStack {
-                    BlurView(style: .systemUltraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.accentColor.opacity(0.06))
+                    // Enhanced glass morphism
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.accentColor.opacity(0.3),
+                                            Color.accentColor.opacity(0.1)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.5
+                                )
+                        )
+                        .shadow(color: Color.accentColor.opacity(0.2), radius: 15, x: 0, y: 8)
                 }
             )
             .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.75), value: viewModel.isLoading)
@@ -1004,9 +1056,28 @@ struct ContentGenerationView: View {
             }
         }
         .padding(20)
-        .background(Color.white.opacity(colorScheme == .dark ? 0.08 : 1))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .background(
+            ZStack {
+                // Glass morphism background
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            }
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
     }
 }
 
@@ -1017,6 +1088,7 @@ struct ContentGenerationView: View {
 // MARK: - Content Block Views
 struct ContentBlockView: View {
     let block: ContentBlock
+    @Environment(\.colorScheme) private var colorScheme
     
     // MARK: - iPad Detection
     private var isIPad: Bool {
@@ -1025,133 +1097,202 @@ struct ContentBlockView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Display image if available for any block type
-            if let imageUrl = block.firebaseImageUrl ?? block.url {
-                CachedAsyncImage(url: URL(string: imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: isIPad ? 600 : .infinity)
-                        .frame(maxHeight: isIPad ? 400 : 300)
-                        .cornerRadius(12)
-                } placeholder: {
-                    VStack {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                        Text("Loading image...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.top, 8)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: isIPad ? 300 : 200)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                }
-                .frame(maxWidth: .infinity)
-                .id(imageUrl) // Force reload only when URL changes
-            }
-            
-            // Display block content based on type
-            switch block.type {
-            case .heading:
-                Text(block.content ?? "")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 4)
-                
-            case .paragraph:
-                Text(block.content ?? "")
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .lineSpacing(4)
-                    .padding(.horizontal, 4)
-                
-            case .image:
-                // Image already displayed above
-                if block.content != nil {
-                    Text(block.content ?? "")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .italic()
-                        .padding(.horizontal, 4)
-                }
-                
-            case .quizHeading:
-                Text(block.content ?? "")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 4)
-                
-            case .multipleChoiceQuestion:
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(block.content ?? "")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 4)
-                    
-                    if let options = block.options {
-                        VStack(spacing: 8) {
-                            ForEach(options) { option in
-                                Button(action: {
-                                    // Handle option selection
-                                }) {
-                                    HStack {
-                                        Text(option.text)
-                                            .font(.caption)
-                                            .foregroundColor(.primary)
-                                            .multilineTextAlignment(.leading)
-                                        Spacer()
-                                        if option.id == block.correctAnswerID {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                                .font(.title3)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(8)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                    }
-                    
-                    if let explanation = block.explanation {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Explanation")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
-                            Text(explanation)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(12)
-                        .background(Color.yellow.opacity(0.1))
-                        .cornerRadius(8)
-                    }
-                }
-                .padding(12)
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                
-            case .error:
-                Text(block.content ?? "An error occurred")
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(12)
-                    .background(Color.red.opacity(0.1))
-                    .cornerRadius(8)
-            }
+            blockImageView
+            blockContentView
         }
         .padding(16)
+        .background(glassMorphismBackground)
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
+    }
+    
+    // MARK: - Block Image View
+    @ViewBuilder
+    private var blockImageView: some View {
+        if let imageUrl = block.firebaseImageUrl ?? block.url {
+            CachedAsyncImage(url: URL(string: imageUrl)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: isIPad ? 600 : .infinity)
+                    .frame(maxHeight: isIPad ? 400 : 300)
+                    .cornerRadius(12)
+            } placeholder: {
+                placeholderView
+            }
+            .frame(maxWidth: .infinity)
+            .id(imageUrl)
+        }
+    }
+    
+    // MARK: - Placeholder View
+    private var placeholderView: some View {
+        VStack {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Loading image...")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: isIPad ? 300 : 200)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Block Content View
+    @ViewBuilder
+    private var blockContentView: some View {
+        switch block.type {
+        case .heading:
+            headingView
+        case .paragraph:
+            paragraphView
+        case .image:
+            imageCaptionView
+        case .quizHeading:
+            quizHeadingView
+        case .multipleChoiceQuestion:
+            multipleChoiceView
+        case .error:
+            errorView
+        }
+    }
+    
+    // MARK: - Content Type Views
+    private var headingView: some View {
+        Text(block.content ?? "")
+            .font(.title2)
+            .fontWeight(.bold)
+            .foregroundColor(.primary)
+            .padding(.horizontal, 4)
+    }
+    
+    private var paragraphView: some View {
+        Text(block.content ?? "")
+            .font(.body)
+            .foregroundColor(.primary)
+            .lineSpacing(4)
+            .padding(.horizontal, 4)
+    }
+    
+    @ViewBuilder
+    private var imageCaptionView: some View {
+        if let content = block.content {
+            Text(content)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .italic()
+                .padding(.horizontal, 4)
+        }
+    }
+    
+    private var quizHeadingView: some View {
+        Text(block.content ?? "")
+            .font(.headline)
+            .fontWeight(.semibold)
+            .foregroundColor(.primary)
+            .padding(.horizontal, 4)
+    }
+    
+    private var multipleChoiceView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(block.content ?? "")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+                .padding(.horizontal, 4)
+            
+            if let options = block.options {
+                optionsView(options: options)
+            }
+            
+            if let explanation = block.explanation {
+                explanationView(explanation: explanation)
+            }
+        }
+        .padding(12)
         .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .cornerRadius(12)
+    }
+    
+    private var errorView: some View {
+        Text(block.content ?? "An error occurred")
+            .font(.caption)
+            .foregroundColor(.red)
+            .padding(12)
+            .background(Color.red.opacity(0.1))
+            .cornerRadius(8)
+    }
+    
+    // MARK: - Helper Views
+    @ViewBuilder
+    private func optionsView(options: [QuizOption]) -> some View {
+        VStack(spacing: 8) {
+            ForEach(options) { option in
+                optionButton(option: option)
+            }
+        }
+    }
+    
+    private func optionButton(option: QuizOption) -> some View {
+        Button(action: {
+            // Handle option selection
+        }) {
+            HStack {
+                Text(option.text)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+                if option.id == block.correctAnswerID {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title3)
+                }
+            }
+            .padding(12)
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func explanationView(explanation: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Explanation")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+            Text(explanation)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(12)
+        .background(Color.yellow.opacity(0.1))
+        .cornerRadius(8)
+    }
+    
+    // MARK: - Background
+    private var glassMorphismBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(colorScheme == .dark ? 0.2 : 0.4),
+                                    Color.white.opacity(colorScheme == .dark ? 0.05 : 0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        }
     }
 }
 
