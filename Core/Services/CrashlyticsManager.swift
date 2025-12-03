@@ -153,6 +153,113 @@ class CrashlyticsManager {
         print("[Crashlytics] Image generation error logged: \(error.localizedDescription)")
     }
     
+    // MARK: - Gemini-Specific Error Tracking
+    func logGeminiModelError(
+        error: Error,
+        model: String,
+        operation: String,
+        config: [String: Any]? = nil,
+        fallbackUsed: Bool = false
+    ) {
+        let nsError = error as NSError
+        
+        Crashlytics.crashlytics().setCustomValue(model, forKey: "gemini_model")
+        Crashlytics.crashlytics().setCustomValue(operation, forKey: "gemini_operation")
+        Crashlytics.crashlytics().setCustomValue(fallbackUsed, forKey: "gemini_fallback_used")
+        
+        if let config = config {
+            if let temperature = config["temperature"] as? Double {
+                Crashlytics.crashlytics().setCustomValue(temperature, forKey: "gemini_temperature")
+            }
+            if let topP = config["top_p"] as? Double {
+                Crashlytics.crashlytics().setCustomValue(topP, forKey: "gemini_top_p")
+            }
+            if let topK = config["top_k"] as? Int {
+                Crashlytics.crashlytics().setCustomValue(topK, forKey: "gemini_top_k")
+            }
+        }
+        
+        Crashlytics.crashlytics().record(error: nsError)
+        
+        print("[Crashlytics] Gemini model error logged: \(error.localizedDescription) for model \(model)")
+    }
+    
+    func logGeminiImageGenerationError(
+        error: Error,
+        model: String,
+        prompt: String,
+        aspectRatio: String? = nil,
+        quality: String? = nil,
+        consistencyMode: Bool = false,
+        attemptNumber: Int = 1
+    ) {
+        let nsError = error as NSError
+        
+        Crashlytics.crashlytics().setCustomValue(model, forKey: "gemini_image_model")
+        Crashlytics.crashlytics().setCustomValue(String(prompt.prefix(200)), forKey: "gemini_image_prompt")
+        Crashlytics.crashlytics().setCustomValue(consistencyMode, forKey: "gemini_consistency_mode")
+        Crashlytics.crashlytics().setCustomValue(attemptNumber, forKey: "gemini_attempt_number")
+        
+        if let aspectRatio = aspectRatio {
+            Crashlytics.crashlytics().setCustomValue(aspectRatio, forKey: "gemini_aspect_ratio")
+        }
+        
+        if let quality = quality {
+            Crashlytics.crashlytics().setCustomValue(quality, forKey: "gemini_image_quality")
+        }
+        
+        Crashlytics.crashlytics().record(error: nsError)
+        
+        print("[Crashlytics] Gemini image generation error logged: \(error.localizedDescription)")
+    }
+    
+    func logGeminiModelFallback(
+        fromModel: String,
+        toModel: String,
+        reason: String,
+        operation: String
+    ) {
+        Crashlytics.crashlytics().setCustomValue(fromModel, forKey: "gemini_fallback_from")
+        Crashlytics.crashlytics().setCustomValue(toModel, forKey: "gemini_fallback_to")
+        Crashlytics.crashlytics().setCustomValue(reason, forKey: "gemini_fallback_reason")
+        Crashlytics.crashlytics().setCustomValue(operation, forKey: "gemini_operation")
+        
+        let error = NSError(
+            domain: "GeminiModelFallback",
+            code: -1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Model fallback: \(fromModel) -> \(toModel) due to: \(reason)"
+            ]
+        )
+        
+        Crashlytics.crashlytics().record(error: error)
+        
+        print("[Crashlytics] Gemini model fallback logged: \(fromModel) -> \(toModel)")
+    }
+    
+    func logGeminiConsistencyError(
+        error: Error,
+        storyId: String,
+        characterName: String? = nil,
+        chapterId: String? = nil
+    ) {
+        let nsError = error as NSError
+        
+        Crashlytics.crashlytics().setCustomValue(storyId, forKey: "gemini_consistency_story_id")
+        
+        if let characterName = characterName {
+            Crashlytics.crashlytics().setCustomValue(characterName, forKey: "gemini_consistency_character")
+        }
+        
+        if let chapterId = chapterId {
+            Crashlytics.crashlytics().setCustomValue(chapterId, forKey: "gemini_consistency_chapter_id")
+        }
+        
+        Crashlytics.crashlytics().record(error: nsError)
+        
+        print("[Crashlytics] Gemini consistency error logged: \(error.localizedDescription)")
+    }
+    
     // MARK: - Authentication Error Tracking
     func logAuthenticationError(
         error: Error,

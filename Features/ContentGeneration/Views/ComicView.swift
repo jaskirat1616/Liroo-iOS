@@ -26,6 +26,8 @@ struct ComicView: View {
                 
                 // Comic Panels
                 comicPanelsSection
+                
+                Spacer(minLength: 120)
             }
             .padding(.horizontal, 0)
             .padding(.vertical, 0)

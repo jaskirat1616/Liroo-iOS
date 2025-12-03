@@ -80,6 +80,12 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Log app launch
         CrashlyticsManager.shared.logAppStateChange(state: "app_launched")
         
+        // Initialize Gemini Configuration Manager
+        // Note: Actual Firebase Vertex AI initialization would go here if using direct Vertex AI SDK
+        // For now, we're using the backend API, so configuration is handled server-side
+        _ = GeminiConfigurationManager.shared
+        Crashlytics.crashlytics().log("Gemini Configuration Manager initialized")
+        
         return true
     }
     

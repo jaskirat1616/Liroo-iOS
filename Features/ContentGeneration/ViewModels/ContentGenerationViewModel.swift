@@ -15,6 +15,9 @@ class ContentGenerationViewModel: ObservableObject {
     @Published var selectedGenre: StoryGenre = .adventure
     @Published var mainCharacter = ""
     @Published var selectedImageStyle: ImageStyle = .ghibli
+    @Published var selectedAspectRatio: ImageAspectRatio = .landscape
+    @Published var imageQuality: ImageQuality = .high
+    @Published var consistencyMode: Bool = true
     
     @Published var isLoading = false
     @Published var isGenerating = false
@@ -511,6 +514,17 @@ class ContentGenerationViewModel: ObservableObject {
     }
     
     private func generateStoryWithProgress() async throws {
+        let startTime = Date()
+        
+        // Log analytics
+        AnalyticsManager.shared.logContentGenerationStart(
+            contentType: "story",
+            level: selectedLevel.rawValue,
+            tier: selectedSummarizationTier.rawValue
+        )
+        AnalyticsManager.shared.logImageStyleUsage(style: selectedImageStyle.backendRawValue)
+        AnalyticsManager.shared.logAspectRatioUsage(aspectRatio: selectedAspectRatio.rawValue)
+        
         globalManager.updateProgress(step: "Generating story content...", stepNumber: 1, totalSteps: 6)
         print("[Story] Starting story generation process")
         await MainActor.run { self.statusMessage = "Checking backend status..." }
@@ -530,12 +544,19 @@ class ContentGenerationViewModel: ObservableObject {
         """
         await MainActor.run { self.statusMessage = "Generating story content..." }
         let userToken = await getFCMToken()
-        let requestBody: [String: Any] = [
+        var requestBody: [String: Any] = [
             "text": storyPrompt,
             "level": selectedLevel.rawValue,
-            "image_style": selectedImageStyle.displayName,
-            "user_token": userToken ?? ""
+            "image_style": selectedImageStyle.backendRawValue,
+            "user_token": userToken ?? "",
+            "consistency_mode": consistencyMode,
+            "aspect_ratio": selectedAspectRatio.rawValue
         ]
+        
+        // Add main character if provided for consistency
+        if !mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requestBody["main_character"] = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         guard let jsonData = try? JSONSerialization.data(withJSONObject: requestBody) else { throw ContentGenerationError.encodingFailed }
         let url = URL(string: "\(backendURL)/generate_story")!
         var request = URLRequest(url: url)
@@ -574,6 +595,24 @@ class ContentGenerationViewModel: ObservableObject {
                 }
                 guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let storyData = json["story"] as? [String: Any] else { throw ContentGenerationError.parsingFailed }
                 guard var story = try? JSONDecoder().decode(Story.self, from: try! JSONSerialization.data(withJSONObject: storyData)) else { throw ContentGenerationError.parsingFailed }
+                
+                // Log analytics for story generation
+                let storyGenerationTime = Date().timeIntervalSince(startTime)
+                AnalyticsManager.shared.logContentGenerationSuccess(
+                    contentType: "story",
+                    generationTime: storyGenerationTime
+                )
+                
+                // Log consistency references if available
+                if let consistencyRefs = json["consistency_references"] as? [String: Any],
+                   let storyId = consistencyRefs["story_id"] as? String {
+                    AnalyticsManager.shared.logImageConsistencyScore(
+                        storyId: storyId,
+                        consistencyScore: consistencyMode ? 1.0 : 0.0,
+                        chapterCount: story.chapters.count
+                    )
+                }
+                
                 await MainActor.run { self.statusMessage = "Processing story images..."; self.currentStory = story }
                 if let userId = Auth.auth().currentUser?.uid {
                     try await processAllStoryImages(story: &story, userId: userId)
@@ -1642,23 +1681,46 @@ class ContentGenerationViewModel: ObservableObject {
         print("[Image] Generating image for chapter: \(chapter.title)")
         print("[Image] Chapter content: \(chapter.content.prefix(100))...")
         
+        // Log analytics
+        AnalyticsManager.shared.logImageGenerationStart(
+            contentType: "story_chapter",
+            style: selectedImageStyle.backendRawValue,
+            aspectRatio: selectedAspectRatio.rawValue,
+            quality: imageQuality.rawValue,
+            consistencyMode: consistencyMode
+        )
+        
+        let startTime = Date()
+        
         // Create image prompt from chapter content
         let imagePrompt = chapter.content
         print("[Image] Using image prompt: \(imagePrompt.prefix(100))...")
         
-        // Call the backend image generation API
-        let requestBody: [String: Any] = [
+        // Call the enhanced backend image generation API v2
+        var requestBody: [String: Any] = [
             "prompt": imagePrompt,
-            "style": selectedImageStyle.displayName,
-            "size": "800x600"
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.backendRawValue,
+            "aspect_ratio": selectedAspectRatio.rawValue,
+            "quality": imageQuality.rawValue,
+            "use_cache": true
         ]
         
-        print("[Image] Request body for image generation:")
-        print("[Image] - prompt: \(imagePrompt.prefix(50))...")
-        print("[Image] - style: \(selectedImageStyle.displayName)")
-        print("[Image] - size: 800x600")
+        // Add consistency mode if main character is set
+        if consistencyMode, !mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let storyId = currentStory?.id.uuidString {
+            requestBody["consistency_mode"] = true
+            requestBody["story_id"] = storyId
+            requestBody["character_name"] = mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         
-        let url = URL(string: "\(backendURL)/generate_image")!
+        print("[Image] Request body for image generation (v2):")
+        print("[Image] - prompt: \(imagePrompt.prefix(50))...")
+        print("[Image] - style: \(selectedImageStyle.backendRawValue)")
+        print("[Image] - aspect_ratio: \(selectedAspectRatio.rawValue)")
+        print("[Image] - quality: \(imageQuality.rawValue)")
+        
+        let url = URL(string: "\(backendURL)/generate_image_v2")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1713,98 +1775,97 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Image] Raw data (first 100 bytes): \(data.prefix(100).map { String(format: "%02x", $0) }.joined())")
             }
             
-            // Parse the response to get the image URL
-            let imageResponse: ImageGenerationResponse
+            // Parse the response (try v2 first, fallback to v1)
+            var imageResponseV2: ImageGenerationResponseV2? = nil
+            var imageResponse: ImageGenerationResponse? = nil
+            
+            // Try v2 format first
             do {
-                imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
-                print("[Image] Successfully decoded ImageGenerationResponse")
-                print("[Image] - url: \(imageResponse.url ?? "nil")")
-                print("[Image] - image_url: \(imageResponse.image_url ?? "nil")")
-                print("[Image] - imageUrl (computed): \(imageResponse.imageUrl ?? "nil")")
-                print("[Image] - error: \(imageResponse.error ?? "nil")")
+                imageResponseV2 = try JSONDecoder().decode(ImageGenerationResponseV2.self, from: data)
+                print("[Image] Successfully decoded ImageGenerationResponseV2")
+                if let metadata = imageResponseV2?.metadata {
+                    print("[Image] - generation_time: \(metadata.generation_time)s")
+                    print("[Image] - model_used: \(metadata.model_used ?? "unknown")")
+                }
+                
+                if let imageUrlString = imageResponseV2?.url, let imageUrl = URL(string: imageUrlString) {
+                    // Log success analytics
+                    let generationTime = Date().timeIntervalSince(startTime)
+                    AnalyticsManager.shared.logImageGenerationSuccess(
+                        contentType: "story_chapter",
+                        style: selectedImageStyle.backendRawValue,
+                        generationTime: generationTime,
+                        modelUsed: imageResponseV2?.metadata?.model_used,
+                        aspectRatio: selectedAspectRatio.rawValue,
+                        cached: imageResponseV2?.metadata?.cached ?? false
+                    )
+                    
+                    return try await downloadImage(from: imageUrl, prompt: imagePrompt)
+                }
             } catch {
-                print("[Image] ERROR: Failed to decode ImageGenerationResponse")
-                print("[Image] Decoding error: \(error)")
-                print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
-                
-                CrashlyticsManager.shared.logCustomError(
-                    error: error,
-                    context: "image_response_decoding",
-                    additionalData: [
-                        "endpoint": "/generate_image",
-                        "response_size": data.count,
-                        "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode",
-                        "prompt": imagePrompt.prefix(100),
-                        "style": selectedImageStyle.displayName
-                    ]
-                )
-                
-                return nil
+                // Fall back to v1 format
+                do {
+                    imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
+                    print("[Image] Successfully decoded ImageGenerationResponse (v1 fallback)")
+                    
+                    if let imageUrlString = imageResponse?.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                        // Log success analytics (v1 fallback)
+                        let generationTime = Date().timeIntervalSince(startTime)
+                        AnalyticsManager.shared.logImageGenerationSuccess(
+                            contentType: "story_chapter",
+                            style: selectedImageStyle.backendRawValue,
+                            generationTime: generationTime,
+                            modelUsed: "legacy",
+                            aspectRatio: selectedAspectRatio.rawValue,
+                            cached: false
+                        )
+                        
+                        return try await downloadImage(from: imageUrl, prompt: imagePrompt)
+                    }
+                } catch {
+                    print("[Image] ERROR: Failed to decode both v2 and v1 ImageGenerationResponse")
+                    print("[Image] Decoding error: \(error)")
+                    print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
+                    
+                    CrashlyticsManager.shared.logCustomError(
+                        error: error,
+                        context: "image_response_decoding",
+                        additionalData: [
+                            "endpoint": "/generate_image_v2",
+                            "response_size": data.count,
+                            "response_preview": String(data: data.prefix(200), encoding: .utf8) ?? "unable_to_decode",
+                            "prompt": imagePrompt.prefix(100),
+                            "style": selectedImageStyle.displayName
+                        ]
+                    )
+                }
             }
             
-            if let imageUrlString = imageResponse.imageUrl, let imageUrl = URL(string: imageUrlString) {
-                print("[Image] Successfully generated image URL: \(imageUrlString)")
+            print("[Image] ERROR: No valid image URL in response")
+            
+            // Log failure analytics
+            let error = NSError(domain: "ImageGenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No valid image URL in response"])
+            AnalyticsManager.shared.logImageGenerationFailure(
+                contentType: "story_chapter",
+                style: selectedImageStyle.backendRawValue,
+                error: error
+            )
+            
+            // Check for error in v1 response if it was decoded
+            if let v1Response = imageResponse, let errorMsg = v1Response.error {
+                print("[Image] Backend error: \(errorMsg)")
                 
-                // Download the image
-                print("[Image] Downloading image from: \(imageUrl.absoluteString)")
-                let (imageData, imageResponse) = try await session.data(from: imageUrl)
+                let backendError = NSError(domain: "ImageGenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend error: \(errorMsg)"])
                 
-                guard let httpImageResponse = imageResponse as? HTTPURLResponse,
-                      httpImageResponse.statusCode == 200 else {
-                    let downloadError = NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download image"])
-                    
-                    CrashlyticsManager.shared.logCustomError(
-                        error: downloadError,
-                        context: "image_download_failed",
-                        additionalData: [
-                            "image_url": imageUrlString,
-                            "status_code": (imageResponse as? HTTPURLResponse)?.statusCode ?? -1,
-                            "prompt": imagePrompt.prefix(100)
-                        ]
-                    )
-                    
-                    print("[Image] ERROR: Failed to download image")
-                    print("[Image] Image response status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
-                    return nil
-                }
-                
-                print("[Image] Successfully downloaded image data: \(imageData.count) bytes")
-                
-                guard let image = UIImage(data: imageData) else {
-                    let imageCreationError = NSError(domain: "ImageCreationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create UIImage from data"])
-                    
-                    CrashlyticsManager.shared.logCustomError(
-                        error: imageCreationError,
-                        context: "image_creation_failed",
-                        additionalData: [
-                            "image_data_size": imageData.count,
-                            "prompt": imagePrompt.prefix(100)
-                        ]
-                    )
-                    
-                    print("[Image] ERROR: Failed to create UIImage from data")
-                    return nil
-                }
-                
-                print("[Image] Successfully downloaded and created image. Size: \(image.size)")
-                return image
-            } else {
-                print("[Image] ERROR: No image URL in response")
-                if let error = imageResponse.error {
-                    print("[Image] Backend error: \(error)")
-                    
-                    let backendError = NSError(domain: "ImageGenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Backend error: \(error)"])
-                    
-                    CrashlyticsManager.shared.logImageGenerationError(
-                        error: backendError,
-                        prompt: imagePrompt,
-                        style: selectedImageStyle.displayName,
-                        size: "800x600"
-                    )
-                }
-                print("[Image] Full response object: \(imageResponse)")
-                return nil
+                CrashlyticsManager.shared.logImageGenerationError(
+                    error: backendError,
+                    prompt: imagePrompt,
+                    style: selectedImageStyle.displayName,
+                    size: selectedAspectRatio.rawValue
+                )
             }
+            
+            return nil
             
         } catch {
             print("[Image] ERROR: Failed to generate image: \(error.localizedDescription)")
@@ -1815,28 +1876,183 @@ class ContentGenerationViewModel: ObservableObject {
                 error: error,
                 prompt: imagePrompt,
                 style: selectedImageStyle.displayName,
-                size: "800x600"
+                size: selectedAspectRatio.rawValue
+            )
+            
+            // Log failure analytics
+            AnalyticsManager.shared.logImageGenerationFailure(
+                contentType: "story_chapter",
+                style: selectedImageStyle.backendRawValue,
+                error: error
             )
             
             return nil
         }
     }
     
+    // Helper function to download image from URL
+    // MARK: - Image Regeneration
+    @Published var regeneratingImageId: String?
+    @Published var regenerationProgress: [String: Double] = [:]
+    
+    /// Regenerate an image for a story chapter
+    @MainActor
+    func regenerateChapterImage(chapterId: String, storyId: String, prompt: String, characterName: String?) async {
+        regeneratingImageId = chapterId
+        regenerationProgress[chapterId] = 0.0
+        
+        AnalyticsManager.shared.logEvent(name: "image_regeneration_started", parameters: [
+            "content_type": "story_chapter",
+            "chapter_id": chapterId,
+            "story_id": storyId
+        ])
+        
+        defer {
+            regeneratingImageId = nil
+            regenerationProgress[chapterId] = nil
+        }
+        
+        // Force regeneration by disabling cache
+        let requestBody: [String: Any] = [
+            "prompt": prompt,
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.backendRawValue,
+            "aspect_ratio": selectedAspectRatio.rawValue,
+            "quality": imageQuality.rawValue,
+            "consistency_mode": consistencyMode,
+            "story_id": storyId,
+            "character_name": characterName ?? "",
+            "use_cache": false  // Force regeneration
+        ]
+        
+        let url = URL(string: "\(backendURL)/generate_image_v2")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+            regenerationProgress[chapterId] = 0.3
+            
+            let (data, response) = try await session.data(for: request)
+            regenerationProgress[chapterId] = 0.6
+            
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                throw NSError(domain: "ImageRegenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to regenerate image"])
+            }
+            
+            // Parse response
+            if let responseV2 = try? JSONDecoder().decode(ImageGenerationResponseV2.self, from: data),
+               let imageUrl = URL(string: responseV2.url) {
+                regenerationProgress[chapterId] = 0.8
+                
+                // Download and cache the new image
+                if let newImage = try? await downloadImage(from: imageUrl, prompt: prompt) {
+                    regenerationProgress[chapterId] = 1.0
+                    
+                    AnalyticsManager.shared.logEvent(name: "image_regeneration_success", parameters: [
+                        "content_type": "story_chapter",
+                        "chapter_id": chapterId,
+                        "generation_time": responseV2.metadata?.generation_time ?? 0
+                    ])
+                    
+                    // Note: In a real implementation, you'd update the story chapter with the new image URL
+                    // This requires updating Firestore, which should be done through your data service
+                    print("[Image Regeneration] Successfully regenerated image for chapter \(chapterId)")
+                }
+            }
+        } catch {
+            AnalyticsManager.shared.logEvent(name: "image_regeneration_failed", parameters: [
+                "content_type": "story_chapter",
+                "chapter_id": chapterId,
+                "error": error.localizedDescription
+            ])
+            
+            CrashlyticsManager.shared.logCustomError(
+                error: error as NSError,
+                context: "image_regeneration_failed",
+                additionalData: [
+                    "chapter_id": chapterId,
+                    "story_id": storyId
+                ]
+            )
+        }
+    }
+    
+    private func downloadImage(from imageUrl: URL, prompt: String) async throws -> UIImage? {
+        print("[Image] Downloading image from: \(imageUrl.absoluteString)")
+        let (imageData, imageResponse) = try await session.data(from: imageUrl)
+        
+        guard let httpImageResponse = imageResponse as? HTTPURLResponse,
+              httpImageResponse.statusCode == 200 else {
+            let downloadError = NSError(domain: "ImageDownloadError", code: (imageResponse as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Failed to download image"])
+            
+            CrashlyticsManager.shared.logCustomError(
+                error: downloadError,
+                context: "image_download_failed",
+                additionalData: [
+                    "image_url": imageUrl.absoluteString,
+                    "status_code": (imageResponse as? HTTPURLResponse)?.statusCode ?? -1,
+                    "prompt": prompt.prefix(100)
+                ]
+            )
+            
+            print("[Image] ERROR: Failed to download image")
+            print("[Image] Image response status: \((imageResponse as? HTTPURLResponse)?.statusCode ?? -1)")
+            return nil
+        }
+        
+        print("[Image] Successfully downloaded image data: \(imageData.count) bytes")
+        
+        guard let image = UIImage(data: imageData) else {
+            let imageCreationError = NSError(domain: "ImageCreationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create UIImage from data"])
+            
+            CrashlyticsManager.shared.logCustomError(
+                error: imageCreationError,
+                context: "image_creation_failed",
+                additionalData: [
+                    "image_data_size": imageData.count,
+                    "prompt": prompt.prefix(100)
+                ]
+            )
+            
+            print("[Image] ERROR: Failed to create UIImage from data")
+            return nil
+        }
+                
+        print("[Image] Successfully downloaded and created image. Size: \(image.size)")
+        return image
+    }
+    
     private func fetchImageForBlock(block: ContentBlock) async -> UIImage? {
         print("[Image] Generating image for block ID: \(block.id.uuidString)")
+        
+        // Log analytics
+        AnalyticsManager.shared.logImageGenerationStart(
+            contentType: "content_block",
+            style: selectedImageStyle.backendRawValue,
+            aspectRatio: selectedAspectRatio.rawValue,
+            quality: imageQuality.rawValue,
+            consistencyMode: false
+        )
+        
+        let startTime = Date()
         
         // Use alt text if content is empty
         let imagePrompt = block.content ?? block.alt ?? "A beautiful illustration"
         print("[Image] Using image prompt: \(imagePrompt)")
         
-        // Call the backend image generation API
-        let requestBody: [String: Any] = [
+        // Call the enhanced backend image generation API v2
+        var requestBody: [String: Any] = [
             "prompt": imagePrompt,
-            "style": selectedImageStyle.displayName,
-            "size": "800x600"
+            "level": selectedLevel.rawValue,
+            "image_style": selectedImageStyle.backendRawValue,
+            "aspect_ratio": selectedAspectRatio.rawValue,
+            "quality": imageQuality.rawValue,
+            "use_cache": true
         ]
         
-        let url = URL(string: "\(backendURL)/generate_image")!
+        let url = URL(string: "\(backendURL)/generate_image_v2")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1871,45 +2087,76 @@ class ContentGenerationViewModel: ObservableObject {
                 print("[Image] Raw data (first 100 bytes): \(data.prefix(100).map { String(format: "%02x", $0) }.joined())")
             }
             
-            // Parse the response to get the image URL
-            let imageResponse: ImageGenerationResponse
+            // Parse the response (try v2 first, fallback to v1)
+            var imageResponseV2: ImageGenerationResponseV2? = nil
+            var imageResponse: ImageGenerationResponse? = nil
+            
+            // Try v2 format first
             do {
-                imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
-                print("[Image] Successfully decoded ImageGenerationResponse")
-                print("[Image] - url: \(imageResponse.url ?? "nil")")
-                print("[Image] - image_url: \(imageResponse.image_url ?? "nil")")
-                print("[Image] - imageUrl (computed): \(imageResponse.imageUrl ?? "nil")")
-                print("[Image] - error: \(imageResponse.error ?? "nil")")
+                imageResponseV2 = try JSONDecoder().decode(ImageGenerationResponseV2.self, from: data)
+                print("[Image] Successfully decoded ImageGenerationResponseV2")
+                if let metadata = imageResponseV2?.metadata {
+                    print("[Image] - generation_time: \(metadata.generation_time)s")
+                    print("[Image] - model_used: \(metadata.model_used ?? "unknown")")
+                }
+                
+                if let imageUrlString = imageResponseV2?.url, let imageUrl = URL(string: imageUrlString) {
+                    // Log success analytics
+                    let generationTime = Date().timeIntervalSince(startTime)
+                    AnalyticsManager.shared.logImageGenerationSuccess(
+                        contentType: "content_block",
+                        style: selectedImageStyle.backendRawValue,
+                        generationTime: generationTime,
+                        modelUsed: imageResponseV2?.metadata?.model_used,
+                        aspectRatio: selectedAspectRatio.rawValue,
+                        cached: imageResponseV2?.metadata?.cached ?? false
+                    )
+                    
+                    return try await downloadImage(from: imageUrl, prompt: imagePrompt)
+                }
             } catch {
-                print("[Image] ERROR: Failed to decode ImageGenerationResponse")
-                print("[Image] Decoding error: \(error)")
-                print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
-                return nil
+                // Fall back to v1 format
+                do {
+                    imageResponse = try JSONDecoder().decode(ImageGenerationResponse.self, from: data)
+                    print("[Image] Successfully decoded ImageGenerationResponse (v1 fallback)")
+                    
+                    if let imageUrlString = imageResponse?.imageUrl, let imageUrl = URL(string: imageUrlString) {
+                        // Log success analytics (v1 fallback)
+                        let generationTime = Date().timeIntervalSince(startTime)
+                        AnalyticsManager.shared.logImageGenerationSuccess(
+                            contentType: "content_block",
+                            style: selectedImageStyle.backendRawValue,
+                            generationTime: generationTime,
+                            modelUsed: "legacy",
+                            aspectRatio: selectedAspectRatio.rawValue,
+                            cached: false
+                        )
+                        
+                        return try await downloadImage(from: imageUrl, prompt: imagePrompt)
+                    }
+                } catch {
+                    print("[Image] ERROR: Failed to decode both v2 and v1 ImageGenerationResponse")
+                    print("[Image] Decoding error: \(error)")
+                    print("[Image] Raw response data: \(String(data: data, encoding: .utf8) ?? "Unable to print response data")")
+                }
             }
             
-            if let imageUrlString = imageResponse.imageUrl, let imageUrl = URL(string: imageUrlString) {
-                print("[Image] Successfully generated image URL: \(imageUrlString)")
-                
-                // Download the image
-                let (imageData, imageResponse) = try await session.data(from: imageUrl)
-                
-                guard let httpImageResponse = imageResponse as? HTTPURLResponse,
-                      httpImageResponse.statusCode == 200 else {
-                    print("[Image] ERROR: Failed to download image")
-                    return nil
-                }
-                
-                guard let image = UIImage(data: imageData) else {
-                    print("[Image] ERROR: Failed to create UIImage from data")
-                    return nil
-                }
-                
-                print("[Image] Successfully downloaded and created image. Size: \(image.size)")
-                return image
-            } else {
-                print("[Image] ERROR: No image URL in response")
-                return nil
+            print("[Image] ERROR: No valid image URL in response")
+            
+            // Log failure analytics
+            let error = NSError(domain: "ImageGenerationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No valid image URL in response"])
+            AnalyticsManager.shared.logImageGenerationFailure(
+                contentType: "content_block",
+                style: selectedImageStyle.backendRawValue,
+                error: error
+            )
+            
+            // Check for error in v1 response if it was decoded
+            if let v1Response = imageResponse, let errorMsg = v1Response.error {
+                print("[Image] Backend error: \(errorMsg)")
             }
+            
+            return nil
             
         } catch {
             print("[Image] ERROR: Failed to generate image: \(error.localizedDescription)")
@@ -2302,29 +2549,6 @@ enum StoryGenre: String, Codable, CaseIterable {
     case educational = "Educational"
 }
 
-enum ImageStyle: String, Codable, CaseIterable {
-    case ghibli = "ghibli"
-    case disney = "disney"
-    case comicBook = "comic_book"
-    case watercolor = "watercolor"
-    case pixelArt = "pixel_art"
-    case threeDRender = "3d_render"
-    
-    var displayName: String {
-        switch self {
-        case .ghibli: return "Studio Ghibli"
-        case .disney: return "Disney"
-        case .comicBook: return "Comic Book"
-        case .watercolor: return "Watercolor"
-        case .pixelArt: return "Pixel Art"
-        case .threeDRender: return "3D Render"
-        }
-    }
-    
-    var backendRawValue: String {
-        rawValue
-    }
-}
 
 struct Response: Codable {
     let story: Story?
@@ -2606,6 +2830,19 @@ struct ImageGenerationResponse: Codable {
     var imageUrl: String? {
         return url ?? image_url
     }
+}
+
+struct ImageGenerationResponseV2: Codable {
+    let url: String
+    let metadata: ImageGenerationMetadata?
+    let error: String?
+}
+
+struct ImageGenerationMetadata: Codable {
+    let generation_time: Double
+    let model_used: String?
+    let aspect_ratio: String?
+    let cached: Bool?
 }
 
 // MARK: - Missing Helper Methods

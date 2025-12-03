@@ -48,16 +48,18 @@ struct SplashScreenView: View {
             
             VStack {
                 // Move 'Liroo' to the top
-                Text("Liroo")
-                    .font(.custom("OpenDyslexic-Regular", size: 28))
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .shadow(radius: 5)
-                    .padding(.top, 60)
-                    .padding(.bottom, 20)
                 Spacer()
                 
                 VStack(spacing: 16) {
+                    Spacer()
+                    Text("Liroo")
+                        .font(.custom("ComicNeue-Regular", size: 38))
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(radius: 5)
+                        .padding(.top, 60)
+  
+
                     Button(action: {
                         withAnimation {
                             isActive = true
@@ -78,7 +80,7 @@ struct SplashScreenView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                 }
-                .padding(.bottom, 40)
+                .padding(.bottom, 20)
             }
         }
         .onAppear {

@@ -786,6 +786,99 @@ struct ContentGenerationView: View {
                                 .cornerRadius(12)
                             }
                         }
+                        
+                        // Aspect Ratio Selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Image Format")
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                .foregroundColor(.primary)
+                            
+                            HStack(spacing: 8) {
+                                ForEach(ImageAspectRatio.allCases, id: \.self) { ratio in
+                                    Button(action: {
+                                        viewModel.selectedAspectRatio = ratio
+                                    }) {
+                                        VStack(spacing: 4) {
+                                            Image(systemName: ratio.iconName)
+                                                .font(.system(size: 20))
+                                                .foregroundColor(viewModel.selectedAspectRatio == ratio ? .white : .primary)
+                                            Text(ratio == .square ? "1:1" : ratio == .landscape ? "16:9" : "9:16")
+                                                .font(.system(size: 10, weight: .medium))
+                                                .foregroundColor(viewModel.selectedAspectRatio == ratio ? .white : .primary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(viewModel.selectedAspectRatio == ratio ? Color.accentColor : Color(.systemGray6))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Image Quality Selection
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Image Quality")
+                                .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                .foregroundColor(.primary)
+                            
+                            Menu {
+                                ForEach(ImageQuality.allCases, id: \.self) { quality in
+                                    Button(action: {
+                                        viewModel.imageQuality = quality
+                                    }) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(quality.displayName)
+                                            Text(quality.description)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            if viewModel.imageQuality == quality {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.accentColor)
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(viewModel.imageQuality.displayName)
+                                            .foregroundColor(.primary)
+                                        Text(viewModel.imageQuality.description)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                            }
+                        }
+                        
+                        // Consistency Mode Toggle (for stories with characters)
+                        if !viewModel.mainCharacter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Toggle(isOn: $viewModel.consistencyMode) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Maintain Character Consistency")
+                                            .font(.system(size: isIPad ? 14 : 13, weight: .medium))
+                                            .foregroundColor(.primary)
+                                        Text("Keep the same character appearance across all story chapters")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                     .padding(.top, 2)
                 }

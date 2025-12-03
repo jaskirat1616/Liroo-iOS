@@ -1,18 +1,36 @@
 import SwiftUI
 import CommonCrypto
 
-// MARK: - Cached Async Image Component
+// MARK: - Cached Async Image Component with Progressive Loading
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     let url: URL?
     let content: (Image) -> Content
     let placeholder: () -> Placeholder
+    let quality: ImageQuality?
+    let enableProgressiveLoading: Bool
     
     @State private var image: UIImage?
+    @State private var lowResImage: UIImage?
     @State private var isLoading = false
     @State private var hasError = false
+    @State private var loadProgress: Double = 0.0
+    
+    init(url: URL?, 
+         quality: ImageQuality? = nil,
+         enableProgressiveLoading: Bool = true,
+         @ViewBuilder content: @escaping (Image) -> Content, 
+         @ViewBuilder placeholder: @escaping () -> Placeholder) {
+        self.url = url
+        self.quality = quality
+        self.enableProgressiveLoading = enableProgressiveLoading
+        self.content = content
+        self.placeholder = placeholder
+    }
     
     init(url: URL?, @ViewBuilder content: @escaping (Image) -> Content, @ViewBuilder placeholder: @escaping () -> Placeholder) {
         self.url = url
+        self.quality = nil
+        self.enableProgressiveLoading = true
         self.content = content
         self.placeholder = placeholder
     }

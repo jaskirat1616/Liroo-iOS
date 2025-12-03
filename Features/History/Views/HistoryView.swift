@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 enum HistoryFilter: String, CaseIterable, Identifiable {
     case all = "All"
@@ -13,12 +14,18 @@ enum HistoryFilter: String, CaseIterable, Identifiable {
 struct HistoryView: View {
     @StateObject private var viewModel = HistoryViewModel()
     @StateObject private var globalManager = GlobalBackgroundProcessingManager.shared
+    private let searchService = SearchService.shared
+    @StateObject private var offlineManager = OfflineManager.shared
     @State private var selectedFilter: HistoryFilter = .all
     @Environment(\.colorScheme) private var colorScheme
     @State private var isSelectionMode: Bool = false
     @State private var selectedItems: Set<String> = []
     @State private var showDeleteConfirmation = false
     @State private var showDeleteError = false
+    @State private var searchText: String = ""
+    @State private var showSearch: Bool = false
+    @State private var searchResults: [SearchService.SearchResult] = []
+    @State private var isSearching: Bool = false
     
     // MARK: - iPad Detection
     private var isIPad: Bool {
@@ -46,136 +53,65 @@ struct HistoryView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient matching other screens
-            LinearGradient(
-                gradient: Gradient(
-                    colors: colorScheme == .dark ?
-                    [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)] :
-                    [.cyan.opacity(0.2), .cyan.opacity(0.1),  .white, .white]
-                ),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            backgroundGradient
             
-            Group {
-                if viewModel.isLoading {
-                    ProgressView("Loading History...")
-                        .font(isIPad ? .title2 : .body)
-                } else if let errorMessage = viewModel.errorMessage {
-                    VStack(spacing: isIPad ? 16 : 12) {
-                        Text("Error")
-                            .font(isIPad ? .title : .headline)
-                        Text(errorMessage)
-                            .font(isIPad ? .body : .subheadline)
-                            .foregroundColor(.red)
-                        Button("Retry") {
-                            viewModel.fetchHistory()
-                        }
-                        .padding(.top, isIPad ? 16 : 8)
-                    }
-                } else if viewModel.historyItems.isEmpty {
-                    Text("No history found.")
-                        .font(isIPad ? .title2 : .body)
-                        .foregroundColor(.secondary)
-                } else {
-                    VStack(spacing: 0) {
-                        // Segmented control for filtering
-                        Picker("Filter", selection: $selectedFilter) {
-                            ForEach(HistoryFilter.allCases) { filter in
-                                Text(filter.rawValue).tag(filter)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal, isIPad ? 24 : 16)
-                        .padding(.top, isIPad ? 16 : 8)
-                        .environment(\.layoutDirection, .leftToRight)
-
-                        if filteredItems.isEmpty {
-                            Text("No \(selectedFilter.rawValue.lowercased()) found.")
-                                .font(isIPad ? .title2 : .body)
-                                .foregroundColor(.secondary)
-                                .padding(isIPad ? 32 : 16)
-                        } else {
-                            ScrollView {
-                                LazyVStack(spacing: isIPad ? 16 : 12) {
-                                    ForEach(filteredItems) { item in
-                                        let isSelected = selectedItems.contains(item.id)
-                                        HStack {
-                                            if isSelectionMode {
-                                                Button(action: {
-                                                    if isSelected {
-                                                        selectedItems.remove(item.id)
-                                                    } else {
-                                                        selectedItems.insert(item.id)
-                                                    }
-                                                }) {
-                                                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                                        .foregroundColor(isSelected ? .blue : .gray)
-                                                }
-                                            }
-                                            Group {
-                                                if item.type == .lecture {
-                                                    NavigationLink(destination: LectureDestinationView(
-                                                        lectureID: item.originalDocumentID,
-                                                        lectureTitle: item.title
-                                                    )) {
-                                                        LectureHistoryRow(item: item)
-                                                    }
-                                                } else if item.type == .comic {
-                                                    NavigationLink(destination: ComicDestinationView(
-                                                        comicID: item.originalDocumentID,
-                                                        comicTitle: item.title
-                                                    )) {
-                                                        HistoryRow(item: item)
-                                                    }
-                                                } else {
-                                                    NavigationLink(destination: FullReadingView(
-                                                        itemID: item.originalDocumentID,
-                                                        collectionName: item.originalCollectionName,
-                                                        itemTitle: item.title
-                                                    )) {
-                                                        HistoryRow(item: item)
-                                                    }
-                                                }
-                                            }
-                                            .disabled(isSelectionMode)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, isIPad ? 24 : 16)
-                                .padding(.top, isIPad ? 16 : 8)
-                            }
-                        }
-                    }
-                }
-            }
+            mainContent
         }
         .navigationTitle("History")
+        .onAppear {
+            Task {
+                await viewModel.fetchHistory()
+            }
+        }
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    withAnimation {
+                        showSearch.toggle()
+                        if !showSearch {
+                            searchText = ""
+                            searchResults = []
+                        }
+                    }
+                    HapticFeedbackManager.shared.buttonTap()
+                }) {
+                    Image(systemName: showSearch ? "xmark.circle" : "magnifyingglass")
+                }
+                .accessibilityLabel(showSearch ? "Close search" : "Search history")
+            }
+            
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack {
                     if isSelectionMode {
                         Button(role: .destructive) {
+                            HapticFeedbackManager.shared.destructiveAction()
                             showDeleteConfirmation = true
                         } label: {
                             Image(systemName: "trash")
                         }
                         .disabled(selectedItems.isEmpty)
+                        .accessibilityLabel("Delete selected items")
                     }
                     Button(action: {
+                        HapticFeedbackManager.shared.toggle()
                         isSelectionMode.toggle()
                         if !isSelectionMode { selectedItems.removeAll() }
                     }) {
                         Image(systemName: isSelectionMode ? "xmark.circle" : "checkmark.circle")
                     }
+                    .accessibilityLabel(isSelectionMode ? "Cancel selection" : "Select items")
+                    
                     Button {
-                        viewModel.fetchHistory()
+                        HapticFeedbackManager.shared.refresh()
+                        Task {
+                            await viewModel.fetchHistory()
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .font(isIPad ? .title2 : .body)
                     }
                     .disabled(viewModel.isLoading)
+                    .accessibilityLabel("Refresh history")
                 }
             }
         }
@@ -203,9 +139,209 @@ struct HistoryView: View {
             globalManager.restoreFromUserDefaults()
         }
     }
+    
+    // MARK: - View Components
+    
+    private var backgroundGradient: some View {
+        let darkColors: [Color] = [.cyan.opacity(0.15), .cyan.opacity(0.15), Color(.systemBackground), Color(.systemBackground)]
+        let lightColors: [Color] = [.cyan.opacity(0.2), .cyan.opacity(0.1), .white, .white]
+        
+        return LinearGradient(
+            gradient: Gradient(colors: colorScheme == .dark ? darkColors : lightColors),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+    
+    @ViewBuilder
+    private var mainContent: some View {
+        if viewModel.isLoading {
+            ProgressView("Loading History...")
+                .font(isIPad ? .title2 : .body)
+        } else if let errorMessage = viewModel.errorMessage {
+            errorView(message: errorMessage)
+        } else if viewModel.historyItems.isEmpty {
+            EmptyStateView.noHistory()
+                .onAppear {
+                    HapticFeedbackManager.shared.lightImpact()
+                }
+        } else {
+            historyContentView
+        }
+        
+        // Offline indicator
+        if offlineManager.isOffline {
+            VStack {
+                Spacer()
+                HStack {
+                    Image(systemName: "wifi.slash")
+                    Text("Offline")
+                        .font(.caption)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.9))
+                .foregroundColor(.white)
+                .cornerRadius(8)
+                .padding(.bottom, 100)
+            }
+        }
+    }
+    
+    private func errorView(message: String) -> some View {
+        VStack(spacing: isIPad ? 16 : 12) {
+            Text("Error")
+                .font(isIPad ? .title : .headline)
+            Text(message)
+                .font(isIPad ? .body : .subheadline)
+                .foregroundColor(.red)
+            Button("Retry") {
+                Task {
+                    await viewModel.fetchHistory()
+                }
+            }
+            .padding(.top, isIPad ? 16 : 8)
+        }
+    }
+    
+    @ViewBuilder
+    private var historyContentView: some View {
+        VStack(spacing: 0) {
+            // Search bar
+            if showSearch {
+                searchBar
+            }
+            
+            // Segmented control for filtering
+            Picker("Filter", selection: $selectedFilter) {
+                ForEach(HistoryFilter.allCases) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, isIPad ? 24 : 16)
+            .padding(.top, showSearch ? 8 : (isIPad ? 16 : 8))
+            .environment(\.layoutDirection, .leftToRight)
+            .onChange(of: selectedFilter) { _ in
+                HapticFeedbackManager.shared.selection()
+            }
 
-    // Polished lecture row
-    private struct LectureHistoryRow: View {
+            if filteredItems.isEmpty {
+                EmptyStateView(
+                    icon: "tray",
+                    title: "No \(selectedFilter.rawValue.lowercased()) found",
+                    message: "Try changing the filter or generate some content"
+                )
+                .padding(isIPad ? 32 : 16)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: isIPad ? 16 : 12) {
+                        // Search results section
+                        if !searchResults.isEmpty {
+                            ForEach(searchResults) { result in
+                                SearchResultRow(result: result)
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                        
+                        // Regular history items (when not searching)
+                        if searchText.isEmpty || searchResults.isEmpty {
+                            ForEach(filteredItems) { item in
+                                historyItemRow(item: item)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, isIPad ? 24 : 16)
+                    .padding(.top, isIPad ? 16 : 8)
+                }
+                .pullToRefresh {
+                    await viewModel.fetchHistory()
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func historyItemRow(item: UserHistoryEntry) -> some View {
+        let isSelected = selectedItems.contains(item.id)
+        HStack {
+            if isSelectionMode {
+                Button(action: {
+                    HapticFeedbackManager.shared.buttonTap()
+                    if isSelected {
+                        selectedItems.remove(item.id)
+                    } else {
+                        selectedItems.insert(item.id)
+                    }
+                }) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(isSelected ? .blue : .gray)
+                }
+            }
+            Group {
+                if item.type == .lecture {
+                    NavigationLink(destination: LectureDestinationView(
+                        lectureID: item.originalDocumentID,
+                        lectureTitle: item.title
+                    )) {
+                        LectureHistoryRow(item: item)
+                    }
+                } else if item.type == .comic {
+                    NavigationLink(destination: ComicDestinationView(
+                        comicID: item.originalDocumentID,
+                        comicTitle: item.title
+                    )) {
+                        HistoryRow(item: item)
+                    }
+                } else {
+                    NavigationLink(destination: FullReadingView(
+                        itemID: item.originalDocumentID,
+                        collectionName: item.originalCollectionName,
+                        itemTitle: item.title
+                    )) {
+                        HistoryRow(item: item)
+                    }
+                }
+            }
+            .disabled(isSelectionMode)
+        }
+    }
+    
+    private var searchBar: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            TextField("Search history...", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    performSearch()
+                }
+                .onChange(of: searchText) { newValue in
+                    if newValue.isEmpty {
+                        searchResults = []
+                        isSearching = false
+                    } else {
+                        performSearch()
+                    }
+                }
+            Button(action: {
+                showSearch = false
+                searchText = ""
+                searchResults = []
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, isIPad ? 24 : 16)
+        .padding(.top, isIPad ? 16 : 8)
+        .transition(.move(edge: .top))
+    }
+}
+
+// MARK: - Supporting Views
+private struct LectureHistoryRow: View {
         let item: UserHistoryEntry
         @Environment(\.colorScheme) private var colorScheme
         
@@ -254,8 +390,7 @@ struct HistoryView: View {
         }
     }
 
-    // Existing row for other types
-    private struct HistoryRow: View {
+struct HistoryRow: View {
         let item: UserHistoryEntry
         @Environment(\.colorScheme) private var colorScheme
         
@@ -326,7 +461,6 @@ struct HistoryView: View {
                 return .blue
             }
         }
-    }
 }
 
 // MARK: - Lecture Destination View
@@ -541,6 +675,42 @@ struct ComicDestinationView: View {
                 } catch {
                     print("[ComicDestinationView] Decoding error: \(error.localizedDescription)")
                     errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Helper Methods
+extension HistoryView {
+    private func performSearch() {
+        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else {
+            searchResults = []
+            isSearching = false
+            return
+        }
+        
+        isSearching = true
+        
+        Task {
+            do {
+                guard let userId = Auth.auth().currentUser?.uid else {
+                    isSearching = false
+                    return
+                }
+                
+                let results = try await searchService.search(query: searchText, userId: userId)
+                
+                await MainActor.run {
+                    searchResults = results
+                    isSearching = false
+                    HapticFeedbackManager.shared.lightImpact()
+                }
+            } catch {
+                print("[HistoryView] Search error: \(error)")
+                await MainActor.run {
+                    searchResults = []
+                    isSearching = false
                 }
             }
         }
